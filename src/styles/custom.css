@@ -217,6 +217,7 @@ html[data-read-body='literata'] { --font-body: 'Literata Variable', Georgia, ser
 html[data-read-body='spectral'] { --font-body: 'Spectral', Georgia, serif; }
 html[data-read-body='crimson-pro'] { --font-body: 'Crimson Pro Variable', Georgia, serif; }
 html[data-read-body='vollkorn'] { --font-body: 'Vollkorn Variable', Georgia, serif; }
+html[data-read-body='eb-garamond'] { --font-body: 'EB Garamond Variable', Georgia, serif; }
 html[data-read-body='inter'] { --font-body: 'Inter Variable', system-ui, sans-serif; }
 html[data-read-body='atkinson'] { --font-body: 'Atkinson Hyperlegible', system-ui, sans-serif; }
 

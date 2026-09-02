@@ -8,6 +8,8 @@ import crimsonPro from '@fontsource-variable/crimson-pro/index.css?url';
 import crimsonProItalic from '@fontsource-variable/crimson-pro/wght-italic.css?url';
 import vollkorn from '@fontsource-variable/vollkorn/index.css?url';
 import vollkornItalic from '@fontsource-variable/vollkorn/wght-italic.css?url';
+import ebGaramond from '@fontsource-variable/eb-garamond/index.css?url';
+import ebGaramondItalic from '@fontsource-variable/eb-garamond/wght-italic.css?url';
 import inter from '@fontsource-variable/inter/index.css?url';
 import interItalic from '@fontsource-variable/inter/wght-italic.css?url';
 import spectral from '@fontsource/spectral/400.css?url';
@@ -48,6 +50,7 @@ export const BODY_FONTS: { id: string; name: string; sample: string; css: string
   { id: 'spectral', name: 'Spectral', sample: 'Spectral', css: [spectral, spectralItalic, spectral600, spectral700] },
   { id: 'crimson-pro', name: 'Crimson Pro', sample: 'Crimson Pro', css: [crimsonPro, crimsonProItalic] },
   { id: 'vollkorn', name: 'Vollkorn', sample: 'Vollkorn', css: [vollkorn, vollkornItalic] },
+  { id: 'eb-garamond', name: 'EB Garamond', sample: 'EB Garamond', css: [ebGaramond, ebGaramondItalic] },
   { id: 'inter', name: 'Inter', sample: 'Inter', css: [inter, interItalic] },
   { id: 'atkinson', name: 'Atkinson', sample: 'Atkinson', css: [atkinson, atkinsonItalic, atkinson700] },
 ];
@@ -366,6 +369,7 @@ function getStackFor(id: string): string {
     spectral: "'Spectral', Georgia, serif",
     'crimson-pro': "'Crimson Pro Variable', Georgia, serif",
     vollkorn: "'Vollkorn Variable', Georgia, serif",
+    'eb-garamond': "'EB Garamond Variable', Georgia, serif",
     inter: "'Inter Variable', system-ui, sans-serif",
     atkinson: "'Atkinson Hyperlegible', system-ui, sans-serif",
   };
