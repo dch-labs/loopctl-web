@@ -84,13 +84,14 @@ const ideas = [
             <a class="brand-name" href="/">loopctl<span class="brand-dot">.</span></a>
             <span class="brand-tag">the agent loop, under control</span>
           </div>
-          <nav class="primary-nav">
-            <a href="/start-here/what-is-loopctl/">Start</a>
-            <a href="/guide/">Knowledge base</a>
-            <a href="/cookbook/recipes/">Cookbook</a>
-            <a href="/principles/sans-io/">Principles</a>
-          </nav>
-          <div class="nav-icons">
+          <div class="masthead-right">
+            <nav class="primary-nav">
+              <a href="/start-here/what-is-loopctl/">Start</a>
+              <a href="/guide/">Knowledge base</a>
+              <a href="/cookbook/recipes/">Cookbook</a>
+              <a href="/principles/sans-io/">Principles</a>
+            </nav>
+            <div class="nav-icons">
             <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode">
               <span class="icon-moon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></span>
               <span class="icon-sun" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></span>
@@ -102,6 +103,7 @@ const ideas = [
                 ></path>
               </svg>
             </a>
+            </div>
           </div>
         </div>
         <div class="masthead-meta">
@@ -634,7 +636,7 @@ const ideas = [
 
   .masthead-row {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
     padding: 18px 0 14px;
     gap: 24px;
@@ -665,6 +667,12 @@ const ideas = [
     color: var(--ink-3);
     border-left: 1px solid var(--rule);
     padding-left: 12px;
+  }
+
+  .masthead-right {
+    display: flex;
+    align-items: center;
+    gap: 30px;
   }
 
   .primary-nav {
@@ -1552,7 +1560,11 @@ const ideas = [
     font-weight: 500;
     line-height: 1.9;
     color: var(--ink);
-    max-width: 900px;
+    max-width: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 4px;
   }
 
   .providers-row .ornament {
@@ -1591,9 +1603,10 @@ const ideas = [
 
   .colophon-grid {
     display: grid;
-    grid-template-columns: 2fr 1fr 1fr 1fr;
+    grid-template-columns: repeat(4, 1fr);
     gap: 48px;
     margin-bottom: 40px;
+    padding: 0 28px;
   }
 
   .col-block h4 {
@@ -1641,6 +1654,7 @@ const ideas = [
   .colophon-foot {
     border-top: 1px solid var(--rule);
     padding-top: 18px;
+    margin: 0 28px;
     display: flex;
     justify-content: space-between;
     font-size: 11px;
@@ -1713,10 +1727,6 @@ const ideas = [
       display: none;
     }
 
-    .nav-icons {
-      margin-left: auto;
-    }
-
     .hero-meta {
       grid-template-columns: 1fr;
       gap: 16px;
@@ -1726,6 +1736,14 @@ const ideas = [
       flex-wrap: wrap;
       align-items: center;
       row-gap: 14px;
+    }
+
+    .masthead-right {
+      display: contents;
+    }
+
+    .nav-icons {
+      margin-left: auto;
     }
 
     .primary-nav {
