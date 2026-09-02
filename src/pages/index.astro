@@ -1,0 +1,1718 @@
+---
+import '../styles/custom.css';
+
+const sections = [
+  { num: 'i.', name: 'Start here', count: 4, href: '/start-here/what-is-loopctl/', note: 'the twenty-line agent' },
+  { num: 'ii.', name: 'Core data', count: 6, href: '/core-data/messages/', note: 'messages, tools, streams' },
+  { num: 'iii.', name: 'The engine', count: 8, href: '/engine/state-machine/', note: 'every step of a run' },
+  { num: 'iv.', name: 'Safety systems', count: 8, href: '/safety/loop-detection/', note: 'staying alive & harmless' },
+  { num: 'v.', name: 'Extensions', count: 5, href: '/extensions/observers/', note: 'observers, hooks, memory' },
+  { num: 'vi.', name: 'Providers', count: 7, href: '/providers/overview/', note: 'five families, one trait' },
+  { num: 'vii.', name: 'Integration', count: 5, href: '/integration/structured-output/', note: 'MCP, derive, presets' },
+  { num: 'viii.', name: 'File reference', count: 78, href: '/file-reference/', note: 'one page per source file' },
+  { num: 'ix.', name: 'Cookbook', count: 2, href: '/cookbook/recipes/', note: '14 recipes, every gotcha' },
+  { num: 'x.', name: 'Principles', count: 12, href: '/principles/sans-io/', note: 'the ideas underneath' },
+];
+
+const safety = [
+  { name: 'Middleware', href: '/safety/middleware/', desc: 'The dispatch pipeline: timeouts, permission gates, output limits, redaction — compose your own.' },
+  { name: 'Loop detection', href: '/safety/loop-detection/', desc: 'Catches the model asking for the same thing forever, and stops the bleed.' },
+  { name: 'Convergence detection', href: '/safety/convergence/', desc: 'Knows when repetition is progress, not a rut, so legitimate work survives.' },
+  { name: 'Model fallback', href: '/safety/fallback/', desc: 'Circuit-breaker chains that hand a dying run to a backup model mid-flight.' },
+  { name: 'Reflection & recovery', href: '/safety/reflection/', desc: 'Turns failures into retries with a plan instead of dying on the first 500.' },
+  { name: 'Tool health', href: '/safety/tool-health/', desc: 'Scores your tools from their results and stops calling the flaky ones.' },
+  { name: 'The shield', href: '/safety/tool-shield/', desc: 'A final safety check on tool arguments before anything executes.' },
+  { name: 'Permissions', href: '/safety/permission/', desc: 'Let the model read freely; make it ask before it writes.' },
+];
+
+const ideas = [
+  { name: 'You own the decisions', desc: 'the framework owns the mechanics. Nothing is on that you did not turn on; no model is picked for you.' },
+  { name: 'Bring your own model', desc: 'five provider families out of the box, OpenAI-compatible profiles for the rest, or one trait — ApiClient — for your own.' },
+  { name: 'Tools are plain Rust', desc: 'a name, a description, a schema, an async function — or let #[derive(Tool)] write the scaffolding.' },
+  { name: 'No panics. Ever.', desc: 'the crate builds with panic = "deny"; a crashing tool becomes an error message the model can read and react to.' },
+  { name: 'Pay only for what you use', desc: 'zero default features. Streaming, hooks, MCP, each provider — every one is an opt-in flag.' },
+];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>loopctl — the agent loop, under control</title>
+    <meta
+      name="description"
+      content="A Rust framework for building agents: a sans-IO engine that runs the loop, pluggable model providers, plain-Rust tools, and the safety systems to keep runs alive."
+    />
+    <link rel="canonical" href="https://loopctl.rs/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="loopctl — the agent loop, under control" />
+    <meta
+      property="og:description"
+      content="A Rust framework for building agents: a sans-IO engine, pluggable providers, plain-Rust tools, and the safety systems to keep runs alive."
+    />
+    <meta property="og:url" content="https://loopctl.rs/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script is:inline>
+      (() => {
+        try {
+          const stored = localStorage.getItem('starlight-theme');
+          const dark =
+            stored === 'dark' ||
+            (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+        } catch {
+          document.documentElement.dataset.theme = 'light';
+        }
+        try {
+          const s = JSON.parse(localStorage.getItem('loopctl-reading') || '{}');
+          const r = document.documentElement;
+          if (s.body) r.dataset.readBody = s.body;
+          if (s.code) r.dataset.readCode = s.code;
+          if (s.scale) r.style.setProperty('--read-scale', s.scale);
+          if (s.leading) r.style.setProperty('--read-leading', s.leading);
+          if (s.measure) r.style.setProperty('--read-measure', s.measure);
+        } catch {}
+      })();
+    </script>
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="wrap">
+        <div class="masthead-row">
+          <div class="brand">
+            <a class="brand-name" href="/">loopctl<span class="brand-dot">.</span></a>
+            <span class="brand-tag">the agent loop, under control</span>
+          </div>
+          <nav class="primary-nav">
+            <a href="/start-here/what-is-loopctl/">Start</a>
+            <a href="/guide/">Knowledge base</a>
+            <a href="/cookbook/recipes/">Cookbook</a>
+            <a href="/principles/sans-io/">Principles</a>
+            <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode">
+              <span class="icon-moon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></span>
+              <span class="icon-sun" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></span>
+            </button>
+            <a class="github-link" href="https://github.com/dch-labs/loopctl" aria-label="GitHub">
+              <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <path
+                  d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
+                ></path>
+              </svg>
+            </a>
+          </nav>
+        </div>
+        <div class="masthead-meta">
+          <span>v0.3.0</span>
+          <span class="ornament">§</span>
+          <span>shipped 30 August 2026</span>
+          <span class="ornament">§</span>
+          <span>MIT OR Apache-2.0</span>
+          <span class="spacer"></span>
+          <span><a href="https://crates.io/crates/loopctl">crates.io</a> · <a href="https://docs.rs/loopctl">docs.rs</a> · rust 1.98+</span>
+        </div>
+      </div>
+      <div class="progress-line" id="progress-line"></div>
+    </header>
+
+    <section class="hero">
+      <div class="hero-deco">
+        sans-IO engine<br />
+        zero default features
+      </div>
+      <div class="wrap">
+        <div class="hero-grid">
+          <div class="hero-main">
+            <div class="hero-eyebrow">
+              <span class="hero-label">A Rust framework for building agents</span>
+              <span class="hero-marker">137-page knowledge base · grounded in source</span>
+            </div>
+            <h1 class="hero-title">
+              The agent loop,<br />
+              <em>under control.</em>
+            </h1>
+            <p class="hero-deck">
+              loopctl runs the part of an agent that is not intelligence: send the conversation,
+              read the stream, call the tools, shrink the history, catch the loops, survive the
+              failures, stop on command. You bring the model connection and your tools — it brings
+              the rest, without a panic in sight.
+            </p>
+            <div class="hero-meta">
+              <div class="meta-cell">
+                <span class="meta-label">Core</span>
+                <span class="meta-value">Sans-IO state machine</span>
+                <span class="meta-sub">a pure brain, serializable mid-run</span>
+              </div>
+              <div class="meta-cell">
+                <span class="meta-label">Providers</span>
+                <span class="meta-value">Five families</span>
+                <span class="meta-sub">OpenAI · Anthropic · Gemini · Bedrock · compatible</span>
+              </div>
+              <div class="meta-cell">
+                <span class="meta-label">Posture</span>
+                <span class="meta-value">No panics</span>
+                <span class="meta-sub">zero default features · deny(unsafe_op_in_unsafe_fn) culture</span>
+              </div>
+            </div>
+            <div class="hero-actions">
+              <a href="/start-here/what-is-loopctl/" class="btn-primary">
+                Start reading — what is loopctl?
+                <span class="arrow">→</span>
+              </a>
+              <a href="#agent" class="btn-ghost">the twenty-line agent, below</a>
+            </div>
+          </div>
+          <aside class="hero-aside">
+            <div class="aside-head">
+              <span>In the knowledge base</span>
+              <em>ten sections, plain words</em>
+            </div>
+            <ul class="aside-list">
+              {
+                sections.map((s) => (
+                  <li>
+                    <a href={s.href}>
+                      <span class="aside-num">{s.num}</span>
+                      <span class="aside-name">
+                        {s.name} <em>— {s.note}</em>
+                      </span>
+                      <span class="aside-count">{s.count}</span>
+                    </a>
+                  </li>
+                ))
+              }
+            </ul>
+            <div class="aside-foot">
+              new here? read <a href="/guide/">the guide</a> first
+            </div>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <section class="agent" id="agent">
+      <div class="wrap">
+        <div class="section-head">
+          <div>
+            <div class="section-eyebrow">II. The whole point</div>
+            <h2 class="section-title">Twenty lines, and the loop is <em>somebody else's problem.</em></h2>
+            <p class="section-deck">
+              A complete, working agent from <code>examples/hello-cli.rs</code> — it runs with a
+              mock connection, no API key. Swap the mock for an OpenAI, Anthropic, Gemini, Bedrock,
+              or Ollama client and nothing else changes.
+            </p>
+          </div>
+        </div>
+        <div class="agent-grid">
+          <div class="agent-prose">
+            <p>
+              <code>BareLoop</code> is the default engine. Its <code>run()</code> does the entire
+              round-trip: send the conversation, read the stream, execute tool calls, feed results
+              back, repeat until the model gives a final answer.
+            </p>
+            <p>
+              The result is a typed <code>Run</code> — the final text, turn count, tool calls, token
+              usage. When things go wrong you get a typed error, never a panic; even a tool that
+              panics is caught and reported as a message the model can read.
+            </p>
+            <a class="text-link" href="/start-here/what-is-loopctl/">walk through it, line by line →</a>
+          </div>
+          <div class="code-block" role="img" aria-label="A twenty-line loopctl agent">
+            <div class="code-line"><span class="kw">use</span> loopctl::engine::BareLoop;</div>
+            <div class="code-line"><span class="kw">use</span> loopctl::engine::core::Loop;</div>
+            <div class="code-line"><span class="kw">use</span> loopctl::engine::RunConfig;</div>
+            <div class="code-line"><span class="kw">use</span> loopctl::tool::ToolRegistry;</div>
+            <div class="code-line"><span class="kw">use</span> loopctl::config::SessionConfig;</div>
+            <div class="code-line"><span class="kw">use</span> loopctl::testing::MockApiClient;</div>
+            <div class="code-line"><span class="kw">use</span> std::sync::Arc;</div>
+            <div class="code-line">&nbsp;</div>
+            <div class="code-line"><span class="attr">#[tokio::main]</span></div>
+            <div class="code-line"><span class="kw">async fn</span> <span class="fn">main</span>() {'{'}</div>
+            <div class="code-line">    <span class="com">// a mock connection — swap for a real provider</span></div>
+            <div class="code-line">    <span class="kw">let</span> client = MockApiClient::new(<span class="str">"hello-model"</span>)</div>
+            <div class="code-line">        .with_text_response(<span class="str">"Hello, world!"</span>);</div>
+            <div class="code-line">&nbsp;</div>
+            <div class="code-line">    <span class="kw">let</span> tools = ToolRegistry::new();</div>
+            <div class="code-line">    <span class="kw">let mut</span> agent = BareLoop::new(Arc::new(client), tools, SessionConfig::default());</div>
+            <div class="code-line">&nbsp;</div>
+            <div class="code-line">    <span class="kw">let</span> result = agent</div>
+            <div class="code-line">        .run(<span class="str">"Say hello!"</span>, &RunConfig::default())</div>
+            <div class="code-line">        .<span class="kw">await</span></div>
+            <div class="code-line">        .expect(<span class="str">"run should succeed"</span>);</div>
+            <div class="code-line">&nbsp;</div>
+            <div class="code-line">    println!(<span class="str">"{}"</span>, result.output.unwrap_or_default());</div>
+            <div class="code-line">{'}'}</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="big-idea" id="big-idea">
+      <div class="wrap">
+        <div class="section-head">
+          <div>
+            <div class="section-eyebrow">III. The big idea</div>
+            <h2 class="section-title">A brain that decides, <em>hands that act.</em></h2>
+            <p class="section-deck">
+              The engine splits in two at a strict border. The brain — LoopMachine — is pure data: it
+              never touches the network. The hands — BareLoop — do whatever the brain asked, then
+              report back, with middleware, hooks, observers and managers standing guard over
+              everything they touch. Hover any band to see it light up.
+            </p>
+          </div>
+        </div>
+
+        <div class="idea-panel">
+          <svg class="idea-svg" viewBox="0 0 880 820" role="img" aria-label="One brain, two hands, a full staff: the LoopMachine decides, the BareLoop hands act, middleware, hooks, observers and managers stand guard, and model providers form the world.">
+            <defs>
+              <marker id="arrowhead" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                <path class="flow-arrow" d="M0,0 L8,4 L0,8 Z" />
+              </marker>
+            </defs>
+
+            <text class="diag-title" x="440" y="56">One brain. Two hands. <tspan class="diag-title-em">A full staff.</tspan></text>
+            <text class="diag-subtitle" x="440" y="86">how loopctl runs an agent — every moving piece, one picture</text>
+
+            <g class="diag" id="cluster-brain">
+              <rect class="cluster-box" x="30" y="130" width="300" height="310" rx="6" />
+              <text class="cluster-title" x="180" y="170">The brain</text>
+              <text class="cluster-sub" x="180" y="194">LoopMachine · pure data · no I/O</text>
+              <g class="mini">
+                <rect x="48" y="220" width="264" height="44" rx="4" />
+                <text x="180" y="247">holds the conversation</text>
+              </g>
+              <g class="mini">
+                <rect x="48" y="282" width="264" height="44" rx="4" />
+                <text x="180" y="309">counts turns, watches context</text>
+              </g>
+              <g class="mini">
+                <rect x="48" y="344" width="264" height="44" rx="4" />
+                <text x="180" y="371">decides the next step</text>
+              </g>
+              <text class="cluster-foot" x="180" y="418">testable with no mocks</text>
+            </g>
+
+            <g class="diag" id="cluster-hands">
+              <rect class="cluster-box" x="550" y="130" width="300" height="310" rx="6" />
+              <text class="cluster-title" x="700" y="170">The hands</text>
+              <text class="cluster-sub" x="700" y="194">BareLoop · the driver · all I/O</text>
+              <g class="mini">
+                <rect x="568" y="220" width="264" height="44" rx="4" />
+                <text x="700" y="247">streams from the model</text>
+              </g>
+              <g class="mini">
+                <rect x="568" y="282" width="264" height="44" rx="4" />
+                <text x="700" y="309">runs the tools you wrote</text>
+              </g>
+              <g class="mini">
+                <rect x="568" y="344" width="264" height="44" rx="4" />
+                <text x="700" y="371">reports back — never decides</text>
+              </g>
+              <text class="cluster-foot" x="700" y="418">pausable — save the brain mid-run</text>
+            </g>
+
+            <g class="flow flow-protocol">
+              <rect class="flow-chip" x="334" y="196" width="212" height="32" rx="6" />
+              <text class="flow-label" x="440" y="217">a step — “do this next”</text>
+              <path class="flow-path" d="M 334 230 C 396 230, 484 242, 546 242" />
+              <path class="flow-path return" d="M 546 338 C 484 338, 396 350, 334 350" />
+              <rect class="flow-chip" x="334" y="354" width="212" height="32" rx="6" />
+              <text class="flow-label" x="440" y="375">the result — what happened</text>
+            </g>
+
+            <g class="diag">
+              <rect class="rail-box" x="30" y="500" width="820" height="115" rx="6" />
+              <text class="rail-header" x="440" y="534">the guardrails — opt-in machinery</text>
+              <g class="g-chip">
+                <rect x="45" y="548" width="188" height="52" rx="4" />
+                <text class="g-chip-name" x="139" y="571">middleware</text>
+                <text class="g-chip-sub" x="139" y="589">timeouts · limits · redaction</text>
+              </g>
+              <g class="g-chip">
+                <rect x="246" y="548" width="188" height="52" rx="4" />
+                <text class="g-chip-name" x="340" y="571">hooks</text>
+                <text class="g-chip-sub" x="340" y="589">allow · block · ask</text>
+              </g>
+              <g class="g-chip">
+                <rect x="447" y="548" width="188" height="52" rx="4" />
+                <text class="g-chip-name" x="541" y="571">observers</text>
+                <text class="g-chip-sub" x="541" y="589">watch every event</text>
+              </g>
+              <g class="g-chip">
+                <rect x="648" y="548" width="188" height="52" rx="4" />
+                <text class="g-chip-name" x="742" y="571">managers</text>
+                <text class="g-chip-sub" x="742" y="589">detection · fallback · reflection</text>
+              </g>
+            </g>
+
+            <g class="diag">
+              <rect class="rail-box" x="30" y="680" width="820" height="95" rx="6" />
+              <text class="rail-header" x="440" y="712">the world — bring any model</text>
+              <g class="g-chip">
+                <rect x="40" y="726" width="94" height="32" rx="4" />
+                <text class="g-chip-name" x="87" y="746">openai</text>
+              </g>
+              <g class="g-chip">
+                <rect x="141" y="726" width="94" height="32" rx="4" />
+                <text class="g-chip-name" x="188" y="746">anthropic</text>
+              </g>
+              <g class="g-chip">
+                <rect x="242" y="726" width="94" height="32" rx="4" />
+                <text class="g-chip-name" x="289" y="746">gemini</text>
+              </g>
+              <g class="g-chip">
+                <rect x="343" y="726" width="94" height="32" rx="4" />
+                <text class="g-chip-name" x="390" y="746">bedrock</text>
+              </g>
+              <g class="g-chip">
+                <rect x="444" y="726" width="94" height="32" rx="4" />
+                <text class="g-chip-name" x="491" y="746">ollama</text>
+              </g>
+              <g class="g-chip">
+                <rect x="545" y="726" width="94" height="32" rx="4" />
+                <text class="g-chip-name" x="592" y="746">moonshot</text>
+              </g>
+              <g class="g-chip">
+                <rect x="646" y="726" width="94" height="32" rx="4" />
+                <text class="g-chip-name" x="693" y="746">z.ai</text>
+              </g>
+              <g class="g-chip dashed">
+                <rect x="747" y="726" width="94" height="32" rx="4" />
+                <text class="g-chip-name" x="794" y="746">your own</text>
+              </g>
+            </g>
+
+            <g class="flow flow-io">
+              <path class="flow-path" d="M 700 440 L 700 492" />
+              <text class="flow-annotation" x="712" y="470">tool calls &amp; events</text>
+              <path class="flow-path return" d="M 830 440 C 866 490, 866 625, 842 676" />
+              <text class="flow-annotation" transform="rotate(90 872 560)" x="872" y="560">model streams — the world answers</text>
+              <text class="flow-steps sub" x="440" y="806">the brain never touches the world — the hands never decide</text>
+            </g>
+          </svg>
+        </div>
+
+        <ol class="payoff-list">
+          <li>
+            <span class="payoff-num">i.</span>
+            <div>
+              <h3>Test the brain with no mocks</h3>
+              <p>
+                Pure data in, pure data out. To check “after three identical tool results, does it
+                detect a loop?” you feed a machine results and read what it says — no fake network,
+                no flaky tests.
+              </p>
+            </div>
+          </li>
+          <li>
+            <span class="payoff-num">ii.</span>
+            <div>
+              <h3>Pause a run, resume it elsewhere</h3>
+              <p>
+                The brain serializes. Take a running agent, turn it into JSON, store it anywhere,
+                and put it into a fresh body later — on another machine if you like.
+              </p>
+            </div>
+          </li>
+          <li>
+            <span class="payoff-num">iii.</span>
+            <div>
+              <h3>Swap providers behind the model's back</h3>
+              <p>
+                The brain never learns who the model is. The hands speak to it through one small
+                trait, so OpenAI becomes a local Ollama and nothing upstream notices.
+              </p>
+            </div>
+          </li>
+        </ol>
+        <div class="idea-foot">
+          <a class="text-link" href="/start-here/the-big-idea/">the big idea, in full →</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="safety" id="safety">
+      <div class="wrap">
+        <div class="section-head">
+          <div>
+            <div class="section-eyebrow">IV. Safety, in the box</div>
+            <h2 class="section-title">Long runs die of small failures. <em>These are the antidotes.</em></h2>
+            <p class="section-deck">
+              Every system below is opt-in, composable, and documented to the threshold — each one
+              has a page in the knowledge base explaining exactly when it fires and what it costs.
+            </p>
+          </div>
+        </div>
+        <div class="library-list">
+          {
+            safety.map((item, i) => (
+              <a class="library-item" href={item.href}>
+                <span class="lib-num">
+                  {['i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii'][i]}.
+                </span>
+                <span class="lib-body">
+                  <span class="lib-title">{item.name}</span>
+                  <span class="lib-desc">{item.desc}</span>
+                </span>
+                <span class="lib-arrow" aria-hidden="true">
+                  →
+                </span>
+              </a>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <section class="principles" id="ideas">
+      <div class="wrap">
+        <div class="section-head">
+          <div>
+            <div class="section-eyebrow">V. The five ideas</div>
+            <h2 class="section-title">What the crate believes, <em>in five lines.</em></h2>
+          </div>
+        </div>
+        <ol class="ideas-list">
+          {
+            ideas.map((idea, i) => (
+              <li>
+                <span class="idea-num">{['i', 'ii', 'iii', 'iv', 'v'][i]}.</span>
+                <div>
+                  <strong>{idea.name}</strong> — {idea.desc}
+                </div>
+              </li>
+            ))
+          }
+        </ol>
+
+        <div class="providers-strip">
+          <div class="providers-label">bring your own model</div>
+          <p class="providers-row">
+            {['OpenAI', 'Anthropic', 'Google Gemini', 'AWS Bedrock', 'Azure OpenAI', 'Ollama', 'DeepSeek', 'Moonshot', 'xAI Grok', 'Z.ai'].map(
+              (p) => (
+                <span>
+                  {p} <span class="ornament">·</span>
+                </span>
+              )
+            )}
+            <em>or implement one trait — <code>ApiClient</code> — and bring your own.</em>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <footer class="colophon">
+      <div class="wrap">
+        <div class="colophon-grid">
+          <div class="col-block">
+            <h4>Colophon</h4>
+            <p>
+              Set in <em>Fraunces</em> for display, <em>Newsreader</em> for text, and
+              <em>JetBrains Mono</em> for code. Built as a static site — no tracking, no cookies,
+              search runs in your browser. The knowledge base is grounded in the loopctl v0.3.0
+              source; where the docs and the code disagree, the code wins and the docs get fixed.
+            </p>
+          </div>
+          <div class="col-block">
+            <h4>Read</h4>
+            <ul>
+              <li><a href="/guide/">The knowledge base</a></li>
+              <li><a href="/start-here/what-is-loopctl/">What is loopctl?</a></li>
+              <li><a href="/start-here/the-big-idea/">The big idea</a></li>
+              <li><a href="/cookbook/recipes/">Fourteen recipes</a></li>
+              <li><a href="/cookbook/gotchas/">Every gotcha</a></li>
+            </ul>
+          </div>
+          <div class="col-block">
+            <h4>Ecosystem</h4>
+            <ul>
+              <li><a href="https://github.com/dch-labs/loopctl">GitHub — dch-labs/loopctl</a></li>
+              <li><a href="https://crates.io/crates/loopctl">crates.io</a></li>
+              <li><a href="https://docs.rs/loopctl">docs.rs — API reference</a></li>
+              <li><a href="/glossary/">Glossary</a></li>
+            </ul>
+          </div>
+          <div class="col-block">
+            <h4>License</h4>
+            <p>
+              Dual-licensed under <em>MIT OR Apache-2.0</em>. Found a mistake on this site? The
+              knowledge base has an issue tracker — corrections are welcome and credited.
+            </p>
+          </div>
+        </div>
+        <div class="colophon-foot">
+          <span>loopctl · v0.3.0 · the agent loop, under control</span>
+          <span class="colophon-mark">— Dream · Create · Harness —</span>
+          <span>© 2026 dch-labs</span>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      import { initReadingPanel } from '../scripts/reading';
+      initReadingPanel();
+
+      const root = document.documentElement;
+      const toggle = document.getElementById('theme-toggle');
+
+      const syncIcon = () => {
+        const dark = root.dataset.theme === 'dark';
+        toggle?.querySelector('.icon-sun')?.setAttribute('style', dark ? 'display:grid' : 'display:none');
+        toggle?.querySelector('.icon-moon')?.setAttribute('style', dark ? 'display:none' : 'display:grid');
+      };
+      syncIcon();
+
+      toggle?.addEventListener('click', () => {
+        const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+        root.dataset.theme = next;
+        try {
+          localStorage.setItem('starlight-theme', next);
+        } catch {}
+        syncIcon();
+      });
+
+      const fitChips = () => {
+        const svg = document.querySelector('.idea-svg');
+        if (!svg) return;
+        const labels = svg.querySelectorAll('.flow-label');
+        const chips = svg.querySelectorAll('.flow-chip');
+        labels.forEach((label, i) => {
+          const chip = chips[i];
+          if (!chip || typeof label.getBBox !== 'function') return;
+          const box = label.getBBox();
+          const pad = 14;
+          let x = box.x - pad;
+          let width = box.width + pad * 2;
+          if (x < 332) {
+            width -= 332 - x;
+            x = 332;
+          }
+          if (x + width > 548) width = 548 - x;
+          chip.setAttribute('x', String(x));
+          chip.setAttribute('width', String(width));
+        });
+      };
+      fitChips();
+      document.fonts?.ready.then(fitChips);
+
+      const progressLine = document.getElementById('progress-line');
+      const updateProgress = () => {
+        if (!progressLine) return;
+        const total = document.documentElement.scrollHeight - window.innerHeight;
+        progressLine.style.width = `${total > 0 ? (window.scrollY / total) * 100 : 0}%`;
+      };
+      window.addEventListener('scroll', updateProgress, { passive: true });
+      updateProgress();
+    </script>
+  </body>
+</html>
+
+<style>
+  .wrap {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 36px;
+  }
+
+  a {
+    text-decoration: none;
+  }
+
+  .masthead {
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .masthead-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 18px 0 14px;
+    gap: 24px;
+  }
+
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .brand-name {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 26px;
+    letter-spacing: -0.025em;
+    color: var(--ink);
+  }
+
+  .brand-dot {
+    color: var(--accent);
+    font-style: italic;
+  }
+
+  .brand-tag {
+    font-style: italic;
+    font-size: 13px;
+    color: var(--ink-3);
+    border-left: 1px solid var(--rule);
+    padding-left: 12px;
+  }
+
+  .primary-nav {
+    display: flex;
+    align-items: center;
+    gap: 26px;
+  }
+
+  .primary-nav a {
+    font-size: 14px;
+    color: var(--ink-2);
+    transition: color 0.2s;
+  }
+
+  .primary-nav a:hover {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
+  .theme-toggle {
+    background: none;
+    border: none;
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    cursor: pointer;
+    color: var(--ink-3);
+    transition: color 0.2s;
+  }
+
+  .theme-toggle:hover {
+    color: var(--accent);
+  }
+
+  .github-link {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+  }
+
+  .theme-toggle span {
+    display: grid;
+    place-items: center;
+  }
+
+  .masthead-meta {
+    display: flex;
+    gap: 10px;
+    font-size: 11px;
+    color: var(--ink-3);
+    font-variant: small-caps;
+    letter-spacing: 0.06em;
+    padding-bottom: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .masthead-meta a:hover {
+    color: var(--accent);
+  }
+
+  .masthead-meta .spacer {
+    flex: 1;
+  }
+
+  .ornament {
+    color: var(--accent);
+  }
+
+  .progress-line {
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    height: 2px;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.1s linear;
+  }
+
+  .hero {
+    padding: 72px 0 96px;
+    border-bottom: 1px solid var(--rule);
+    position: relative;
+  }
+
+  .hero-grid {
+    display: grid;
+    grid-template-columns: 7fr 5fr;
+    gap: 72px;
+  }
+
+  .hero-deco {
+    position: absolute;
+    right: 36px;
+    top: 36px;
+    font-family: var(--font-mono-ui);
+    font-size: 10px;
+    color: var(--ink-3);
+    text-align: right;
+    line-height: 1.5;
+  }
+
+  .hero-eyebrow {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 28px;
+    gap: 16px;
+  }
+
+  .hero-label {
+    font-size: 11px;
+    font-variant: small-caps;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  .hero-marker {
+    font-family: var(--font-mono-ui);
+    font-size: 11px;
+    color: var(--ink-3);
+  }
+
+  .hero-title {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(46px, 7.4vw, 92px);
+    line-height: 0.94;
+    letter-spacing: -0.028em;
+    margin-bottom: 32px;
+    font-variation-settings: 'opsz' 144;
+    color: var(--ink);
+  }
+
+  .hero-title em {
+    font-style: italic;
+    font-weight: 400;
+    color: var(--accent);
+    font-variation-settings: 'opsz' 144;
+  }
+
+  .hero-deck {
+    font-size: calc(19px * var(--read-scale));
+    line-height: calc(1.55 * var(--read-leading));
+    max-width: calc(580px * var(--read-measure));
+    margin-bottom: 40px;
+    color: var(--ink-2);
+  }
+
+  .hero-meta {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 28px;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    padding: 22px 0;
+    margin-bottom: 32px;
+  }
+
+  .meta-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .meta-label {
+    font-size: 10px;
+    font-variant: small-caps;
+    letter-spacing: 0.1em;
+    color: var(--ink-3);
+  }
+
+  .meta-value {
+    font-family: var(--font-display);
+    font-size: 19px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+
+  .meta-sub {
+    font-size: 12px;
+    color: var(--ink-3);
+    font-style: italic;
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .btn-primary {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 14px 22px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  [data-theme='dark'] .btn-primary {
+    color: var(--dim-bg);
+  }
+
+  .btn-primary:hover {
+    background: var(--accent);
+    color: var(--paper-bg);
+  }
+
+  .btn-primary .arrow {
+    transition: transform 0.2s;
+  }
+
+  .btn-primary:hover .arrow {
+    transform: translateX(3px);
+  }
+
+  .btn-ghost {
+    padding: 14px 8px;
+    font-size: 14px;
+    color: var(--ink-2);
+    border-bottom: 1px solid var(--ink-3);
+    transition: color 0.2s, border-color 0.2s;
+  }
+
+  .btn-ghost:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .hero-aside {
+    border-left: 1px solid var(--rule);
+    padding-left: 36px;
+  }
+
+  .aside-head {
+    font-size: 11px;
+    font-variant: small-caps;
+    letter-spacing: 0.12em;
+    color: var(--ink-3);
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .aside-head em {
+    font-style: italic;
+    font-size: 12px;
+    font-variant: normal;
+    letter-spacing: 0;
+  }
+
+  .aside-list li {
+    border-bottom: 1px dotted var(--rule);
+  }
+
+  .aside-list li a {
+    display: grid;
+    grid-template-columns: 34px 1fr auto;
+    gap: 12px;
+    align-items: baseline;
+    padding: 11px 0;
+    font-size: 14px;
+    transition: background 0.2s, color 0.2s;
+  }
+
+  .aside-list li a:hover {
+    background: var(--bg-2);
+  }
+
+  .aside-list li a:hover .aside-name {
+    color: var(--accent);
+    text-decoration: underline;
+    text-decoration-color: var(--accent);
+    text-underline-offset: 3px;
+  }
+
+  .aside-num {
+    font-family: var(--font-display);
+    font-style: italic;
+    color: var(--ink-3);
+    font-size: 14px;
+  }
+
+  .aside-name {
+    color: var(--ink);
+    transition: color 0.2s;
+  }
+
+  .aside-name em {
+    color: var(--ink-3);
+    font-style: italic;
+    font-size: 12.5px;
+  }
+
+  .aside-count {
+    font-family: var(--font-mono-ui);
+    font-size: 11px;
+    color: var(--ink-3);
+  }
+
+  .aside-foot {
+    margin-top: 18px;
+    font-size: 12.5px;
+    color: var(--ink-3);
+    font-style: italic;
+    text-align: right;
+  }
+
+  .aside-foot a {
+    color: var(--accent);
+    border-bottom: 1px solid var(--accent);
+  }
+
+  .section-head {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 48px;
+    align-items: end;
+    padding: 80px 0 40px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 48px;
+  }
+
+  .section-eyebrow {
+    font-size: 11px;
+    font-variant: small-caps;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    font-weight: 500;
+    margin-bottom: 14px;
+  }
+
+  .section-title {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: clamp(28px, 3.4vw, 40px);
+    line-height: 1.08;
+    letter-spacing: -0.018em;
+    max-width: 760px;
+    font-variation-settings: 'opsz' 72;
+    color: var(--ink);
+  }
+
+  .section-title em {
+    font-style: italic;
+    font-weight: 400;
+    color: var(--accent);
+  }
+
+  .section-deck {
+    font-size: calc(16px * var(--read-scale));
+    color: var(--ink-2);
+    max-width: calc(600px * var(--read-measure));
+    margin-top: 14px;
+    line-height: calc(1.55 * var(--read-leading));
+  }
+
+  .section-deck code {
+    font-family: var(--font-mono-ui);
+    font-size: 0.85em;
+    background: var(--bg-3);
+    padding: 1px 5px;
+    color: var(--accent);
+  }
+
+  .agent {
+    padding-bottom: 32px;
+    scroll-margin-top: 80px;
+  }
+
+  .agent-grid {
+    display: grid;
+    grid-template-columns: 2fr 3fr;
+    gap: 56px;
+    align-items: start;
+  }
+
+  .agent-prose {
+    font-size: calc(16.5px * var(--read-scale));
+    line-height: calc(1.62 * var(--read-leading));
+    color: var(--ink-2);
+  }
+
+  .agent-prose p {
+    margin-bottom: 18px;
+  }
+
+  .agent-prose code {
+    font-family: var(--font-mono-ui);
+    font-size: 0.84em;
+    background: var(--bg-3);
+    padding: 1px 5px;
+    color: var(--accent);
+  }
+
+  .text-link {
+    color: var(--accent);
+    border-bottom: 1px solid var(--accent);
+    padding-bottom: 2px;
+    font-size: 15px;
+    transition: opacity 0.2s;
+  }
+
+  .text-link:hover {
+    opacity: 0.65;
+  }
+
+  .code-block {
+    font-family: var(--font-mono-ui);
+    font-size: 13px;
+    line-height: 1.62;
+    background: var(--bg-code);
+    border: 1px solid var(--rule-soft);
+    border-left: 2px solid var(--accent);
+    padding: 18px 22px;
+    overflow-x: auto;
+    white-space: pre;
+    color: var(--ink);
+    box-shadow: 6px 6px 0 var(--bg-3);
+  }
+
+  .code-line {
+    min-height: 1.62em;
+  }
+
+  .code-block .kw {
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  .code-block .str {
+    color: var(--sage);
+  }
+
+  .code-block .com {
+    color: var(--ink-3);
+    font-style: italic;
+  }
+
+  .code-block .fn {
+    color: var(--gold);
+  }
+
+  .code-block .attr {
+    color: var(--gold);
+  }
+
+  .big-idea {
+    border-top: 1px solid var(--rule);
+    padding-bottom: 40px;
+    scroll-margin-top: 70px;
+  }
+
+  .idea-panel {
+    border: 1px solid var(--rule);
+    background: var(--bg-2);
+    padding: 28px 24px 24px;
+  }
+
+  .idea-svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  .idea-svg .cluster-box {
+    fill: var(--paper);
+    stroke: var(--ink-2);
+    stroke-width: 1;
+    transition: stroke 0.25s, fill 0.25s;
+  }
+
+  .idea-svg .cluster-title {
+    font-family: var(--font-display);
+    font-size: 24px;
+    font-weight: 600;
+    fill: var(--ink);
+    text-anchor: middle;
+    font-variation-settings: 'opsz' 48;
+  }
+
+  .idea-svg .cluster-sub {
+    font-family: var(--font-mono-ui);
+    font-size: 10.5px;
+    fill: var(--ink-3);
+    text-anchor: middle;
+    letter-spacing: 0.04em;
+  }
+
+  .idea-svg .mini rect {
+    fill: var(--bg-2);
+    stroke: var(--rule);
+    stroke-width: 1;
+    transition: fill 0.25s, stroke 0.25s;
+  }
+
+  .idea-svg .mini text {
+    font-family: var(--font-body);
+    font-size: 14.5px;
+    fill: var(--ink-2);
+    text-anchor: middle;
+    dominant-baseline: middle;
+  }
+
+  .idea-svg .cluster-foot {
+    font-family: var(--font-body);
+    font-style: italic;
+    font-size: 12px;
+    fill: var(--ink-3);
+    text-anchor: middle;
+  }
+
+  .idea-svg .flow-chip {
+    fill: var(--paper);
+    stroke: var(--rule-soft);
+    transition: stroke 0.25s;
+  }
+
+  .idea-svg #cluster-brain:hover ~ .flow-protocol .flow-chip:first-of-type,
+  .idea-svg #cluster-hands:hover ~ .flow-protocol .flow-chip:last-of-type {
+    stroke: var(--accent);
+  }
+
+  .idea-svg .flow-path {
+    fill: none;
+    stroke: var(--ink-2);
+    stroke-width: 1.2;
+    transition: stroke 0.25s, stroke-width 0.25s;
+    marker-end: url(#arrowhead);
+  }
+
+  .idea-svg .flow-path.return {
+    stroke-dasharray: 5 4;
+  }
+
+  .idea-svg .flow-label,
+  .idea-svg .flow-steps {
+    font-family: var(--font-body);
+    font-style: italic;
+    font-size: 13px;
+    fill: var(--ink-2);
+    text-anchor: middle;
+    transition: fill 0.25s;
+  }
+
+  .idea-svg .flow-steps {
+    font-style: normal;
+    font-variant: small-caps;
+    letter-spacing: 0.08em;
+    font-size: 12.5px;
+    fill: var(--accent);
+  }
+
+  .idea-svg .flow-steps.sub {
+    fill: var(--ink-3);
+    font-variant: normal;
+    letter-spacing: 0;
+    font-size: 11.5px;
+    font-style: italic;
+  }
+
+  .idea-svg .diag-title {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 30px;
+    letter-spacing: -0.02em;
+    fill: var(--ink);
+    text-anchor: middle;
+    font-variation-settings: 'opsz' 72;
+  }
+
+  .idea-svg .diag-title-em {
+    font-style: italic;
+    font-weight: 500;
+    fill: var(--accent);
+  }
+
+  .idea-svg .diag-subtitle {
+    font-family: var(--font-body);
+    font-style: italic;
+    font-size: 12.5px;
+    fill: var(--ink-3);
+    text-anchor: middle;
+  }
+
+  .idea-svg g.diag {
+    cursor: default;
+  }
+
+  .idea-svg g.diag:hover .cluster-box,
+  .idea-svg g.diag:hover .rail-box {
+    stroke: var(--accent);
+    fill: var(--bg-2);
+  }
+
+  .idea-svg g.diag:hover .cluster-title,
+  .idea-svg g.diag:hover .rail-header {
+    fill: var(--accent);
+  }
+
+  .idea-svg .rail-box {
+    fill: var(--paper);
+    stroke: var(--ink-2);
+    stroke-width: 1;
+  }
+
+  .idea-svg .rail-header {
+    font-family: var(--font-body);
+    font-size: 12.5px;
+    font-variant: small-caps;
+    letter-spacing: 0.14em;
+    fill: var(--accent);
+    text-anchor: middle;
+  }
+
+  .idea-svg .g-chip rect {
+    fill: var(--bg-2);
+    stroke: var(--rule);
+    stroke-width: 1;
+  }
+
+  .idea-svg .g-chip.dashed rect {
+    stroke-dasharray: 4 3;
+  }
+
+  .idea-svg .g-chip-name {
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-variant: small-caps;
+    letter-spacing: 0.1em;
+    fill: var(--ink);
+    text-anchor: middle;
+  }
+
+  .idea-svg .g-chip-sub {
+    font-family: var(--font-body);
+    font-style: italic;
+    font-size: 11px;
+    fill: var(--ink-3);
+    text-anchor: middle;
+  }
+
+  .idea-svg .flow-annotation {
+    font-family: var(--font-body);
+    font-style: italic;
+    font-size: 12px;
+    fill: var(--ink-3);
+  }
+
+  .idea-svg .flow-arrow {
+    fill: var(--ink-2);
+    transition: fill 0.25s;
+  }
+
+  .idea-svg #cluster-brain:hover ~ .flow-protocol .flow-path:not(.return),
+  .idea-svg #cluster-hands:hover ~ .flow-protocol .flow-path.return,
+  .idea-svg #cluster-hands:hover ~ .flow-io .flow-path {
+    stroke: var(--accent);
+    stroke-width: 2;
+  }
+
+  .idea-svg .flow-arrow {
+    fill: context-stroke;
+  }
+
+  .idea-svg #cluster-brain:hover ~ .flow-protocol .flow-label:first-of-type,
+  .idea-svg #cluster-hands:hover ~ .flow-protocol .flow-label:last-of-type,
+  .idea-svg #cluster-hands:hover ~ .flow-io .flow-annotation {
+    fill: var(--accent);
+  }
+
+  .idea-svg #cluster-brain:hover .cluster-box,
+  .idea-svg #cluster-hands:hover .cluster-box {
+    stroke: var(--accent);
+    fill: var(--bg-2);
+  }
+
+  .idea-svg #cluster-brain:hover .mini rect,
+  .idea-svg #cluster-hands:hover .mini rect {
+    stroke: var(--accent);
+  }
+
+  .payoff-list {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 40px;
+    margin-top: 40px;
+    list-style: none;
+    padding: 0;
+  }
+
+  .payoff-list li {
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    gap: 8px;
+    border-top: 1px solid var(--rule);
+    padding-top: 18px;
+  }
+
+  .payoff-num {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 24px;
+    color: var(--accent);
+    line-height: 1;
+  }
+
+  .payoff-list h3 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 17px;
+    letter-spacing: -0.01em;
+    margin-bottom: 8px;
+    color: var(--ink);
+  }
+
+  .payoff-list p {
+    font-size: calc(14.5px * var(--read-scale));
+    line-height: calc(1.58 * var(--read-leading));
+    color: var(--ink-2);
+  }
+
+  .idea-foot {
+    margin-top: 36px;
+    text-align: right;
+  }
+
+  .safety {
+    border-top: 1px solid var(--rule);
+    padding-bottom: 40px;
+    scroll-margin-top: 70px;
+  }
+
+  .library-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 56px;
+  }
+
+  .library-item {
+    display: grid;
+    grid-template-columns: 40px 1fr 20px;
+    gap: 14px;
+    padding: 20px 0;
+    border-bottom: 1px solid var(--rule-soft);
+    align-items: baseline;
+    transition: background 0.2s;
+  }
+
+  .library-item:hover {
+    background: var(--bg-2);
+  }
+
+  .lib-num {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 20px;
+    color: var(--ink-3);
+    line-height: 1;
+  }
+
+  .lib-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .lib-title {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 18px;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+    transition: color 0.2s;
+  }
+
+  .library-item:hover .lib-title {
+    color: var(--accent);
+    text-decoration: underline;
+    text-decoration-color: var(--accent);
+    text-underline-offset: 4px;
+  }
+
+  .lib-desc {
+    font-size: calc(14px * var(--read-scale));
+    line-height: calc(1.5 * var(--read-leading));
+    color: var(--ink-2);
+  }
+
+  .lib-arrow {
+    color: var(--accent);
+    opacity: 0;
+    transform: translateX(-6px);
+    transition: opacity 0.2s, transform 0.2s;
+  }
+
+  .library-item:hover .lib-arrow {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  .principles {
+    border-top: 1px solid var(--rule);
+    padding-bottom: 80px;
+    scroll-margin-top: 70px;
+  }
+
+  .ideas-list {
+    max-width: calc(780px * var(--read-measure));
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .ideas-list li {
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    gap: 12px;
+    padding: 16px 0;
+    border-bottom: 1px dotted var(--rule);
+    font-size: calc(16px * var(--read-scale));
+    line-height: calc(1.58 * var(--read-leading));
+    color: var(--ink-2);
+  }
+
+  .idea-num {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 20px;
+    color: var(--accent);
+  }
+
+  .ideas-list strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .ideas-list code {
+    font-family: var(--font-mono-ui);
+    font-size: 0.84em;
+    background: var(--bg-3);
+    padding: 1px 5px;
+    color: var(--accent);
+  }
+
+  .providers-strip {
+    margin-top: 56px;
+    border-top: 1px solid var(--rule);
+    padding-top: 28px;
+  }
+
+  .providers-label {
+    font-size: 11px;
+    font-variant: small-caps;
+    letter-spacing: 0.12em;
+    color: var(--ink-3);
+    margin-bottom: 12px;
+  }
+
+  .providers-row {
+    font-family: var(--font-display);
+    font-size: 19px;
+    font-weight: 500;
+    line-height: 1.9;
+    color: var(--ink);
+    max-width: 900px;
+  }
+
+  .providers-row .ornament {
+    padding: 0 6px;
+  }
+
+  .providers-row em {
+    font-family: var(--font-body);
+    font-style: italic;
+    font-size: 15px;
+    color: var(--ink-3);
+  }
+
+  .providers-row code {
+    font-family: var(--font-mono-ui);
+    font-size: 0.8em;
+    color: var(--accent);
+  }
+
+  .colophon {
+    border-top: 1px solid var(--rule);
+    padding: 56px 0 32px;
+    background: var(--bg-2);
+  }
+
+  .colophon-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 48px;
+    margin-bottom: 40px;
+  }
+
+  .col-block h4 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 11px;
+    font-variant: small-caps;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+
+  .col-block p {
+    font-size: 13.5px;
+    color: var(--ink-2);
+    line-height: 1.55;
+  }
+
+  .col-block p em {
+    font-style: italic;
+    color: var(--ink);
+  }
+
+  .col-block ul {
+    list-style: none;
+    padding: 0;
+  }
+
+  .col-block ul li {
+    padding: 3px 0;
+    font-size: 13.5px;
+  }
+
+  .col-block ul li a {
+    color: var(--ink-2);
+    transition: color 0.2s;
+  }
+
+  .col-block ul li a:hover {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .colophon-foot {
+    border-top: 1px solid var(--rule);
+    padding-top: 18px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--ink-3);
+    font-variant: small-caps;
+    letter-spacing: 0.06em;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .colophon-mark {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-weight: 400;
+    font-size: 14px;
+    color: var(--accent);
+    font-variant: normal;
+    letter-spacing: 0;
+  }
+
+  @media (max-width: 900px) {
+    .hero-grid,
+    .agent-grid {
+      grid-template-columns: 1fr;
+      gap: 48px;
+    }
+
+    .hero-aside {
+      border-left: none;
+      border-top: 1px solid var(--rule);
+      padding-left: 0;
+      padding-top: 36px;
+    }
+
+    .payoff-list {
+      grid-template-columns: 1fr;
+      gap: 0;
+    }
+
+    .payoff-list li {
+      padding: 16px 0;
+    }
+
+    .library-list {
+      grid-template-columns: 1fr;
+    }
+
+    .colophon-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+    }
+
+    .section-head {
+      grid-template-columns: 1fr;
+      gap: 24px;
+      padding: 56px 0 32px;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .wrap {
+      padding: 0 20px;
+    }
+
+    .brand-tag {
+      display: none;
+    }
+
+    .hero-deco {
+      display: none;
+    }
+
+    .primary-nav a:not(:last-of-type) {
+      display: none;
+    }
+
+    .primary-nav a[aria-label='GitHub'] {
+      display: inline;
+    }
+
+    .hero-meta {
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    .masthead-row {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 10px;
+    }
+  }
+
+  @media (pointer: coarse) {
+    .library-item:hover {
+      background: transparent;
+    }
+  }
+</style>
