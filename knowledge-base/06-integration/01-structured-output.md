@@ -49,6 +49,25 @@ let result: Classification = loopctl::structured::request_structured(
 
 Under the hood: set a `ResponseFormat` from your type → one non-streaming request → extract the JSON (`extract_structured`: a tool-call payload if present, otherwise the text parsed leniently — the outermost balanced `{...}` or `[...]` found inside prose or markdown fences) → `from_value`. **No retry on parse failure** — a malformed answer surfaces as `StructuredError::Deserialize`; retrying with clearer instructions is your call.
 
+## Providers without native support — `request_structured_prompted`
+
+Most local models behind Ollama/vLLM reject or ignore `response_format` — and since 0.3.0, loopctl refuses request options a client cannot forward rather than silently downgrading them. For those providers there is a second one-shot helper: **`request_structured_prompted`**. It gets structured answers without any structured-output wire feature at all:
+
+- Your type's minified JSON Schema is embedded **in the system prompt** with strict-JSON instructions (`structured::prompted_system_prefix` is public if you want to compose your own flow; a caller-supplied system prompt is prepended, never replaced).
+- The request goes out as a plain `create_message` — **no `RequestOptions`, no tools payload**, so there is nothing for a local server to reject.
+- The answer is extracted with the same lenient scanner (fences and prose-wrapped JSON accepted).
+- On a parse or schema failure, **exactly one corrective retry** feeds the concrete error back to the model — the failed answer replayed as a text-only assistant turn, the corrective message bounded to 2,000 characters. A second failure returns `StructuredError::Deserialize` with the reason and the truncated last output.
+
+```rust
+let result: Classification = loopctl::structured::request_structured_prompted(
+    &*client,                                     // any ApiClient — no options support needed
+    vec![Message::user("Classify: 'The package arrived broken'")],
+    Some("You classify support messages.".into()),
+).await?;
+```
+
+Rule of thumb: prefer `request_structured` on providers with native support; reach for the prompted variant when the model can't honor `response_format`. Both extract through the same scanner, so switching later is mechanical.
+
 ## Inside the agent loop — `set_request_options`
 
 ```rust

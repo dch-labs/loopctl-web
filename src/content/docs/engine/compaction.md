@@ -269,6 +269,26 @@ Three promises hold in every case: **no request is ever sent over the window** (
 
 ---
 
+## Who counts the tokens — the heuristic and the ratio presets
+
+Compaction triggers on an *estimate* of the conversation's size, and the estimator is pluggable. The default is **`HeuristicTokenCounter`** — a rough chars-per-token guess with no provider knowledge. Since 0.3.1 there is a second option: **`RatioTokenCounter`** presets, one per provider family, each pinned to a measured characters-per-token ratio plus a fixed per-message overhead:
+
+```rust
+use loopctl::compact::RatioTokenCounter;
+
+let counter = RatioTokenCounter::openai();       // 4.30 chars/token, +4 per message
+// anthropic() → 3.60 / +5 · gemini() → 4.05 / +4 · local_default() → 3.80 / +4
+let custom  = RatioTokenCounter::new(3.9, 4);    // your own calibration
+
+agent.set_token_counter(Arc::new(counter));
+```
+
+The honest long-term answer for local models is the custom ratio: send one known text, read the provider's reported `input_tokens`, divide — the three-minute calibration recipe is in the type's docs. A ratio that is NaN, infinite, or not positive is rejected with a warning and the 4.0 fallback takes over, so a bad constant can never wedge the gate. Presets and heuristic render messages through the same helper, so the two counters can drift only in how they divide — never in *what* they count.
+
+**Defaults are unchanged**: the engine keeps `HeuristicTokenCounter` unless you install a counter. Presets are opt-in, byte-comparable behavior for everyone else. (For why estimates matter at all, see [tokens & context windows](/principles/tokens-and-context/).)
+
+---
+
 ## Configuration quick reference
 
 ```rust

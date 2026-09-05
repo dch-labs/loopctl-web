@@ -64,6 +64,7 @@ Use this when you're *in the code* and want to know what the file in front of yo
 | File | One line |
 |---|---|
 | [`tool.rs`](/file-reference/tool/) | The `Tool` trait, outputs, errors, contexts. |
+| [`tool/builtin.rs`](/file-reference/tool-builtin-think/) + [`tool/builtin/think.rs`](/file-reference/tool-builtin-think/) | Built-in tools (`builtin_tools`): `ThinkTool`, the planning scratchpad. |
 | [`tool/registry.rs`](/file-reference/tool-registry/) | `ToolRegistry` + `FnTool`. |
 | [`tool/permission.rs`](/file-reference/tool-permission/) | `PermissionCheck` — the decision type. |
 | [`tool/health.rs`](/file-reference/tool-health/) | Per-tool stats and circuit breakers. |
@@ -95,6 +96,8 @@ Use this when you're *in the code* and want to know what the file in front of yo
 | [`hooks/executor.rs`](/file-reference/hooks-executor/) | First-block-wins execution. |
 | [`hooks/builtin/*`](/file-reference/hooks-builtin/) | AutoCommit, Blocklist, Confirmation, Logging. |
 | [`memory.rs`](/file-reference/memory/) + [`entry.rs`](/file-reference/memory-entry/) + [`builtin.rs`](/file-reference/memory-builtin/) | The memory trait, entries, in-memory store. |
+| [`memory/trajectory.rs`](/file-reference/memory-trajectory/) + [`memory/trajectory/sink.rs`](/file-reference/memory-trajectory/) | `TrajectoryObserver` — each run as a serializable record (memory + JSONL ledger). |
+| [`memory/vector.rs`](/file-reference/memory-vector/) | `EmbeddingProvider` + `VectorIndex` primitives and reference impls (`vector_index`). |
 | [`compact.rs`](/file-reference/compact/) + [`types.rs`](/file-reference/compact-types/) + [`truncating.rs`](/file-reference/compact-truncating/) | Compaction manager, outcome types, truncator. |
 
 ## Integration & support

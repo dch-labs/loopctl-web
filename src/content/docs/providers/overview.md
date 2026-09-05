@@ -50,6 +50,22 @@ BedrockClient::from_env()     // AWS_REGION + AWS_ACCESS_KEY_ID + AWS_SECRET_ACC
 
 Every client also has a builder (`OpenAiClient::builder().with_api_key(..).with_model(..)....build()?`) with the same knobs everywhere: api key, base URL, model, timeout (default 120s read timeout), connect timeout (10s), connection-pool tuning, and an injectable `reqwest::Client` for full HTTP control. Base-URL setters trim trailing slashes (`…/v1/` == `…/v1`).
 
+## Profile builders — the middle tier
+
+Between the one-line constructors and the bare client builders sits a middle tier added in 0.3.1: **profile builders** — `deepseek_builder()`, `grok_builder()`, `moonshot_builder()`, `ollama_builder(model)`, `azure_builder(resource)` (each returning an `OpenAiClientBuilder`), and `zai_builder()` (returning an `AnthropicClientBuilder`). Each returns the underlying client builder with the provider's *facts* pre-seeded — the endpoint, the credential environment variable (alias fallbacks preserved), and the default model:
+
+```rust
+let client = loopctl::provider::ollama_builder("qwen3:14b")   // endpoint + local defaults seeded
+    .with_base_url("http://gpu-box:11434")                    // your config wins
+    .build()?;
+```
+
+This is the tier for **config-file-driven hosts**: apply your own precedence on top (`with_api_key` / `with_model` / `with_base_url` / `with_timeout` override the seed), and a bad seeded fact — an invalid Azure resource name, a missing key, Azure's missing deployment model — fails at `build()`, in the same order the constructors have always reported, naming the environment variable (`MOONSHOT_API_KEY`, `AZURE_OPENAI_MODEL`, …). No provider fact needs to be duplicated outside the crate. The zero-argument constructors are now thin wrappers over these builders and behave identically, error messages included; `BedrockClientBuilder` gained the same shared HTTP knobs as the rest.
+
+---
+
+## What every client gives you
+
 ## What every client gives you
 
 - **Both turn modes** — streaming (`stream_messages`) and non-streaming (`create_message`).

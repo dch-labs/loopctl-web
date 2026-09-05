@@ -199,6 +199,20 @@ An ordering subtlety pinned by the implementation: `all_tools()` returns **regis
 
 ---
 
+## Built-in tools — `ThinkTool`
+
+The crate ships its first ready-made tool behind the `builtin_tools` feature: **`ThinkTool`**, a no-side-effect scratchpad the model reasons into before acting. It advertises exactly one field — `think(thought)` → the constant reply `"ok"`.
+
+The point is not the acknowledgement (the thought is already in the conversation as the call's input — echoing it back would double its token cost). The point is the **description**: it is written as an instruction template — restate the goal, list the options, check the plan against the constraints, decide — so the tool *teaches the procedure* rather than just naming itself. On small local models this is the cheap version of "think before you act": the reasoning happens in the open, in the transcript, where later turns can see it.
+
+Facts worth knowing:
+
+- `is_read_only()` and `is_concurrency_safe()` are `true` by definition — the tool touches nothing.
+- A missing or non-string `thought` field is a `ToolError::InvalidInput` naming the field.
+- Registration is the only way it enters a session: enable `builtin_tools`, construct `tool::builtin::ThinkTool`, register it like any other tool. Nothing is auto-installed and `default = []` is unchanged.
+
+---
+
 ## Schemas — brief but important
 
 - The framework does **not** validate your schema. A broken schema means the model sends broken arguments. Test it.

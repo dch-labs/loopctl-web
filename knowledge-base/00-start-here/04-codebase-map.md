@@ -12,6 +12,7 @@ loopctl/
 │   ├── stream.rs           streaming event types + the accumulator that assembles them
 │   ├── message.rs          Message, MessagePart, roles — the conversation data model
 │   ├── tool.rs             the Tool trait and its output/error types
+│   ├── tool/builtin/       shipped tools: think.rs — the planning scratchpad [feature: builtin_tools]
 │   ├── tool/registry.rs    ToolRegistry — name → tool lookup
 │   ├── tool/permission.rs  PermissionCheck — allow / deny / ask / modify
 │   ├── tool/health.rs      per-tool circuit breakers [feature: tool_health]
@@ -20,6 +21,8 @@ loopctl/
 │   ├── hooks/              control-flow interception (block a tool before it runs) [feature: hooks]
 │   ├── observer.rs         watch everything that happens (no control) 
 │   ├── memory.rs           long-term memory for the agent
+│   ├── memory/             trajectory.rs — capture each run as a record (JSONL or memory)
+│   │                       vector.rs — embedding + nearest-neighbour primitives [feature: vector_index]
 │   ├── detection/          is the model stuck? (loop + convergence detection)
 │   ├── fallback.rs         circuit breaker over the model itself (switch to a backup model)
 │   ├── reflection/         analyze a failed tool call, decide how to retry
@@ -125,7 +128,7 @@ Deep dives: [observers](../04-extensions/01-observers.md) · [hooks](../04-exten
 | `src/reflection.rs` | Analyze a failed tool call (`Reflector`), decide the retry (`RecoveryStrategy`). |
 | `src/reflection/llm.rs` | Ask the model itself to analyze the failure. |
 | `src/reflection/backoff.rs` | Retry with exponentially growing delays. |
-| `src/memory/` | `LoopMemory` trait + a simple in-memory store. |
+| `src/memory/` | `LoopMemory` trait + a simple in-memory store; `memory/trajectory.rs` captures each run as a serializable record (`TrajectoryObserver`, JSONL ledger). |
 | `src/cancel.rs` | `CancelSignal` — cooperative cancellation, safe to share across tasks. |
 
 Deep dives: [loop detection](../03-safety/02-loop-detection.md) · [fallback](../03-safety/04-fallback.md) · [reflection](../03-safety/05-reflection.md) · [memory](../04-extensions/03-memory.md) · [cancellation](../02-engine/05-cancellation.md)

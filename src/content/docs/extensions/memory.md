@@ -5,7 +5,7 @@ sidebar:
 ---
 
 
-By default, a run's only "memory" is the conversation itself. Install a **memory store** and the agent also keeps a separate long-term record: every successful tool trajectory gets stored, relevant entries are injected before each turn, and everything is tidied at the end of a successful run. Sources: `src/memory.rs`, `src/memory/entry.rs`, `src/memory/builtin.rs`.
+By default, a run's only "memory" is the conversation itself. Install a **memory store** and the agent also keeps a separate long-term record: every successful tool trajectory gets stored, relevant entries are injected before each turn, and everything is tidied at the end of a successful run. Sources: `src/memory.rs`, `src/memory/entry.rs`, `src/memory/builtin.rs` — plus `src/memory/trajectory.rs`, a sibling module that captures whole runs as records (see [Trajectory capture](#trajectory-capture--the-run-as-a-record) below).
 
 ---
 
@@ -75,11 +75,40 @@ Case-insensitive substring matching — not embeddings, not semantic search. Sor
 
 Any of these are valid designs: a SQLite or Postgres-backed store; a vector database with embedding similarity in `retrieve`; a recency-weighted store for "what happened lately"; a hybrid. The contract is just the three verbs, thread-safe (`&self` + interior mutability), async. The reference for "retrieve must not block writers" is pinned in tests — snapshot under the lock, score outside it.
 
+## Trajectory capture — the run as a record
+
+Alongside the long-term store, the `memory::trajectory` module ships a ready-made observer that turns each run into one serializable **`TrajectoryRecord`**: every turn's query and capture-limited response, every tool call paired by id (a retried call appears once per attempt — the recovery story), durations, token totals, and a three-way outcome — `Success`, `Failure`, or `Partial` (failed after real progress, a distinction `success: bool` cannot express).
+
+```rust
+let observer = Arc::new(TrajectoryObserver::in_memory());   // records() hands finished records over
+// or: TrajectoryObserver::writing_to("trajectories")       // also appends one JSONL line per run
+agent.register_observer(observer);
+```
+
+Records are plain data — no engine types — so they can feed experience extraction, debugging, or bug reports (after you apply your own redaction policy: the captured text is plaintext). The optional JSONL ledger grows without bound and its directory is yours to rotate. **Don't confuse the two "trajectories"**: `MemoryCategory::Trajectory` (above) is a *memory entry about one tool call*, written by the engine into your store; `memory::trajectory::TrajectoryRecord` is a *whole-run record*, captured by an observer you register.
+
+Details and defaults: the [file reference](/file-reference/memory-trajectory/).
+
+---
+
+## Vector primitives — the semantic-memory substrate
+
+Behind the `vector_index` feature (0.3.1) live the two traits every semantic-retrieval memory store is built from, plus dependency-free reference implementations:
+
+- **`EmbeddingProvider`** — turns text into an `Embedding` (a vector + its dimension). One required method (`embed(&str)`) plus a provided `embed_batch` that loops `embed` and preserves input order.
+- **`VectorIndex`** — a nearest-neighbour store keyed by `Uuid`: `add` upserts, `search` returns the cosine-scored top-*k* sorted descending with an id tiebreak, `remove` is idempotent, and a dimension mismatch surfaces as `LoopError::Memory`.
+
+Both traits are **object-safe async** — boxed futures, exactly like `LoopMemory` — so a store can hold `Box<dyn EmbeddingProvider>` / `Box<dyn VectorIndex>` and swap backends without touching its contract. The reference implementations: `LinearVectorIndex` (brute-force O(n) cosine scan — deliberately simple, the correctness oracle faster indexes must match) and `HashingEmbedder` (deterministic, no network, no API key — good for exercising the layer in tests, not for real retrieval). A free `cosine_similarity` helper rounds it out.
+
+This is the substrate the upcoming semantic-memory releases build on — real embedders and persistent stores slot in behind the same two traits. The feature adds no dependencies and changes no defaults.
+
+Details: the [file reference](/file-reference/memory-vector/).
+
 ---
 
 ## Gotchas
 
-1. Trajectory entries truncate input/result to 500 chars each — long tool outputs are lossy in memory (by design: memory is for gist, not archives; the run's audit trail keeps the full text).
+1. Trajectory entries truncate input/result to 500 chars each — long tool outputs are lossy in memory (by design: memory is for gist, not archives; `memory::trajectory` keeps a fuller, per-run record if you capture it).
 2. Only **successful** tool calls are stored — failures don't pollute memory (error patterns are the `ErrorPattern` category's job, if you write them).
 3. Retrieval runs every turn on the turn's input text — cheap stores make this free, expensive ones should cache or debounce.
 4. Memory messages ride the request but count toward the context estimate (the compaction trigger sees them) and are re-fetched fresh each turn.
@@ -92,3 +121,4 @@ Any of these are valid designs: a SQLite or Postgres-backed store; a vector data
 - [Text matching](/principles/text-matching/) — the word-overlap scorer's formula and its worked example.
 - [Contributors](/extensions/contributors/) — the other "inject context each turn" mechanism.
 - [The LLM turn](/engine/llm-turn/) — where retrieval plugs in.
+- [TrajectoryObserver (file reference)](/file-reference/memory-trajectory/) — whole-run records, JSONL ledger and all.

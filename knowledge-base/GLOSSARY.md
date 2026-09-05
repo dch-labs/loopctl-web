@@ -82,6 +82,7 @@ Every abbreviation, jargon word, and loopctl-specific term used in this knowledg
 | **Cancellation signal** | The shared flag that stops a run cooperatively at the next checkpoint. |
 | **Cancel re-arm** | Re-setting the signal after a run so one cancel doesn't kill the agent forever. |
 | **Audit trail** | `session.runs` — the append-only record of every run and turn, untouched by compaction. |
+| **Trajectory record** | A whole-run snapshot captured by the built-in `TrajectoryObserver`: per-turn queries/responses, tool calls, durations, tokens, outcome. (Different thing from `MemoryCategory::Trajectory`, a memory entry about one tool call.) |
 | **Loop detection** | Noticing the same tool operation (name + argument + result) repeating. |
 | **Convergence detection** | Noticing the model's final answers becoming near-identical. |
 | **Shield** | A risk scorer that can block dangerous tool input before it runs. |
@@ -90,6 +91,11 @@ Every abbreviation, jargon word, and loopctl-specific term used in this knowledg
 | **Emergency line** | The always-on 95%-of-window compaction trigger. |
 | **Preresolved result** | An answer the brain fills in itself (e.g. "tool not available") without dispatching. |
 | **Attempt reset** | The stream handler's signal: "void everything buffered from the failed attempt." |
+| **Think tool** | A built-in no-side-effect scratchpad (`ThinkTool`) the model reasons into before acting — its description teaches the procedure (restate goal → options → check → decide). |
+| **Prompted structured output** | Getting structured JSON from providers without native support: the schema rides in the system prompt and a lenient scanner plus one corrective retry fish the answer out. |
+| **Ratio token counter** | A `RatioTokenCounter` preset — token estimates from a per-provider chars-per-token ratio plus per-message overhead; the calibrated alternative to the default heuristic. |
+| **Embedding** | Text as a vector of numbers, positioned so similar meanings sit close together — the basis of semantic retrieval. |
+| **Vector index** | A nearest-neighbour store over embeddings: add vectors, get the top-k closest back (`VectorIndex`). |
 
 ## Design & pattern words
 
@@ -122,6 +128,7 @@ Terms from the [Principles](09-principles/01-sans-io.md) pages — the patterns 
 | Term | Meaning |
 |---|---|
 | **ApiClient** | loopctl's one trait for talking to any model provider. |
+| **Profile builder** | The middle tier of provider setup (`ollama_builder()`, `azure_builder(resource)`, …): a client builder with a provider's endpoint/env-var/model facts pre-seeded, so config-driven hosts override instead of duplicate. |
 | **`StreamRequest`** | The outbound bundle: messages + optional system prompt and tools. |
 | **`RequestOptions`** | Per-request extras: model override, response format, tool constraint. |
 | **Response format** | A forced JSON shape for the reply ("answer as this schema"). |

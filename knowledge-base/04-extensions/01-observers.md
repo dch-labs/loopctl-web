@@ -83,6 +83,10 @@ agent.set_text_streamer(Arc::new(|chunk: &str| {
 
 One consumer, no trait, no reset bookkeeping — but the same failed-attempt caveat applies. The committed text is always `Run::output` / `on_response`.
 
+## A ready-made observer — trajectory capture
+
+You don't have to write your own transcript keeper: `memory::trajectory::TrajectoryObserver` listens to these same events and assembles each run into a serializable `TrajectoryRecord` — per-turn queries and responses, tool calls paired by `tool_call_id` (a retried call appears once per attempt), durations, token totals, and a three-way outcome (`Success` / `Failure` / `Partial`). Keep finished records in memory (`records()`), optionally append one JSONL line per run to a directory (`writing_to(dir)`), and cap response text with `with_capture_limit` (default 2,000 characters). See the [file reference](../07-file-reference/memory-trajectory.md) and [Memory](03-memory.md).
+
 ---
 
 ## Gotchas
@@ -99,3 +103,4 @@ One consumer, no trait, no reset bookkeeping — but the same failed-attempt cav
 
 - [Hooks](02-hooks.md) — the controlling counterpart.
 - [Anatomy of a run](../00-start-here/03-anatomy-of-a-run.md) — where each event sits in the flow.
+- [`TrajectoryObserver` (file reference)](../07-file-reference/memory-trajectory.md) — a built-in observer that turns events into run records.

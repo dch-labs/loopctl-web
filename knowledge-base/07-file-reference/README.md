@@ -59,6 +59,7 @@ Use this when you're *in the code* and want to know what the file in front of yo
 | File | One line |
 |---|---|
 | [`tool.rs`](tool.md) | The `Tool` trait, outputs, errors, contexts. |
+| [`tool/builtin.rs`](tool-builtin-think.md) + [`tool/builtin/think.rs`](tool-builtin-think.md) | Built-in tools (`builtin_tools`): `ThinkTool`, the planning scratchpad. |
 | [`tool/registry.rs`](tool-registry.md) | `ToolRegistry` + `FnTool`. |
 | [`tool/permission.rs`](tool-permission.md) | `PermissionCheck` — the decision type. |
 | [`tool/health.rs`](tool-health.md) | Per-tool stats and circuit breakers. |
@@ -90,6 +91,8 @@ Use this when you're *in the code* and want to know what the file in front of yo
 | [`hooks/executor.rs`](hooks-executor.md) | First-block-wins execution. |
 | [`hooks/builtin/*`](hooks-builtin.md) | AutoCommit, Blocklist, Confirmation, Logging. |
 | [`memory.rs`](memory.md) + [`entry.rs`](memory-entry.md) + [`builtin.rs`](memory-builtin.md) | The memory trait, entries, in-memory store. |
+| [`memory/trajectory.rs`](memory-trajectory.md) + [`memory/trajectory/sink.rs`](memory-trajectory.md) | `TrajectoryObserver` — each run as a serializable record (memory + JSONL ledger). |
+| [`memory/vector.rs`](memory-vector.md) | `EmbeddingProvider` + `VectorIndex` primitives and reference impls (`vector_index`). |
 | [`compact.rs`](compact.md) + [`types.rs`](compact-types.md) + [`truncating.rs`](compact-truncating.md) | Compaction manager, outcome types, truncator. |
 
 ## Integration & support

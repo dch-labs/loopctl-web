@@ -54,6 +54,14 @@ MessageStop
 
 Two deliberate details: the text arrives as a **single delta** (no artificial chunking — if your test needs multi-fragment assembly, that's accumulator territory, covered by the crate's own tests), and the tool lane opens with an **empty input that then streams its arguments** — mirroring how real providers deliver tool calls piecemeal, so accumulated tool input is byte-identical on mock and real paths. The non-streaming twin builds the same parts in the same lane order (text first, then tool call).
 
+## The wire, recorded — asserting on what was actually sent
+
+The mock also remembers what reached it, so tests can pin the exact request shape rather than just the outcome:
+
+- **`captured_requests()`** — clones of every served `create_message` request, oldest first. A request rejected before sending (unsupported options) is never captured — it never reached the wire.
+- **`create_message_calls()` / `with_options_calls()`** — disjoint counters for the two wire paths (plain vs options-bearing), so a test can prove which path a caller took. A rejected options request still increments `with_options_calls`.
+- **`with_errors(Vec<Option<String>>)`** — scripts failures by call position: each call consumes the front entry; `Some(message)` fails that one call (still counted and captured, like `with_error`), `None` or an exhausted script serves normally. This is how a test fails *exactly one* turn — for example, only the corrective retry of a prompted structured-output flow.
+
 ## `MockTool` — a tool with knobs
 
 ```rust
