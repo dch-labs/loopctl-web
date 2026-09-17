@@ -14,13 +14,17 @@ Two directories of executable knowledge: examples show *how*, integration tests 
 | `derived-tool-cli` | derive, testing | `#[derive(Tool)]` side-by-side with the manual version |
 | `repl-cli` | testing | interactive loop, fresh loop per line, abortable Ctrl-C task |
 | `chat` | testing, providers | real-provider REPL: env-selected provider, observers, three FnTools, streaming vs not (`NO_STREAM=1`), token totals |
+| `vector-index-demo` | vector_index | the embedding + nearest-neighbour layer with the hashing embedder |
+| `file-memory-cli` | file_memory | `FileMemoryStore` — learned memory that survives a restart |
 | `mcp-adapter` | mcp | import an in-process MCP server's tools, call them |
 | `mcp-stdio-server` | mcp | a minimal stdio MCP server subprocess |
 | `mcp_server` | mcp | serve a loopctl registry over MCP stdio (with a deliberately failing tool) |
 
+The `sqlite/` companion crate adds `sqlite-memory-cli` (`cargo run -p loopctl-sqlite --example sqlite-memory-cli`) — the same restart-survival demo over a WAL-mode database.
+
 ## Integration tests (each pins a subsystem contract)
 
-`compaction_noop` / `compaction_pairs` (compaction honesty), `detection_false_positives` (the 11 patterns that must *not* flag), `fallback_switch`, `memoize_tool_call_id` (id stamping), `redacting_middleware`, `provider_error_path` / `provider_survival` (fail-fast vs retry), `structured_output`, `constrained_decode` (grammar, live), `mcp_tool_provider` / `mcp_transports`, `temp_dir_lifecycle`, `unwired_subsystems` (breaker gate, shield middleware), `derive_tool`, `examples_e2e`, `provider_e2e` (live, gated `LOOPCTL_E2E=1`).
+`compaction_noop` / `compaction_pairs` (compaction honesty), `detection_false_positives` (the 11 patterns that must *not* flag), `fallback_switch`, `memoize_tool_call_id` (id stamping), `redacting_middleware`, `provider_error_path` / `provider_survival` (fail-fast vs retry), `structured_output`, `prompted_structured` (the schema-in-prompt fallback), `constrained_decode` (grammar, live), `mcp_tool_provider` / `mcp_transports`, `temp_dir_lifecycle`, `unwired_subsystems` (breaker gate, shield middleware), `derive_tool`, `trajectory_observer` (whole-run records), `vector_index`, `file_memory` (the persistent-store contracts), `census_pins` (cross-cutting behaviors the review census flagged as tested-nowhere), `examples_e2e`, `provider_e2e` (live, gated `LOOPCTL_E2E=1`). The `loopctl-sqlite` crate carries its own suite (restart survival, ranking parity, WAL multi-writer).
 
 ## Makefile targets
 

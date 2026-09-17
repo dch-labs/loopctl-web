@@ -1,10 +1,10 @@
 # `src/engine/bare.rs` — the `BareLoop` driver
 
-The hands: the run loop, the three handlers, `finalize`, and the loop's own state. (~1,600 lines; a facade over its submodules since the big split.)
+The hands: the run loop, the three handlers, `finalize`, and the loop's own state. (~1,800 lines; a facade over its submodules since the big split.)
 
 **Key items**
 
-- Constructors: `new` (empty bundle), `new_with_managers` (seeds a default `ContextManager` if none), `from_machine`/`into_machine` (checkpoint/resume).
+- Constructors: `new` (empty bundle), `new_with_managers` (seeds a default `ContextManager` if none), `from_machine`/`into_machine` (checkpoint/resume), and `from_machine_with_managers` (0.3.2 — resume keeping the caller's `LoopManagers`: observer host, dispatch pipeline, context manager all survive, where `from_machine` builds a fresh bundle and drops every installed observer; a bundle carrying no context manager gets the session-synced default, matching `new_with_managers`).
 - The `Loop` impl: `run` (the match loop), `finalize` (commit/discard, memory consolidation, stale-stop cleanup, run-end events, cancel re-arm), `should_continue`, `state`, `cancel`, `stop_reason`.
 - The three handlers: `handle_call_llm` (transients → deferral check → `do_turn` → detection → feed), `handle_call_tools` (preresolved slots + dispatch → one results message), `handle_compact` (thin, delegates to `bare/compact.rs`).
 - `set_error_state` — Cancelled routes through `machine.cancel()`, everything else through `machine.fail()`.

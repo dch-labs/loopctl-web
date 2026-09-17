@@ -66,7 +66,18 @@ What gets generated: `impl Tool` with `name()`, `description()`, `schema()` (bui
 | `HashMap<String, T>`, `BTreeMap<String, T>` | `object` with values of `<T>` |
 | `Option<T>` | the inner type's schema, **not** required |
 
-Anything else (custom structs, enums, `serde_json::Value`) is a compile error pointing you at `#[tool(skip)]` or a manual `impl Tool` — the macro never guesses a wrong schema silently. Serde's `rename_all` strategies are respected for the derived property names (so `camelCase` APIs line up).
+Anything else (custom structs, enums, `serde_json::Value`) is a compile error pointing you at `#[tool(skip)]` or a manual `impl Tool` — the macro never guesses a wrong schema silently.
+
+## Serde rename parity — the schema follows deserialization (0.3.2)
+
+The derived property names mirror serde's own renaming rules *exactly*, so the schema the model sees and the struct serde deserializes can never disagree:
+
+- `#[serde(rename_all = "...")]` converts field names exactly as serde does — ASCII-only for the case-changing strategies, with `snake_case` and `lowercase` as identities on fields; `"SCREAMING-KEBAB-CASE"` is accepted in serde's spelling.
+- The split form — `rename_all(serialize = "...", deserialize = "...")` — follows the **deserialization** side: the model's input is what deserialization consumes, so that is the name the schema must advertise.
+- `#[serde(default)]` is recognized even when it follows value-bearing serde keys like `with = "..."`.
+- Flag keys (`#[serde(default)]`-style) reject `= value` and parenthesized misuse with a named error instead of being silently ignored.
+
+Before 0.3.2 the conversion could invent names serde rejects (the schema and the deserializer disagreed); the parity is pinned by trybuild fixtures under `derive/tests/ui/`.
 
 ## The errors you might meet (all clear, all spanned)
 

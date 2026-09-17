@@ -95,8 +95,11 @@ Use this when you're *in the code* and want to know what the file in front of yo
 | [`hooks.rs`](/file-reference/hooks/) + [`hooks/context.rs`](/file-reference/hooks-context/) | The `Hook` trait + contexts. |
 | [`hooks/executor.rs`](/file-reference/hooks-executor/) | First-block-wins execution. |
 | [`hooks/builtin/*`](/file-reference/hooks-builtin/) | AutoCommit, Blocklist, Confirmation, Logging. |
-| [`memory.rs`](/file-reference/memory/) + [`entry.rs`](/file-reference/memory-entry/) + [`builtin.rs`](/file-reference/memory-builtin/) | The memory trait, entries, in-memory store. |
+| [`memory.rs`](/file-reference/memory/) + [`entry.rs`](/file-reference/memory-entry/) + [`builtin.rs`](/file-reference/memory-builtin/) + [`score.rs`](/file-reference/memory-builtin/) | The memory trait, entries, in-memory store, shared retrieval scorer. |
+| [`memory/file.rs`](/file-reference/memory-file/) | `FileMemoryStore` — JSONL persistence that survives a restart (`file_memory`). |
 | [`memory/trajectory.rs`](/file-reference/memory-trajectory/) + [`memory/trajectory/sink.rs`](/file-reference/memory-trajectory/) | `TrajectoryObserver` — each run as a serializable record (memory + JSONL ledger). |
+| [`memory/consolidate.rs`](/file-reference/memory-consolidate/) | Quality scoring, category-weighted decay, duplicate merging — the consolidation primitives. |
+| [`memory/extractor.rs`](/file-reference/memory-extractor/) | Mines learned memories from recorded runs (`MemoryExtractor`). |
 | [`memory/vector.rs`](/file-reference/memory-vector/) | `EmbeddingProvider` + `VectorIndex` primitives and reference impls (`vector_index`). |
 | [`compact.rs`](/file-reference/compact/) + [`types.rs`](/file-reference/compact-types/) + [`truncating.rs`](/file-reference/compact-truncating/) | Compaction manager, outcome types, truncator. |
 

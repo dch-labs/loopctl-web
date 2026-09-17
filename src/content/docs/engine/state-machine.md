@@ -150,6 +150,8 @@ let agent = BareLoop::from_machine(m, config, client, tools); // new body, same 
 
 Tests pin that a restored machine makes **identical** step decisions — resume is not "close enough," it's exact. Once `Terminal`, a machine accepts no further input and repeats its outcome forever (a restored finished run still knows it finished — `fail()` even ensures an errored machine carries its failure record into serialization).
 
+One driver-level choice: `from_machine` builds a fresh manager bundle, so every installed observer is dropped on resume. Since 0.3.2, `BareLoop::from_machine_with_managers(m, config, client, tools, managers)` resumes keeping the caller's `LoopManagers` — observer host, dispatch pipeline, context manager (a bundle carrying none gets the session-synced default, matching `new_with_managers`) — for observer-preserving resume of a seeded or deserialized machine.
+
 ---
 
 ## Rules recap — the brain's contract

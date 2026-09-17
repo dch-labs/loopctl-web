@@ -27,6 +27,10 @@ loopctl/
 │   ├── observer.rs         watch everything that happens (no control) 
 │   ├── memory.rs           long-term memory for the agent
 │   ├── memory/             trajectory.rs — capture each run as a record (JSONL or memory)
+│   │                       consolidate.rs — decay, merge, prune: memory curation primitives
+│   │                       extractor.rs — mine learned memories from recorded runs
+│   │                       file.rs — JSONL-persistent memory store [feature: file_memory]
+│   │                       score.rs — the shared retrieval scorer (ranking parity across backends)
 │   │                       vector.rs — embedding + nearest-neighbour primitives [feature: vector_index]
 │   ├── detection/          is the model stuck? (loop + convergence detection)
 │   ├── fallback.rs         circuit breaker over the model itself (switch to a backup model)
@@ -44,6 +48,7 @@ loopctl/
 │   ├── testing.rs          fake model client + fake tools for your tests [feature: testing]
 │   └── numeric.rs          internal safe-math helpers (not public)
 ├── derive/                 a companion crate: #[derive(Tool)] generates the Tool impl
+├── sqlite/                 a companion crate: loopctl-sqlite, durable SQLite memory
 ├── examples/               runnable example programs
 └── tests/                  integration tests
 ```
@@ -133,7 +138,7 @@ Deep dives: [observers](/extensions/observers/) · [hooks](/extensions/hooks/) �
 | `src/reflection.rs` | Analyze a failed tool call (`Reflector`), decide the retry (`RecoveryStrategy`). |
 | `src/reflection/llm.rs` | Ask the model itself to analyze the failure. |
 | `src/reflection/backoff.rs` | Retry with exponentially growing delays. |
-| `src/memory/` | `LoopMemory` trait + a simple in-memory store; `memory/trajectory.rs` captures each run as a serializable record (`TrajectoryObserver`, JSONL ledger). |
+| `src/memory/` | `LoopMemory` trait + the in-memory store; `file.rs` persists it to JSONL (`file_memory`); `consolidate.rs`/`score.rs` are the curation and ranking primitives every backend shares; `extractor.rs` mines learned memories from recorded runs; `trajectory.rs` captures each run as a serializable record (`TrajectoryObserver`, JSONL ledger). |
 | `src/cancel.rs` | `CancelSignal` — cooperative cancellation, safe to share across tasks. |
 
 Deep dives: [loop detection](/safety/loop-detection/) · [fallback](/safety/fallback/) · [reflection](/safety/reflection/) · [memory](/extensions/memory/) · [cancellation](/engine/cancellation/)
@@ -158,7 +163,8 @@ Deep dives: [messages](/core-data/messages/) · [errors](/core-data/errors/) · 
 | Path | What it is |
 |---|---|
 | `derive/` | The `loopctl-derive` crate: `#[derive(Tool)]` writes the Tool impl for you. |
-| `examples/` | Eight runnable examples, from hello-world to MCP servers. |
+| `sqlite/` | The `loopctl-sqlite` crate: a durable SQLite-backed memory store (bundled rusqlite, WAL). |
+| `examples/` | Ten runnable examples, from hello-world to persistent memory. |
 | `tests/` | Integration tests — good reading for "how is X supposed to behave?" |
 | `Makefile` | `make ci`, `make test`, `make lint`, `make e2e` and friends. |
 | `TESTING.md` | The project's testing philosophy (written, but useful to users too). |

@@ -10,7 +10,7 @@ The pipeline's enforcement point for the `PermissionCheck` decision type.
 **Behavior notes**
 
 - `Deny` short-circuits the whole inner chain: soft error `"Permission <reason> for tool 'x'"`, zero duration — tests pin that nothing inside executes.
-- `Ask` without a resolver is **denied** (headless-safe): `"permission required: <prompt>"`.
+- `Ask` without a resolver is **denied** (headless-safe): `"permission required: <prompt>"`. A user refusal logs the same `warn` as every other denial (0.3.2), and a cancel while the answer is pending aborts the wait (`cancelled while awaiting approval`) — a cancelled run never executes the tool, whatever the resolver returns late.
 - `Modify` rewrites `ctx.input` then proceeds — the replacement is not re-validated against the tool's schema.
 - Install it outermost (or near) so denial happens before any other layer's work.
 

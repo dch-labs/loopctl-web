@@ -53,7 +53,7 @@ What is loopctl → Safety section (all of it) → [Production hardening recipe]
 
 ## About this knowledge base
 
-- **Grounded in source**: written against the loopctl codebase (v0.3.0) — every default value, threshold, and behavior stated here comes from the code or its tests.
+- **Grounded in source**: written against the loopctl codebase (v0.3.2) — every default value, threshold, and behavior stated here comes from the code or its tests.
 - **Plain by design**: no unexplained jargon; short sentences; every diagram can be read on its own.
 - **Honest about limits**: where the crate drops images, where defaults surprise (zero retries!), where heuristics are heuristics — it's all in the open, mostly in [Gotchas](08-cookbook/01-gotchas.md).
 
