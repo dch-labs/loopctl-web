@@ -86,6 +86,15 @@ Every abbreviation, jargon word, and loopctl-specific term used in this knowledg
 | **Cancel re-arm** | Re-setting the signal after a run so one cancel doesn't kill the agent forever. |
 | **Audit trail** | `session.runs` — the append-only record of every run and turn, untouched by compaction. |
 | **Trajectory record** | A whole-run snapshot captured by the built-in `TrajectoryObserver`: per-turn queries/responses, tool calls, durations, tokens, outcome. (Different thing from `MemoryCategory::Trajectory`, a memory entry about one tool call.) |
+| **Memory extraction** | Mining reusable lessons (strategies, error recoveries, wasted calls) out of recorded runs and storing them as memories — the agent learning from experience. |
+| **Consolidation** | A curation pass over a memory store: decay stale relevance, merge near-duplicates, prune what neither fresh nor useful. |
+| **Half-life decay** | Exponential forgetting: relevance halves for each half-life of unaccessed age (default 14 days), weighted by category — facts fade slower than working memory. |
+| **Quality score** | The composite that decides what a consolidation pass keeps: relevance + access history + recency + validated trust. |
+| **Jaccard similarity** | Shared tokens over all tokens — the cheap text-overlap measure used to detect near-duplicate memories. |
+| **Access stamp** | The record a *matched* retrieval leaves on a memory entry (`access_count`/`last_accessed`), folded in by the next consolidation — what makes retrieved memories resist decay. |
+| **Provider-derived memory** | A memory authored by the LLM extraction pass, tagged `provider-derived` and excluded from injection by default — untrusted model output, not verified fact. |
+| **File-backed store** | `FileMemoryStore` — memory persisted as one JSON line per entry, surviving process restarts (single-process; feature `file_memory`). |
+| **loopctl-sqlite** | The companion crate: the same memory contract over a WAL-mode SQLite database — multi-process durability, durable access stamps. |
 | **Loop detection** | Noticing the same tool operation (name + argument + result) repeating. |
 | **Convergence detection** | Noticing the model's final answers becoming near-identical. |
 | **Shield** | A risk scorer that can block dangerous tool input before it runs. |

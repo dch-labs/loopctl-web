@@ -56,6 +56,10 @@ execute_tool_call(call, turn):
     biased select!:
         cancel fired                       → Err(Cancelled)
         dispatch_tool(...)                 → the result (panics caught inside)
+                                           (the pipeline core checks the cancel
+                                            signal BEFORE invoking the tool, so a
+                                            pre-cancelled call never starts — the
+                                            select is the backstop, not the guard)
     ── the POST phase, in this exact order ──
     post_detection                         (record operation + result hash —
                                             the single write point per invocation)
@@ -72,6 +76,8 @@ execute_tool_call(call, turn):
 ```
 
 Two asymmetries in that ordering are deliberate: **detection records before observers fire**, so an observer reacting to a tool result is already seeing the detection state that includes it; and **health records under the *resolved* tool name** (what actually ran, post-renaming), while the pre-flight gate keys on the *requested* name — the only name that exists before dispatch.
+
+One 0.3.2 guarantee sits under the `select!`: the pipeline's core (`middleware/tool_call.rs`) checks the cancel signal *before* invoking the tool, so a call that was already cancelled when dispatch reached it never starts — no more relying on `select!`'s branch order, which could poll a side-effecting tool once before the cancel branch won. The biased select above remains the guard for a cancel that arrives *while* the tool runs.
 
 ### What the tool actually receives — `ToolContext`
 

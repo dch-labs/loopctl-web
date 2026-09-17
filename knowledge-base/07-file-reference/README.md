@@ -90,8 +90,11 @@ Use this when you're *in the code* and want to know what the file in front of yo
 | [`hooks.rs`](hooks.md) + [`hooks/context.rs`](hooks-context.md) | The `Hook` trait + contexts. |
 | [`hooks/executor.rs`](hooks-executor.md) | First-block-wins execution. |
 | [`hooks/builtin/*`](hooks-builtin.md) | AutoCommit, Blocklist, Confirmation, Logging. |
-| [`memory.rs`](memory.md) + [`entry.rs`](memory-entry.md) + [`builtin.rs`](memory-builtin.md) | The memory trait, entries, in-memory store. |
+| [`memory.rs`](memory.md) + [`entry.rs`](memory-entry.md) + [`builtin.rs`](memory-builtin.md) + [`score.rs`](memory-builtin.md) | The memory trait, entries, in-memory store, shared retrieval scorer. |
+| [`memory/file.rs`](memory-file.md) | `FileMemoryStore` — JSONL persistence that survives a restart (`file_memory`). |
 | [`memory/trajectory.rs`](memory-trajectory.md) + [`memory/trajectory/sink.rs`](memory-trajectory.md) | `TrajectoryObserver` — each run as a serializable record (memory + JSONL ledger). |
+| [`memory/consolidate.rs`](memory-consolidate.md) | Quality scoring, category-weighted decay, duplicate merging — the consolidation primitives. |
+| [`memory/extractor.rs`](memory-extractor.md) | Mines learned memories from recorded runs (`MemoryExtractor`). |
 | [`memory/vector.rs`](memory-vector.md) | `EmbeddingProvider` + `VectorIndex` primitives and reference impls (`vector_index`). |
 | [`compact.rs`](compact.md) + [`types.rs`](compact-types.md) + [`truncating.rs`](compact-truncating.md) | Compaction manager, outcome types, truncator. |
 

@@ -28,7 +28,7 @@ What each produces in the [middleware](/safety/middleware/) (the enforcement poi
 |---|---|
 | `Allow` | next layer runs |
 | `Deny { reason }` | **short-circuit** — soft error `"Permission <reason> for tool 'x'"`, zero duration; nothing inside executes |
-| `Ask { prompt }` | your async resolver answers; `true` → proceed, `false` → soft error "denied by user". **No resolver configured → denied** (safe default for headless agents) |
+| `Ask { prompt }` | your async resolver answers; `true` → proceed, `false` → soft error "denied by user" (logged at `warn`, like every other denial — 0.3.2). **No resolver configured → denied** (safe default for headless agents). A cancel while the answer is pending aborts the wait (`cancelled while awaiting approval`) — an unresponsive resolver cannot hold a cancelled run open, and a cancellation that already fired when the answer lands wins deterministically: a cancelled run never executes the tool |
 | `Modify { input }` | `ctx.input` is replaced, then the call proceeds |
 
 > **Gotcha:** `Modify`'s replacement is **not re-validated** against the tool's schema. If your policy rewrites arguments, keep them valid yourself.
@@ -63,7 +63,7 @@ let middleware = PermissionMiddleware::from_context().with_check(|ctx| {
 
 **3. Ready-made extremes** — `deny_all()` (a sandbox: nothing runs, everything gets "blocked by policy") and `allow_all()` (pass-through, useful for testing a pipeline with the permission slot occupied).
 
-The `Ask` resolver is async (`AskResolverFn`), so a real integration can call a UI, a webhook, an approval service. While it resolves, dispatch waits — the timeout middleware (if outside the permission layer) still bounds the whole thing.
+The `Ask` resolver is async (`AskResolverFn`), so a real integration can call a UI, a webhook, an approval service. While it resolves, dispatch waits — the timeout middleware (if outside the permission layer) still bounds the whole thing, and since 0.3.2 the dispatch's cancel signal does too: a cancelled pipeline stops awaiting and denies with `cancelled while awaiting approval` instead of waiting out an unresponsive resolver.
 
 ---
 
