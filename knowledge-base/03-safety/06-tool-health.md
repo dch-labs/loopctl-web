@@ -84,7 +84,7 @@ Or write it into a middleware that rewrites `tool_name` — but read the gotcha 
 
 1. **The gate keys on the requested name; recording keys on the resolved name.** A renaming middleware can split those key spaces (no in-tree middleware renames; yours might). Keep them identical or route deliberately.
 2. **Everything retry-shaped re-fires per attempt.** A tool failing 3 recovery retries records 3 failures — enough to open its own breaker. That's usually correct (it *is* failing), but it's the interaction to know.
-3. **Repeated shield blocks count as failures** toward the breaker ([shield](07-tool-shield.md)): once open, the engine's gate refuses first, and the model sees "temporarily unavailable" instead of the shield's reason.
+3. **Repeated shield blocks count as failures** toward the breaker ([shield](07-tool-shield.md)): once open, the engine's gate refuses first, and the model sees "temporarily unavailable" instead of the shield's reason. Gate refusals also record into the [loop detector](02-loop-detection.md) (0.4.0) — a model hammering an unavailable tool gets caught rather than spinning.
 4. **Zero-threshold ≠ never-trip.** `failure_threshold: 0` *disables* tripping; the breaker still counts.
 5. `is_tool_available` and the mutating gate **agree at every instant** — including expiry-aware HalfOpen states — both pinned by tests. Either is safe to build on.
 

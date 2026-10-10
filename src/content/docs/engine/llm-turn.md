@@ -41,7 +41,7 @@ context estimate = tokens(history + pending)      // the conversation
                  + tokens(transient extras)       // contributors + memory, if any
 ```
 
-That estimate feeds `machine.set_context_tokens(...)`, and it's the number the compaction trigger compares against the window. It deliberately over-reserves rather than under-counts (a turn running under a forced JSON format suppresses tools, so the tool-schema part of the overhead is counted but not sent — conservative is the safe direction).
+That estimate feeds `machine.set_context_tokens(...)`, and it's the number the compaction trigger compares against the window. Since 0.4.0 the counting is honest about what the wire suppresses: a turn running under a `response_format` no longer reserves the tool schemas its request drops (the OpenAI/Gemini bodies omit `tools` outright; Anthropic swaps in one synthesized forced tool, which rides uncounted — a bounded, small under-reserve stated in the docs). On backends that report usage, the raw estimate is further corrected by the [calibration ratio](/engine/context-accounting/), and a usable `input_tokens` report can *anchor* the figure wholesale.
 
 ---
 
@@ -100,7 +100,7 @@ Every accepted event goes somewhere specific — this table is the whole routing
 | Event | Who sees it | Effect on the turn |
 |---|---|---|
 | `IndexedDelta` carrying Text | your `text_streamer` callback **and** observers (`on_text_delta`) **and** the accumulator | fragment joins the reply's text |
-| `IndexedDelta` carrying Thinking | observers (`on_thinking_delta`) only | never enters the message — reasoning is stream-only |
+| `IndexedDelta` carrying Thinking | observers (`on_thinking_delta`) **and** the accumulator | joins a `MessagePart::Thinking` on close — the reasoning rides the conversation for replay (0.4.0) |
 | `IndexedDelta` carrying tool JSON | the accumulator only | fragment joins a tool call's argument string |
 | `MessageDelta` with a stop reason | the engine | becomes the turn's `StreamStopReason` — an *unrecognized* string keeps the previous value rather than guessing |
 | `MessageStart`, `PartStart`, `PartStop` | the accumulator | lane bookkeeping |
@@ -154,6 +154,8 @@ Turn {
     tool_calls: Vec<ToolCall>,   // any tool calls it requested
     input_tokens: u64,
     output_tokens: u64,
+    stop_reason: StreamStopReason,          // why this turn's reply ended (0.4.0)
+    transport_fallback: bool,               // served by the unstreamed rescue (0.4.0)
 }
 ```
 
@@ -166,7 +168,8 @@ This trail is **never touched by compaction** — even after the conversation is
 1. **Transients are ephemeral by design.** Contributor and memory messages are re-emitted fresh each turn and never persisted. Stop returning them and they vanish from the conversation — nothing to clean up.
 2. **A deferred turn is invisible.** When the compaction trigger fires *after* transients were gathered, the turn defers without firing `on_turn_start`/`on_turn_end`. The retried turn (after compaction) fires them once, with a reserved budget so its transients fit.
 3. **The model override beats your `RequestOptions.model`.** When the fallback manager routes to a backup, its routing decision overwrites any per-request model you set — that's the point of automatic failover.
-4. **Usage may be `None`.** Providers don't guarantee usage reports (Ollama with `stream_usage: false`, some proxies). Code against `Option<Usage>`.
+4. **Usage may be `None`.** Providers don't guarantee usage reports (Ollama with `stream_usage: false`, some proxies). Code against `Option<Usage>`. A backend that reports no usage at all also leaves the context estimate uncalibrated and un-anchored — it behaves byte-identically to the pure estimate (see [context accounting](/engine/context-accounting/)).
+5. **Prior-turn thinking rides the request.** Since 0.4.0 the engine does not strip reasoning at turn boundaries — the request prefix stays byte-stable so provider prompt caches keep hitting, at the cost of window space for the reasoning's lifetime (see [messages](/core-data/messages/)).
 
 ---
 

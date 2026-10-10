@@ -115,9 +115,35 @@ Behind the `vector_index` feature (0.3.1) live the two traits every semantic-ret
 
 Both traits are **object-safe async** — boxed futures, exactly like `LoopMemory` — so a store can hold `Box<dyn EmbeddingProvider>` / `Box<dyn VectorIndex>` and swap backends without touching its contract. The reference implementations: `LinearVectorIndex` (brute-force O(n) cosine scan — deliberately simple, the correctness oracle faster indexes must match) and `HashingEmbedder` (deterministic, no network, no API key — good for exercising the layer in tests, not for real retrieval). A free `cosine_similarity` helper rounds it out.
 
-This is the substrate the upcoming semantic-memory releases build on — real embedders and semantic indexes slot in behind the same two traits. The feature adds no dependencies and changes no defaults.
-
 Details: the [file reference](/file-reference/memory-vector/).
+
+---
+
+## The semantic tier — shipped (0.4.0)
+
+The substrate above now has real tiers behind it:
+
+| Tier | What it is | Where |
+|---|---|---|
+| **`VectorMemoryStore`** | The semantic `LoopMemory` backend (feature `vector_memory`): embeds entries through an `EmbeddingProvider`, blends vector similarity with keyword + tag overlap on retrieve, prunes/merges with index eviction on consolidate. `VectorMemoryStore::new(embedder, index)` — swap tiers with one constructor call. | in-crate |
+| **Real embedders** | `OllamaEmbedder` (local, native `/api/embed`, key-free) and `OpenAiEmbedder` (`/v1/embeddings`, Matryoshka truncation) — see [embeddings](/providers/embeddings/). | `openai`/`ollama` + `vector_index` |
+| **`loopctl-hnsw`** | The HNSW `VectorIndex` companion — approximate nearest-neighbour search at scale, matching `LinearVectorIndex`'s ordering contracts. | companion crate |
+| **`loopctl-vector`** | External stores as `VectorIndex` backends: **Qdrant** (dedicated vector DB — memory shared across sessions and hosts) and **pgvector** (one `vector(n)` table in the Postgres a team already runs). Each behind its own feature; auto-provisioning, connect-time shape validation, degenerate-vector rejection. | side-workspace crate |
+
+Every tier answers the same **golden-set bar**: a fixed set of queries with known-relevant entries, and a ≥ 80% precision gate that runs against *every* backend — a new store is only as good as its recall. Degenerate vectors (zero-norm, non-finite) reject loudly on the external tiers (`LoopError::Memory`) where cosine is undefined.
+
+### The model searches too — `SearchMemoriesTool`
+
+The engine's per-turn injection is *passive* (bounded by `memory_top_k`, queried on the turn's input). `SearchMemoriesTool` (`memory::search_tool`) is the *active* half: a read-only, concurrency-safe `Tool` the **model** calls (`search_memories`) when it decides the context is missing something — a small model deep in a task recalls the fact demoted three compactions ago instead of hallucinating past the gap.
+
+- Schema written for small-model selection: `query` + optional `limit` (missing defaults to 5, clamped to the schema's maximum of 10; a search for zero results is useless, so zero clamps *up* to one — a deliberate deviation from the crate-wide zero-disables sentinel).
+- Output is model-facing text — one `[N] (category)` line per entry, truncated on character boundaries to a per-entry budget (default 1,000 chars) — with the same provenance framing as passive injection; `provider-derived` entries excluded unless `include_provider_derived()` opts in.
+- The tool opts out of trajectory recording (`records_trajectory() -> false`): a search tool that recorded would store its own answers, and the next search would return them.
+- `with_name` renames the tool and its schema together, so the registry key and the model's call never diverge; the standard middleware compose unchanged (memoize caches identical queries; the breaker degrades repeated retrieve failures).
+
+### The full loop — evict, demote, recall
+
+Put together with [compaction's demotion sink](/engine/compaction/#demotion--evicted-is-not-destroyed), this closes the context-quality story: **what compaction evicts is demoted into memory; the model pulls it back on demand.** A real run pins the headline — `TruncatingCompactor` evictions demote into a `VectorMemoryStore`, and the tool recalls the demoted fact with its `(trajectory)` category named.
 
 ---
 

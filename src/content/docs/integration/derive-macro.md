@@ -5,7 +5,7 @@ sidebar:
 ---
 
 
-The derive macro turns a plain `Deserialize` struct into a full `Tool` implementation: name, description, schema, and dispatch — all generated from the type. Enable the `derive` feature; `use loopctl::Tool;` brings both the trait and the derive. Source: the `derive/` crate (`loopctl-derive`).
+The derive macro turns a plain `Deserialize` struct into a full `Tool` implementation: name, description, schema, and dispatch — all generated from the type. Enable the `derive` feature; `use loopctl::Tool;` brings both the trait and the derive. Source: the `crates/derive/` crate (`loopctl-derive`).
 
 ---
 
@@ -82,7 +82,13 @@ The derived property names mirror serde's own renaming rules *exactly*, so the s
 - `#[serde(default)]` is recognized even when it follows value-bearing serde keys like `with = "..."`.
 - Flag keys (`#[serde(default)]`-style) reject `= value` and parenthesized misuse with a named error instead of being silently ignored.
 
-Before 0.3.2 the conversion could invent names serde rejects (the schema and the deserializer disagreed); the parity is pinned by trybuild fixtures under `derive/tests/ui/`.
+Before 0.3.2 the conversion could invent names serde rejects (the schema and the deserializer disagreed); the parity is pinned by trybuild fixtures under `crates/derive/tests/ui/`.
+
+## The failure-mode matrix, at full breadth (0.4.0)
+
+The macro's error surface is now pinned by a **trybuild matrix** — 28 compile-fail cases plus 3 pass cases — covering every attribute misuse: empty `name`/`description`, an empty doc comment used as description, `handler` naming a non-identifier or a wrong-shaped method, `= value` on flag keys, non-string values, generics, lifetimes, private fields, `#[serde(container)]` forms... Each case asserts the exact compiler diagnostics, so an error message can't drift silently. A **consumer hygiene fixture** (`crates/derive/tests/consumer/`) builds a downstream crate depending on the macro the way a real consumer does — catching expansion bugs in-crate tests structurally cannot see (the generated code's references resolving in *your* dependency graph, not the macro's).
+
+One such bug it caught and 0.4.0 fixed: the expansion **hard-coded `loopctl::` paths**, so a downstream manifest renaming the dependency (`loopctl = { package = "loopctl" }` shadows, workspace renames) failed to compile. The expansion now goes through the re-export the derive feature provides, so a renamed dependency works.
 
 ## The errors you might meet (all clear, all spanned)
 

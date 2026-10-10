@@ -38,7 +38,7 @@ impl ContextContributor for GoalReminder {
 agent.add_contributor(Box::new(GoalReminder { every_n: 5 }));
 ```
 
-(That exact pattern — re-emit the first user message every N turns — ships as `presets::GoalReminder::new(5)`.)
+(That exact pattern — re-emit the first user message every N turns — ships as `presets::GoalReminder::new(n)`; since 0.4.0 a `GoalReminder` is **default-wired** into every fresh construction — [presets](../06-integration/04-presets.md) — so small models get re-anchored unless you opt out with `FrontierProfile`.)
 
 ## The lifecycle — the part to internalize
 

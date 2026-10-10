@@ -7,7 +7,7 @@ The name→tool phone book, plus the function-adapter for quick tools.
 
 **Key items**
 
-- `ToolRegistry` — `register` (same name **overwrites** with a warn, original position kept), `get`, `contains`, `tool_names` (sorted), `all_schemas` (order unspecified), `all_tools` (registration order, includes unsafe), `concurrent_safe_tools`, `len`/`is_empty`. `Send + Sync` — share as `Arc`.
+- `ToolRegistry` — `register` (same name **overwrites** with a warn, original position kept), `get`, `contains`, `tool_names` (sorted), `all_schemas` (registration order since 0.4.0 — what makes request construction byte-reproducible for the goldens), `all_tools` (registration order, includes unsafe), `concurrent_safe_tools`, `len`/`is_empty`. `Send + Sync` — share as `Arc`.
 - `FnTool` — public fields + builder: `new(name, description, schema, tool_fn)`, `.concurrency_safe()`, `.with_concurrency_check(fn)`, `.with_resource_key(fn)`, `.read_only()`, `.with_system_prompt(...)`.
 
 **Behavior notes**

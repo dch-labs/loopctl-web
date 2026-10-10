@@ -42,9 +42,9 @@ flowchart TD
 Each step exists for a reason:
 
 - **Client acceptance first.** Some clients can't hot-swap (their `set_model` returns `false`). The switch aborts *before* touching anything else — no half-updated window, no reset breaker.
-- **The window is optional but usually right.** If the new model has a different context window and you don't update it, the compactor keeps using the old threshold — too small (needless compaction) or too big (overflow risk). `with_context_window(tokens)` when the window differs.
+- **The window is optional but usually right.** If the new model has a different context window and you don't update it, the compactor keeps using the old threshold — too small (needless compaction) or too big (overflow risk). `with_context_window(tokens)` when the window differs. Since 0.4.0 the window re-sync converts into the manager's *raw units* under a settled calibration ratio (writing the provider window verbatim left the manager's target and the trigger line in different scales), and a switch also **invalidates the window-probe cache and the run's resolved window** — the next run re-probes for the new model ([context accounting](09-context-accounting.md)).
 - **The breaker resets because old-model failures are meaningless for the new model.** Failure counts, tripped state — all wiped; the new model starts with a clean slate as primary.
-- **Observers find out.** `on_model_switched(ModelSwitchedContext { from, to })` fires — your UI or logs can track what's serving.
+- **Observers find out.** `on_model_switched(ModelSwitchedContext { from, to })` fires exactly once per apply (a 0.4.0 fix — it previously double-fired for programmatic switches) — your UI or logs can track what's serving.
 
 ## Requirements
 

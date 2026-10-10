@@ -24,9 +24,9 @@ let client = AnthropicClient::builder()
 
 **Tool calls and results.** Assistant tool calls become `tool_use` content blocks; your results become `tool_result` blocks carrying `tool_use_id` and — unlike OpenAI — the **`is_error` flag travels on the wire** (`true` only; success omits it).
 
-**Thinking (extended reasoning).** `thinking` and `redacted_thinking` blocks stream as a dedicated thinking lane: `on_thinking_delta` fragments for visible reasoning; redacted reasoning arrives as exactly one *empty* thinking delta (render a placeholder). Signatures are ignored; non-streaming replies skip thinking blocks entirely (reasoning is stream-only by design).
+**Thinking (extended reasoning).** `thinking` and `redacted_thinking` blocks stream as a dedicated thinking lane: `on_thinking_delta` fragments for visible reasoning; redacted reasoning arrives as an empty-text thinking delta carrying its opaque payload. Since 0.4.0 the client **latches signatures** (`signature` on visible blocks, the `redacted` payload on withheld ones) into `MessagePart::Thinking`, and — `replay_reasoning(true)` on the builder, the default — returns prior turns' thinking blocks verbatim on continuation requests: some Anthropic models refuse to continue a conversation whose earlier thinking lacks a valid signature, so the round-trip is load-bearing, and keeping the history byte-stable also keeps provider prompt caches hitting.
 
-**Usage accounting.** Input tokens arrive on `message_start`, output on `message_delta` — the client latches both and merges by **max** per counter, so a downward revision never under-reports.
+**Usage accounting.** Input tokens arrive on `message_start`, output on `message_delta` — the client latches both and merges by **max** per counter, so a downward revision never under-reports. Cache reporting (0.4.0): `cache_read_input_tokens` fills `Usage::cached_input_tokens` — and Anthropic's raw `input_tokens` **excludes** cache traffic, so the client normalizes the input to raw + cache reads + cache-creation spend, keeping the cached share a true subset of the reported input.
 
 ## Structured output — the forced-tool trick
 
@@ -44,6 +44,16 @@ The model's answer lands in the `tool_use` block's `input` — which `extract_st
 - `ToolConstraint::Grammar` → rejected (no grammar-constrained decoding on this API).
 
 `ToolConstraint::Strict` *is* supported — via schema tightening (`additionalProperties: false`, full `required`), which is what Anthropic validates server-side.
+
+## Prompt-cache breakpoints (0.4.0, off by default)
+
+Multi-turn loops re-send the whole conversation every request; the provider's prompt cache exists to keep that cheap, but the wire has to *ask* for it. `AnthropicClientBuilder::prompt_caching(true)` marks up to four `cache_control` breakpoints on every request from both wire paths (streaming and non-streaming share one body-builder exit, so they can never disagree):
+
+1. the **last tool definition** — the stable, slowly-changing prefix;
+2. the **system prompt** (rewritten from its plain-string form into one marked text block; an empty system stays a string — marking nothing buys no cache);
+3. and 4. the **last two eligible content blocks** of the final message — the placement that keeps the previous request's prefix cached while rolling the frontier forward one turn at a time.
+
+Thinking and redacted-thinking blocks are skipped as breakpoints (the provider rejects `cache_control` on them) — a signed-thinking tail marks the text blocks around it instead. A final message whose content is a plain string is wrapped into a one-block array so it can carry the marker. Off by default, requests stay byte-identical to a client that never asked to cache.
 
 ## Streaming
 

@@ -7,7 +7,7 @@ Read-only spectators of engine events: one required method (`name`), every event
 
 **Key items**
 
-- `LoopObserver` — 18 callbacks, all defaulting to no-op: run start/end, turn start/end, response, text/thinking deltas, tool call received/pre/post, stream success/failure, compaction, fallback, model switched, loop/convergence detected, `reset`.
+- `LoopObserver` — 24 callbacks, all defaulting to no-op: run start/end, turn start/end, response, text/thinking deltas, attempt reset, tool call received/pre/post, gate decision, stream success/failure, transport fallback, pre-compaction, compaction, compaction failed, fallback, model switched, budget warn, loop/convergence detected, `reset` — the additions since 0.3.2 are attempt reset, gate decision, transport fallback, pre-compaction, compaction failed, and budget warn.
 - `ObserverHost` — `register` (append; duplicate registration = duplicate events), fan-out in registration order, **panic isolation** (a panicking observer is logged and skipped), `reset_all`, `len`/`is_empty`.
 
 **Behavior notes**

@@ -22,7 +22,7 @@ flowchart TB
 
 - **Primary** — normal life; requests go to your model. Failures stack up (`consecutive_failures`); one success resets the count.
 - **Fallback** — the breaker has tripped; requests route to a backup model. Entering this state fires `on_fallback` to observers and resets the failure counter.
-- **Recovering** — cooldown has passed; requests go back to the *primary* on probation. Two successes close the breaker; a rate-limit failure re-trips instantly; a transient failure just resets the success streak (probation continues).
+- **Recovering** — cooldown has passed; requests go back to the *primary* on probation. Two successes close the breaker; a rate-limit failure re-trips instantly; transient failures reset the success streak **and stack toward a re-trip at `trip_threshold`** (0.4.0 — a dying primary no longer keeps the probe alive forever; previously only rate-limit failures could end probation).
 
 > **Threshold nuance:** `trip_threshold = 0` trips on the **first** failure, it does not mean "never trip."
 
@@ -42,7 +42,9 @@ managers.fallback_mut().set_fallback_models(vec![
 
 When the *current* fallback model fails too, the engine marks it failed (`mark_fallback_failed`) and the chain advances to the next entry. An entry recovers when the breaker closes, or you can flip its `available` flag manually (an out-of-band kill switch: `set_fallback_available(name, false)`).
 
-**`FallbackExhausted`** — the honest end: breaker tripped **and** every chain entry failed **and** the cooldown hasn't elapsed. Fail rather than silently retreating to the known-bad primary. Once the cooldown passes, the next turn probes the primary instead of failing again. A manager with *no* chain never produces this error (it trips, but keeps serving the primary).
+**`FallbackExhausted`** — the honest end: breaker tripped **and** every chain entry failed **and** the cooldown hasn't elapsed. Fail rather than silently retreating to the known-bad primary (0.4.0 hardened the corner: `active_model()` with an *empty* chain refuses to serve the known-bad primary — it fails closed). Once the cooldown passes, the next turn probes the primary instead of failing again. A manager with *no* chain never produces this error (it trips, but keeps serving the primary).
+
+Two setter validations shipped with 0.4.0: `set_original_model` / `set_fallback_models` (and the per-entry names) reject empty and whitespace-only names with a loud `Config`/`InvalidInput` error — a blank model name previously flowed into per-request `model` overrides and produced confusing provider 404s.
 
 ---
 

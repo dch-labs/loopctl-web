@@ -58,8 +58,9 @@ Two deliberate details: the text arrives as a **single delta** (no artificial ch
 
 The mock also remembers what reached it, so tests can pin the exact request shape rather than just the outcome:
 
-- **`captured_requests()`** — clones of every served `create_message` request, oldest first. A request rejected before sending (unsupported options) is never captured — it never reached the wire.
-- **`create_message_calls()` / `with_options_calls()`** — disjoint counters for the two wire paths (plain vs options-bearing), so a test can prove which path a caller took. A rejected options request still increments `with_options_calls`.
+- **`captured_requests()`** — clones of every served `create_message` request, oldest first. A request rejected before sending (unsupported options) is never captured — it never reached the wire. **`captured_stream_requests()`** (0.4.0) — the same record for the streaming path: every request the mock served on `stream_messages`.
+- **`create_message_calls()` / `with_options_calls()`** — counters for the two wire paths, so a test can prove which path a caller took. `with_options_calls` counts **both** options-bearing transports (`create_message_with_options` *and* `stream_messages_with_options`, 0.4.0); a rejected options request still increments it.
+- **`without_usage()`** (0.4.0) — serve the script with **no usage payload at all**, the shape of a backend that reports no usage — for fixtures asserting identity behavior on the engine's estimate side (no calibration, no anchor). The fixed 50/25 default report stays otherwise.
 - **`with_errors(Vec<Option<String>>)`** — scripts failures by call position: each call consumes the front entry; `Some(message)` fails that one call (still counted and captured, like `with_error`), `None` or an exhausted script serves normally. This is how a test fails *exactly one* turn — for example, only the corrective retry of a prompted structured-output flow.
 
 ## `MockTool` — a tool with knobs
@@ -111,6 +112,22 @@ That is a full engine pass — loop, dispatch, feedback, finalize — determinis
 | Real-model smoke tests | the repo's `make e2e` pattern: gated behind `LOOPCTL_E2E=1`, run on demand |
 
 The last one is the project's own philosophy: everything deterministic is tested with mocks; a small gated suite proves the provider wiring against real endpoints (Ollama for the free tier).
+
+---
+
+## Two oracles beyond the mock — cassettes and goldens (0.4.0)
+
+The repo's own wire contracts are pinned by two harnesses shipped since 0.4.0, both usable from your own projects:
+
+### Cassettes — the wire is the oracle
+
+A **cassette** is a real HTTP exchange — recorded through a forwarding proxy during a deliberate live session, scrubbed (credentials never enter the file; provider-generated ids become deterministic placeholders consistently across the file) — replayed hermetically. Replay matching is exact on method, path, recorded query pairs and headers, and **full body bytes**: a request the client builds differently than the real server accepted misses every mock and fails as a 404. Replays additionally require the provider's contract headers to be *present* (never the value). The doctrine: **never weaken a cassette to make it pass** — a red replay is the finding (the client drifted, or the provider drifted and needs a deliberate re-record). A `committed_cassettes_carry_no_secrets` meta-test scans the corpus every run, fail-closed.
+
+### Goldens — the engine is the oracle
+
+Where cassettes guard *provider-shape* truth, **golden request bytes** guard *engine-construction* truth: deterministic fixtures run through `BareLoop` against a recording mock that captures the exact request-and-options pair of every outbound call; canonical-JSON snapshots land in `tests/golden/`, one file per scenario. Object key order is never a contract; **array order is pinned** (message order, tool schema order in registration order). A red golden can only mean *our* construction drifted — no re-record exists to hide behind. Regeneration is a deliberate, reviewed act: `UPDATE_GOLDENS=1 cargo test --test golden_requests`, then read the diff like code.
+
+Both live in the crate's `tests/` (`cassettes/`, `golden/`) — see `TESTING.md` in the repository for the full doctrine.
 
 ---
 

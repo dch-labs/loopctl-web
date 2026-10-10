@@ -38,7 +38,7 @@ let result = agent
 | Field | Type | Default | Meaning |
 |---|---|---|---|
 | `system_prompt` | `Option<String>` | `None` | Sent as the system prompt every turn. `None` = no system prompt. |
-| `context_window` | `u64` | `200_000` | The model's token limit. **Set this to your real model's window** — compaction is driven by it. `0` disables all window policy (nothing is ever "too big"). |
+| `context_window` | `u64` | `200_000` | The model's token limit — the *declared* value. **Set this to your real model's window** — compaction is driven by it. Since 0.4.0 a client that discloses its real window (`model_context_window`) outranks this declaration at run start; `0` is the deliberate opt-out — it disables all window policy (nothing is ever "too big") and beats any disclosure. See [context accounting](/engine/context-accounting/). |
 | `compact_threshold` | `u8` | `80` | Compaction trigger, as a percentage of the window. Crossing 80% → shrink before the next model call. Range clamped to 0–100. |
 | `auto_compact` | `bool` | `true` | Master switch for *threshold* compaction. `false` = you manage the context yourself — **but the 95% emergency line still fires** (it is a hard safety net, not configurable off, except by `context_window: 0`). |
 
@@ -55,8 +55,9 @@ Notes that save an afternoon:
 |---|---|---|---|
 | `max_turns` | `usize` | `200` | Hard cap on model turns for this run. |
 | `parallel_tool_dispatch` | `ParallelDispatchConfig` | sequential, max 8 | How tool calls within a turn run. See [tool dispatch](/engine/tool-dispatch/). |
-| `reset_managers` | `bool` | `false` | `true` = wipe transient manager state (breaker, detectors, observers) at run start. Normally state persists across runs in a session. |
-| `memory_top_k` | `usize` | `3` | How many memory entries to retrieve each turn. `0` disables memory injection. See [memory](/extensions/memory/). |
+| `reset_managers` | `bool` | `false` | `true` = wipe transient manager state (breaker, detectors, observers) at run start. Normally state persists across runs in a session. Settable via `with_reset_managers(true)`. |
+| `memory_top_k` | `usize` | `3` | How many memory entries to retrieve each turn. `0` disables memory injection — but a `0` does **not** disable the model's own `SearchMemoriesTool` if you registered one. See [memory](/extensions/memory/). |
+| `memory_include_provider_derived` | `bool` | `false` | Whether LLM-authored memories (tagged `provider-derived`) may be injected. Default excludes them — untrusted model text never reaches a prompt unless you opt in. |
 
 `RunConfig` is `#[non_exhaustive]` — use builders (`.with_max_turns(n)`, `.with_parallel_dispatch(cfg)`), not struct literals, so future fields don't break your code.
 

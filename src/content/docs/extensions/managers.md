@@ -41,9 +41,11 @@ let managers = LoopManagers::new()
     .with_hook_executor(Arc::new(my_hooks))             // [hooks]
     .with_health_registry(Arc::new(ToolHealthRegistry::new()))  // [tool_health]
     .with_pipeline(my_pipeline)
-    .with_context_manager(Arc::new(my_context_manager));
+    .with_context_manager(Arc::new(my_context_manager))
+    .with_ask_resolver(Arc::new(ask_channel));          // 0.4.0 — the ask channel's engine half
 
 let mut agent = BareLoop::new_with_managers(client, tools, config, managers);
+agent.with_budget_gate(BudgetGate::new(limits));        // 0.4.0 — engine-side, per loop
 ```
 
 Or the simple way — `BareLoop::new(...)` uses an empty bundle, and you install parts afterward through the loop's own setters (`set_memory`, `register_observer`, ...), which write into this same bundle.
@@ -54,6 +56,7 @@ Facts about the bundle:
 - **The constructor seeds a compaction manager** if your bundle doesn't carry one: a `ContextManager` around the default truncating compactor, synced to your `SessionConfig`. Auto-compaction is never "on" without machinery behind it; your own manager is never overridden.
 - **`with_observer` appends.** There is no replace-observers call — hosts accumulate.
 - **Not `Clone`.** The engine consumes it by value. Share the `Arc`-wrapped parts (memory, context manager, health registry, hook executor) by cloning the `Arc`s *before* building, if you need the same store in two places.
+- **The 0.4.0 seams ride here**: `with_ask_resolver` / `with_ask_timeout` (the [ask channel](/safety/approvals/)); `with_clock` / `with_id_gen` (the [determinism module](/file-reference/determinism/)'s `Clock` and `IdGen` seams — a `FixedClock` plus `SeededIdGen` makes a run's timestamps and ids byte-reproducible; the defaults are the system clock and UUIDs; the third seam, `Rng`, is the trait the stream handler's jitter draws through, defaulting to thread-local randomness); and the budget gate, installed per-loop with `with_budget_gate` (taken by value, so accounting is local to each loop).
 
 ## Reading it — capability traits
 

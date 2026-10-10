@@ -28,6 +28,8 @@ pub trait ApiClient: Send + Sync {
     fn create_message_with_options(&self, request: &StreamRequest, options: RequestOptions)
         -> Pin<Box<dyn Future<...>>>;      // default: rejects non-empty options loudly
     fn extract_structured(&self, message: &Message) -> Value;  // default: tool input or JSON-ish text
+    fn supports_tool_constraints(&self) -> bool;   // default: false — "I enforce tool schemas"
+    fn model_context_window(&self) -> Future<Option<u64>>;   // default: None — disclose the window
 }
 ```
 
@@ -54,7 +56,12 @@ StreamRequest::new(messages)           // Vec<Message> — the conversation
 
 ### The options methods — fail loudly
 
-`RequestOptions` carries three optional extras: a per-request **model override**, a **response format** (forced JSON), and a **tool constraint** (strict tool schemas). If your client cannot honor one of these, the default `*_with_options` implementations **reject the request with an `ApiError`** rather than silently dropping it. Silently ignoring a model override, for example, would send the request to the wrong model. Override these methods only to actually support the options.
+`RequestOptions` is `#[non_exhaustive]` and carries four optional extras: a per-request **model override**, a **response format** (forced JSON), a **tool constraint** (strict tool schemas), and a **thinking-effort** level (`ThinkingEffort`: off / low / medium / high / max — see [structured output](/integration/structured-output/)). If your client cannot honor one of these, the default `*_with_options` implementations **reject the request with an `ApiError`** rather than silently dropping it. Silently ignoring a model override, for example, would send the request to the wrong model. Override these methods only to actually support the options.
+
+The two capability probes matter for [default wiring](/integration/presets/):
+
+- **`supports_tool_constraints()`** (default `false`) — answers "do you enforce strict tool schemas?". Default construction installs the strict tool-call constraint *only* when this returns `true`.
+- **`model_context_window()`** (default `None`) — asks the provider how many tokens it actually accepts. The shipped OpenAI-compatible client answers from llama.cpp's `/props` (divided by `total_slots` — a `--parallel` server splits its KV budget) and Ollama's `/api/show`; the hosted APIs disclose nothing and keep `None`. A `None` never errors the run — the declared `SessionConfig::context_window` stands. At each run start the engine resolves the denominator once: **probe over declaration** (a declared `0` is the documented opt-out and wins over any disclosure), frozen for the run's life. See [context accounting](/engine/context-accounting/).
 
 ---
 
@@ -83,6 +90,8 @@ The interesting part is not the shapes — it's the three questions every error 
 Each error also has a stable numeric **`ErrorCode`** (e.g. 1002 = rate-limited, 1101 = auth failed) — handy for logging and dashboards.
 
 `RateLimit.retry_after` is the provider's parsed "wait this long" hint (`Retry-After` header), so nothing downstream has to re-parse it.
+
+`Usage` (the token accounting on every response) gained a fourth field: **`cached_input_tokens`** — the share of the input the provider served from its prompt cache, filled by every shipped provider from its native report (Anthropic `cache_read_input_tokens`, OpenAI `usage.prompt_tokens_details.cached_tokens`, Bedrock Converse `cacheReadInputTokens`). It is a *subset* of the input count, never additional; `Usage::new` leaves it at zero and `with_cached_input(n)` attaches it. Anthropic's raw `input_tokens` excludes cache traffic, so loopctl normalizes (raw + cache reads + cache-creation spend) to keep the cached share the documented subset.
 
 ---
 

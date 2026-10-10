@@ -29,7 +29,10 @@ if err.is_recoverable() {
 | `Api` | message | The provider/HTTP layer failed (network, 5xx, auth...). The engine may retry or fall back. | yes |
 | `FallbackExhausted` | — | The primary model's breaker is open **and** every backup model in the chain has failed too. Wait for the cooldown (default 60 s) — the next turn probes the primary. | (wait) |
 | `MaxTurnsExceeded` | `max` | The run hit `RunConfig::max_turns` (default 200). Raise the limit or simplify the task. | config |
-| `ContextExceeded` | `used`, `limit` | The conversation outgrew the context window and compaction could not shrink it. `limit` is either the window or the pre-compaction size (see [compaction](../02-engine/06-compaction.md)). | yes |
+| `ContextExceeded` | `used`, `limit` | The conversation outgrew the context window and compaction could not shrink it. `limit` is either the window or the pre-compaction size (see [compaction](../02-engine/06-compaction.md)). A provider rejection reporting an oversized prompt now gets one compact-and-retry first ([overflow salvage](../02-engine/09-context-accounting.md)) — this error is what a *repeat* rejection means. | yes |
+| `CompactionFailed` | `used`, `limit` | A compaction pass errored outright (compactor failure, not a shrink-to-nothing). The payload is payload-comparable to `ContextExceeded` for utilization reporting. | yes |
+| `CompactionStalled` | `used`, `limit` | The no-progress guard: the pass completed but shaved nothing (`used >= limit` where `limit` is the pre-pass size). The run ends instead of ping-ponging between Compact and CallLLM. One carve-out: a threshold-triggered pass that declines while the payload still fits the window *defers* instead of killing the run. | no |
+| `BudgetExhausted` | `dimension`, `spent`, `limit` | The [budget gate](../03-safety/10-budget-gate.md)'s hard line: the next request was refused before it was sent. Not recoverable within the run. | no |
 | `LockPoisoned` | `what` | A mutex was poisoned by a panic (labels: `"fallback"`, `"convergence_detector"`, `"detection_stats"`, `"rate_limit_bucket"`). Restart the subsystem or the session. | no |
 | `PhaseFailed` | `phase`, `message` | A named pipeline phase failed (`"pre_process"`, `"reflection"`, `"post_process"`). | depends |
 | `Memory` | message | A memory backend failed (storage, serialization). | depends |
@@ -80,7 +83,7 @@ match agent.run(input, &config).await {
 }
 ```
 
-**`Run::stop_reason` records the ending for the audit trail.** After a run, `agent.session().current_run()` carries `stop_reason: Option<LoopError>` — `None` means it completed normally. Timestamps (`start`, `end`) are skipped by serde (they're process-local), but everything durable serializes.
+**`Run::stop_reason` records the ending for the audit trail.** After a run, `agent.session().current_run()` carries `stop_reason: Option<LoopError>` — `None` means it completed normally. A run that dies mid-overflow carries its `unfinished_input` (via `RunEndContext`) so a host can offer one-click resubmission. Timestamps (`start`, `end`) are skipped by serde (they're process-local), but everything durable serializes.
 
 ---
 

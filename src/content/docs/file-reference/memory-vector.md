@@ -3,7 +3,7 @@ title: "`src/memory/vector.rs` — embedding and vector-search primitives"
 ---
 
 
-The two traits semantic-retrieval memory is built from, plus dependency-free reference implementations — behind the `vector_index` feature (0.3.1). No dependencies added, no defaults changed: this is substrate for the semantic-memory releases, not a working memory system on its own.
+The two traits semantic-retrieval memory is built from, plus dependency-free reference implementations — behind the `vector_index` feature (0.3.1). Since 0.4.0 the substrate has real tiers behind it: `OllamaEmbedder`/`OpenAiEmbedder` ([embeddings](/file-reference/provider-embeddings/)), `VectorMemoryStore` ([vector_memory](/file-reference/memory-vector-memory/)), the `loopctl-hnsw` companion, and the `loopctl-vector` external backends.
 
 **Key items**
 

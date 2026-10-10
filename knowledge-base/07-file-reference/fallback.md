@@ -4,7 +4,7 @@ Counts model failures, switches to backup models, probes the primary for recover
 
 **Key items**
 
-- `FallbackState` — `Primary`, `Fallback`, `Recovering`.
+- `FallbackState` — `Primary`, `Fallback`, `Recovering` (during recovery, transient failures stack toward a re-trip at `trip_threshold` since 0.4.0 — a dying primary no longer keeps the probe alive; model-name setters reject blank names; an empty chain fails closed rather than serving the known-bad primary).
 - `FallbackConfig` — trip threshold 3 (**0 trips on first failure**), recovery timeout 60s, recovery successes 2, per-model max fails 2.
 - Chain management: `set_fallback_model(s)`, `add_/insert_/remove_fallback_model`, `fallback_models()`, `fallback_model()` (first healthy), `mark_fallback_failed`, `set_fallback_available`.
 - Recording: `record_failure(kind)` (returns `true` if this call tripped), `record_success()`, `reset_failure_counter()`, `reset()`.

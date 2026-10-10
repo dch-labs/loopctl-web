@@ -13,6 +13,7 @@ flowchart TD
     E["execute_tool_call(call, turn)"] --> PRE["on_tool_pre → observers"]
     PRE --> HOOKS{"pre-tool hooks?<br/>[feature: hooks]"}
     HOOKS -- "Block / Ask-headless" --> BLK["soft error result<br/>(model sees the reason)<br/>call never runs"]
+    HOOKS -- "Ask + resolver" --> PARK["park the run — the ask channel<br/>(0.4.0); approval → proceed,<br/>refusal/expiry → soft denial"]
     HOOKS -- allow --> DET{"loop-detection<br/>pre-check"}
     DET -- "stop threshold reached" --> LOOPHARD["hard error LoopDetected<br/>run ends"]
     DET -- pass --> HG{"circuit breaker<br/>open? [tool_health]"}
@@ -22,9 +23,10 @@ flowchart TD
     RACE -- "tool ran" --> RUN["dispatch_tool:<br/>middleware pipeline if installed,<br/>else registry — panics caught"]
     RUN --> POSTD["post_detection:<br/>record operation + result hash"]
     POSTD --> POST["on_tool_post → observers"]
-    POST --> PHOOK["post-tool hooks"]
+    POST --> GATE["on_gate_decision — if a gate<br/>decided this dispatch (0.4.0)"]
+    GATE --> PHOOK["post-tool hooks"]
     PHOOK --> HEALTH["record health [tool_health]"]
-    HEALTH --> MEM["store trajectory in memory"]
+    HEALTH --> MEM["store trajectory in memory<br/>(unless the tool opts out)"]
     MEM --> ERR{"result.is_error?"}
     ERR -- no --> DONE["return result"]
     ERR -- yes --> REC["recovery: reflect + decide"]
@@ -32,6 +34,8 @@ flowchart TD
     REC -- "Retry ceiling passed" --> EXH["hard error ToolRecoveryExhausted"]
     REC -- "Skip / AskUser / Fail" --> SOFT["return the original<br/>error result (soft)"]
     REC -- "cancel during backoff" --> CANCHARD
+    PARK -- "approved" --> DET
+    PARK -- "refused / expired / cancelled" --> BLK
 ```
 
 Reading the diagram's three outcome kinds:
@@ -86,6 +90,10 @@ Built per dispatch: `{ session_id, temp_dir, ..Default::default() }`. The `temp_
 ### What memory records about a call
 
 Only **successful** calls, and lossy by design: input and result are each truncated to **500 characters**, joined as `"tool={name}; input={…}; result={…}"`, and stored as a `Trajectory` entry. Memory is for gist; the audit trail keeps the full text. Store failures are logged and swallowed — memory must never be why a turn failed.
+
+### The per-call metric
+
+Every settled call emits one `loopctl.tools.calls` event on the `loopctl::metrics` `tracing` target — `tool`, `outcome` (`ok`/`error`), `duration_ms` — emitted once at the shared exit of the direct-registry and middleware paths, so retries and both dispatch modes can neither double-count nor miss a call. It counts *every* tool, including `Think`, which is why the Think tool's own counter is now deprecated (see [the metric stream](../04-extensions/01-observers.md)).
 
 ### Panic isolation
 
@@ -143,10 +151,13 @@ pub struct ToolDispatchResult {
     pub duration: Duration,          // real wall time (memoize hits replay the original's)
     pub resolved_tool_name: String,  // differs from requested when middleware renamed it
     pub display_hint: Option<DisplayHint>,
+    pub gate: Option<GateDecision>,  // the decision record when a gate decided (0.4.0)
 }
 ```
 
 The engine stamps `tool_call_id` after the pipeline returns, unconditionally — a middleware that returns a stale or fabricated id (e.g. a cache replaying the first call's id) cannot break the model's call↔result pairing. Tests pin this exact guarantee.
+
+**The gate record (0.4.0).** Every gated dispatch emits exactly one `GateDecision` — tool, args digest, verdict, rule id + source, reason, engine-stamped timestamp — through `on_gate_decision`, ordered `on_tool_pre → gate → on_tool_post` per dispatch. Compositions stay honest: a memoize cache hit re-stamps the call id and clears the gate (a dispatch no gate consulted produces no record), and stacked permission layers follow a precedence lattice — a deny displaces anything, a rewrite displaces a pass-through, so the record that *decided* the outcome survives (see [permissions](../03-safety/08-permission.md)).
 
 ---
 

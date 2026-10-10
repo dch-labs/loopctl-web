@@ -100,6 +100,7 @@ Facts pinned by tests (the false-positive suite):
 - **Changing outputs are progress** — never flagged, even at high frequency.
 - **Different inputs with identical outputs are different operations** — three files with the same content don't merge into one "repeat."
 - **Recovery retries count as attempts** — a flaky tool failing repeatedly *can* trip detection on its own; recoverable-error marking is the fix.
+- **Gate refusals reach the detector (0.4.0)** — a tool-health breaker refusing the call records into the loop detector too, so a model hammering an unavailable tool is caught by *either* subsystem, not neither.
 - **Acting-turn preambles never trigger convergence** (see next page) — "Let me check that..." repeated over real tool work is fine.
 - **`stop_threshold: 0`** disables hard stops entirely (warnings only).
 - A genuinely stuck tool (identical input *and* output, over the line) **does** stop — that's the whole point.

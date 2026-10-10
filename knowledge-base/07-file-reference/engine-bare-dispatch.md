@@ -5,7 +5,7 @@ The per-call pipeline, both dispatch modes, and the recovery loop. (~1,950 lines
 **Key items**
 
 - `dispatch_tools` — sequential (cancel checked between calls) or parallel (`ToolDependencyGraph` waves: `is_safe_for_concurrent_execution` + `resource_key` conflicts; semaphore-clamped; results in input order; hard error discards resolved siblings).
-- `execute_tool_call` — the full per-attempt pipeline: pre observer → hooks → pre-detection (pure read; stop → hard error) → breaker gate → biased cancel-vs-dispatch → post-detection (the single write point) → post observer → post hooks → health → memory → recovery.
+- `execute_tool_call` — the full per-attempt pipeline: pre observer → hooks (an `Ask` with a resolver **parks the run** — the ask channel, 0.4.0) → pre-detection (pure read; stop → hard error) → breaker gate → biased cancel-vs-dispatch → post-detection (the single write point) → post observer → **gate-decision emission** (`on_gate_decision`, ordered pre → gate → post, 0.4.0) → post hooks → health → memory (honoring `records_trajectory()`) → recovery.
 - `dispatch_tool` — pipeline first if configured, else registry; panic-isolated (`catch_unwind`); unknown tool → soft error listing available names. The pipeline core (`middleware/tool_call.rs`) checks the cancel signal *before* invoking the tool (0.3.2), so a pre-cancelled call never starts — deterministically, not by `select!` branch luck.
 - `recovery_wait_or_return` — reflect + decide; cancel-aware backoff; the `attempt > 5` ceiling → `ToolRecoveryExhausted`.
 - `apply_correction_if_present` — input swap / tool swap; failed corrections logged and dropped.

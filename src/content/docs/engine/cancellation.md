@@ -44,9 +44,12 @@ The engine checks the signal at five granularities, so a cancel lands quickly no
 | Granularity | Where | Mechanism |
 |---|---|---|
 | Before any turn's work | `do_turn` entry | early guard: return `Err(Cancelled)` before touching the provider |
+| During the run-start window probe | driver run-start | the probe future races the cancel signal (0.4.0) |
 | During a model call | non-streaming path | biased `select!`: cancel raced against the provider future |
 | During a streaming reply | the stream handler | every event poll races the cancel signal |
 | During one tool call | `execute_tool_call` | biased `select!`: cancel raced against the tool future |
+| During a compaction pass | `handle_compact` | the compactor future races the cancel signal (0.4.0) |
+| During a parked ask | the ask channel | the resolver race includes the cancel signal; the park ends typed `Cancelled` with one `Cancelled` gate record (0.4.0) |
 | Between tools / during retry backoff | dispatcher, recovery | poll checks and raced sleeps |
 
 "Biased" means the cancel branch is polled **first** — if the signal is already fired, the work future is never even started. Cancellation always wins the race.
@@ -67,8 +70,8 @@ flowchart TD
 
 Three deliberate properties:
 
-1. **Cancelled is not Failed.** The brain routes it to `Terminal(Cancelled)`, not `Terminal(Failed)`. Your error handling can treat them differently — cancel is expected, failure is not. Both discard the scratchpad, keeping the conversation clean.
-2. **Partial work is not committed.** A cancelled run's half-finished turns never glue into history. The audit trail (`session.runs`) still records the run, with `stop_reason: Cancelled`.
+1. **Cancelled is not Failed.** The brain routes it to `Terminal(Cancelled)`, not `Terminal(Failed)`. Your error handling can treat them differently — cancel is expected, failure is not.
+2. **Completed work is salvaged (0.4.0).** A cancelled run keeps its completed turns: the coherent prefix of the scratchpad glues into history, and only the in-flight exchange is dropped. A Ctrl-C three turns into a five-turn task leaves a usable conversation. (Before 0.4.0 the whole scratchpad was wiped — an interrupt cost the run's entire conversation.) The audit trail (`session.runs`) still records the run, with `stop_reason: Cancelled`.
 3. **The signal re-arms after the run, not before.** This ordering has a subtle guarantee behind it:
 
 > **Why re-arm at the end?** Suppose you fire cancel while no run is active, then call `run()`. If `run()` cleared the signal at its top, the pending cancel would vanish — your agent would look permanently dead or the cancel silently ignored. Instead: `finalize()` re-arms *after* the run observes and reports the cancellation. One cancel always produces exactly one `Err(Cancelled)`, and the next run starts fresh.
@@ -81,7 +84,7 @@ The engine drops your tool's future when a cancel lands mid-call. Rust's async d
 
 > **Write tools that are safe to abandon mid-write.** Write to a temp file and rename at the end; use transactions rather than half-states; keep external side effects (HTTP calls to other services) idempotent or resumable.
 
-The same applies to tools served over MCP — the server adapter races each call against the request's cancellation token and drops in-flight futures on cancel.
+The same applies to tools served over MCP — the server adapter races each call against the request's cancellation token and drops in-flight futures on cancel. Compactors carry their own drop-safety contract (`ContextCompactor::compact` may be dropped mid-pass; a cancelled pass leaves the last committed state), and the demotion-sink handoff in a cancelled pass is raced too — a cancel during a hanging sink ends the run typed `Cancelled`, never wedged.
 
 ---
 

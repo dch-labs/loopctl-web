@@ -183,7 +183,10 @@ use loopctl::presets::ConstrainedProfile;
 let mut agent = BareLoop::new(client, tools, ConstrainedProfile::session_config());
 agent.set_request_options(ConstrainedProfile::request_options());
 ConstrainedProfile::apply(&mut agent)?;
-// Upgrade path: swap NoopVerifier for a real one (Recipe 10).
+// Since 0.4.0 this is also (almost) the default wiring — plain BareLoop::new
+// installs the builtin-verified pipeline, the goal reminder, and strict
+// tool-calls. FrontierProfile is the opt-out; ConstrainedProfile makes the
+// 32k-window / 100-turn shape explicit.
 ```
 
 ## Recipe 10 — Verify every write
@@ -270,6 +273,61 @@ let service = adapter.serve_stdio()?;
 service.waiting().await;   // any MCP client can now use your tools
 ```
 
+## Recipe 15 — Real compaction that never fails (0.4.0)
+
+```rust
+use loopctl::compact::FallbackCompactor;
+
+// QA → structured → truncate: best-effort summaries first, the deterministic
+// terminal cannot fail, so an out-of-tokens condition stops being an error.
+agent.set_context_manager(Arc::new(
+    ContextManager::new(Arc::new(FallbackCompactor::default_chain(summarizer_client)))
+        .with_context_window(32_000),
+));
+// Add the demotion sink and what compaction evicts becomes recallable memory.
+```
+
+## Recipe 16 — A budget the engine enforces (0.4.0)
+
+```rust
+use loopctl::budget::{BudgetGate, BudgetLimits};
+
+let limits = BudgetLimits::new().with_tokens(400_000).with_turns(50);
+agent.with_budget_gate(BudgetGate::new(limits)?);
+// 80% warns once (on_budget_warn); 100% refuses the NEXT request
+// (Err(BudgetExhausted)) before it is sent — plus a budget.hard gate record.
+```
+
+## Recipe 17 — Unattended runs with human approvals (0.4.0)
+
+```rust
+use loopctl::ask::ApprovalChannel;
+
+let (channel, approver) = ApprovalChannel::pair(16);
+// hand `approver` to your webhook/UI thread: approver.resolve(id, resolution)
+let managers = LoopManagers::new()
+    .with_ask_resolver(Arc::new(channel))
+    .with_ask_timeout(Duration::from_secs(300));
+// A hook's Ask now parks the run (no tool executes, the machine is coherent)
+// until the answer, the deadline, or a cancel — one gate record per ending.
+```
+
+## Recipe 18 — Semantic memory the model can search (0.4.0)
+
+```rust
+use loopctl::memory::{VectorMemoryStore, SearchMemoriesTool};
+use loopctl::provider::embeddings::OllamaEmbedder;
+use loopctl::memory::LinearVectorIndex;   // or loopctl-hnsw / loopctl-vector
+
+let memory = VectorMemoryStore::new(
+    Box::new(OllamaEmbedder::from_env()?),
+    Box::new(LinearVectorIndex::new()),
+);
+agent.set_memory(Arc::new(memory.clone()));
+tools.register(SearchMemoriesTool::new(Arc::new(memory)));   // the model searches
+// Pair with MemoryDemotionSink: what compaction evicts, the model recalls.
+```
+
 ---
 
 ## Which recipe first?
@@ -279,5 +337,8 @@ service.waiting().await;   // any MCP client can now use your tools
 | "Just make it work locally" | 1 + 2 |
 | "It works — now make it survive reality" | 3 + 4 + 5 |
 | "It touches my filesystem / production" | 6 + 10 (+ 13 if secrets flow) |
-| "The model is small and wanders" | 9 |
+| "The model is small and wanders" | 9 (it's near the default now) |
+| "Long sessions blow the context" | 15 (+ 18 to keep what compaction evicts) |
+| "It must stop at a spend line" | 16 |
+| "It runs unattended but needs approvals" | 17 |
 | "I want proof it all works" | 12 |

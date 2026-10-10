@@ -111,7 +111,7 @@ The brain holds the conversation in **two** separate lists, and understanding th
 | List | What lives there | When it changes |
 |---|---|---|
 | **`history`** (the notebook) | Messages from **previous, successful runs** | Only when a run finishes successfully (its scratchpad pages get glued in), or when compaction rewrites everything |
-| **`pending`** (the scratchpad) | The **current run's** messages: the user's input, each model reply, each tool result | Starts empty-ish each run; grows during the run; **thrown away if the run fails** |
+| **`pending`** (the scratchpad) | The **current run's** messages: the user's input, each model reply, each tool result | Starts empty-ish each run; grows during the run; on cancel/failure the **coherent prefix is salvaged** into history (0.4.0) and only the in-flight tail is dropped — discarded whole only on the overflow family |
 
 ```mermaid
 flowchart TD
@@ -122,7 +122,7 @@ flowchart TD
     Q -- "Failure or cancel" --> Toss["scratchpad is thrown away —<br/>the notebook keeps only earlier successful runs"]
 ```
 
-**Why this matters to you:** if a run fails halfway (say, the network dies on turn 7), the conversation is **not** poisoned. The next `run()` starts from the last good state. The model never sees a half-finished turn with a missing tool result — providers reject such conversations.
+**Why this matters to you:** if a run fails halfway (say, the network dies on turn 7), the conversation is **not** poisoned. Since 0.4.0 the turns that *did* complete are salvaged into history — the next `run()` continues from them, minus the interrupted exchange. The model never sees a half-finished turn with a missing tool result — providers reject such conversations.
 
 > **Gotcha:** compaction is the one operation that touches both lists at once — it merges `history + pending` into a new, shorter `history` and empties `pending`. See [Compaction](/engine/compaction/) for the full story, including why a run that compacts and *then* fails leaves the compacted history behind (compaction is a commit point).
 

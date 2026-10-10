@@ -5,7 +5,7 @@ sidebar:
 ---
 
 
-A run ends in exactly one of five ways. This page is the complete map: what triggers each ending, the code path it takes, and what state is left behind.
+A run ends in exactly one of five shapes (with a few new error faces inside them). This page is the complete map: what triggers each ending, the code path it takes, and what state is left behind.
 
 ---
 
@@ -19,7 +19,7 @@ A run ends in exactly one of five ways. This page is the complete map: what trig
 | **ContextExceeded** | Compaction couldn't shrink enough | `Err(LoopError::ContextExceeded { used, limit })` |
 | **Failed** | Any other error: provider dead, loop detected, recovery exhausted... | `Err(the matching LoopError)` |
 
-Note the asymmetry: **`Completed` is the only ending that commits.** Its scratchpad glues into history. Every other ending discards the scratchpad — one exception: a run that compacted mid-run and *then* failed (compaction is a commit point; see [the big idea](/start-here/the-big-idea/)).
+Note the retention asymmetry (0.4.0): **`Completed` commits the whole scratchpad**; **`Cancelled` and ordinary failures salvage the coherent prefix** — completed turns commit, the in-flight exchange drops, so an interrupt costs one turn, not the run's conversation; **the `ContextExceeded` family discards the scratchpad whole** — an unshrinkable over-window history must not wedge every future run. One further exception cuts across: a run that compacted mid-run and *then* failed keeps the compacted history (compaction is a commit point; see [the big idea](/start-here/the-big-idea/)).
 
 ---
 
@@ -53,7 +53,7 @@ The check is first in the decision order, so a run at its turn limit never start
 cancel fires → some biased select! returns Err(Cancelled)
   → driver: because it is Cancelled → machine.cancel() (NOT machine.fail())
   → next_step drives Terminal(Cancelled)
-  → finalize(Some(err)) → discard_pending → signal re-armed
+  → finalize(Some(err)) → salvage_pending → signal re-armed
   → Err(Cancelled)
 ```
 
@@ -61,28 +61,39 @@ Full story: [cancellation](/engine/cancellation/). The distinction Cancelled-vs-
 
 ### ContextExceeded
 
-Two entrances, one error:
+Several entrances, one family — and since 0.4.0, one rescue in front of them all:
 
 ```text
+0) overflow salvage (first rejection only):
+   provider rejects with an oversized-prompt error
+   → the failed turn fires its turn-end, the machine is forced onto the
+     emergency compaction path with a target strictly under the refused
+     payload (CompactSizing::target_override)
+   → the same turn is re-requested against the compacted history
+   → a repeat rejection on the spent turn is a genuine misfit: ContextExceeded
+
 A) compactor overflow:
    ContextManager.compact_with_reason → Err(ContextOverflow)
    → handle_compact propagates → set_error_state → machine.fail(...)
-   → finalize(Some(err)) → Err(ContextExceeded { used, limit })
+   → finalize(Some(err)) → Err(CompactionFailed / ContextExceeded)
 
 B) no-progress guard:
    compaction_result / compaction_noop sees tokens_after >= tokens_before
-   → machine goes Terminal(Failed(ContextExceeded)) directly
+   → machine goes Terminal(Failed(CompactionStalled)) directly
    → Done arm → finalize(Some(err))
+   (carve-out: a threshold-triggered stall whose payload still fits the
+    window defers and serves instead — only emergency-line stalls die)
 ```
 
-In both, the buffers are left as they were. Full story: [compaction](/engine/compaction/).
+In all, the buffers are left as they were. Full story: [compaction](/engine/compaction/) and [context accounting](/engine/context-accounting/). Whatever still kills the run, the run-end carries `unfinished_input` so a host can offer one-click resubmission.
 
 ### Failed (everything else)
 
 ```text
-a handler returns Err (provider, dispatch, loop detected, recovery exhausted)
+a handler returns Err (provider, dispatch, loop detected, recovery exhausted,
+                      budget exhausted — the hard line refuses BEFORE the request)
   → set_error_state: machine.fail(error)   [immediate Terminal(Failed)]
-  → finalize(Some(err)) → discard_pending → on_run_end(success=false)
+  → finalize(Some(err)) → salvage_pending → on_run_end(success=false)
   → Err(error)
 ```
 
@@ -95,7 +106,8 @@ The `Done` arm defends itself against future unknown outcomes too: a terminal ou
 | After the run | `machine.history` | `machine.pending` | `session.runs` | cancel signal |
 |---|---|---|---|---|
 | Completed | + this run's messages | empty | run recorded, `stop_reason: None` | re-armed |
-| Any other | unchanged | cleared | run recorded, `stop_reason: Some(err)` | re-armed |
+| Cancelled / ordinary failure | + the run's completed turns (salvaged) | in-flight tail dropped | run recorded, `stop_reason: Some(err)` | re-armed |
+| `ContextExceeded` family | unchanged | cleared whole | run recorded, `stop_reason: Some(err)` | re-armed |
 
 The run record always survives — every ending writes its `Run` (with `stop_reason`) into the audit trail, and `on_run_end` always fires (observers see `success: false` and the error text on failures).
 
@@ -130,8 +142,9 @@ The agent is **immediately reusable**: history is clean, the signal is fresh, th
 
 | You saw | Typical fixes |
 |---|---|
-| `MaxTurnsExceeded` | raise `max_turns`; simplify the task; add a goal-reminder contributor for small models |
-| `ContextExceeded` | bigger window; summarizing compactor; trim huge tool outputs (`OutputLimitMiddleware`) |
+| `MaxTurnsExceeded` | raise `max_turns`; simplify the task; the goal reminder is default-wired since 0.4.0 |
+| `ContextExceeded` / `CompactionStalled` | bigger window; the `FallbackCompactor` chain; prune (`set_prune`) to reclaim tool outputs; trim huge tool outputs (`OutputLimitMiddleware`) |
+| `BudgetExhausted` | raise the [budget gate](/safety/budget-gate/)'s limits or let the run end — the point of a budget |
 | `LoopDetected` | fix the tool the model is stuck on; tune detection thresholds; check `ToolSignature` extraction |
 | `Api` / `RateLimitEscalation` | configure [fallback models](/safety/fallback/) and a rate limiter |
 | `ToolRecoveryExhausted` | install a smarter [reflector](/safety/reflection/) or fix the tool |

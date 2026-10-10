@@ -61,7 +61,7 @@ Every abbreviation, jargon word, and loopctl-specific term used in this knowledg
 | **`MachineState`** | What the brain awaits: model reply, tool results, compaction, or nothing (terminal). |
 | **`MachinePolicy`** | The settings handed to the brain per step (max turns, window, thresholds). |
 | **`history`** (the notebook) | Messages of past *successful* runs — durable across runs. |
-| **`pending`** (the scratchpad) | The current run's messages — discarded if the run fails. |
+| **`pending`** (the scratchpad) | The current run's messages — the coherent prefix is salvaged on cancel/failure (0.4.0); discarded whole only on the overflow family. |
 | **`finalize()`** | The single exit door every run passes through (commit or discard, record, notify, re-arm). |
 | **Soft error** | A failure reported *inside* the run as tool-result text — the model sees it and adapts; the run continues. |
 | **Hard error** | A failure that ends the run as a `LoopError`. |
@@ -105,6 +105,33 @@ Every abbreviation, jargon word, and loopctl-specific term used in this knowledg
 | **Ratio token counter** | A `RatioTokenCounter` preset — token estimates from a per-provider chars-per-token ratio plus per-message overhead; the calibrated alternative to the default heuristic. |
 | **Embedding** | Text as a vector of numbers, positioned so similar meanings sit close together — the basis of semantic retrieval. |
 | **Vector index** | A nearest-neighbour store over embeddings: add vectors, get the top-k closest back (`VectorIndex`). |
+| **Window probe** | The run-start question "how big is this model's context, really?" — answered from llama.cpp `/props` or Ollama `/api/show` when the server discloses it; the disclosure outranks the declared `context_window`. |
+| **Calibration ratio** | The rolling correction (in basis points) between estimated and provider-reported input tokens — the figure keeps estimates honest on backends that report usage. |
+| **Context figure** | The engine's current context-size number: *anchored* (built on a real reported `input_tokens` plus an estimated tail) or *estimated* (pure estimate). `RunEndContext.context_figure` says which drove the last trigger. |
+| **Prune** | The no-LLM reclamation pass: old tool results beyond a protected tail are replaced by a `[cleared: prior tool output]` marker (originals handed to the demotion sink) — freeing context without a summarizer call. |
+| **Overflow salvage** | Surviving a "prompt too long" rejection: the failed turn gets one compact-and-retry against a target strictly under the refused payload, instead of the run dying. |
+| **Demotion sink** | Where compaction's evicted messages go instead of the void — typically a memory store, so evicted content stays recallable. |
+| **Retention class** | The per-tool-result tag (`Durable`/`Requery`/default) that decides what pruning and compaction may clear, and in what order. |
+| **Rolling compactor** | A compactor that re-processes only the messages since the last pass — compaction as a maintenance cadence, not one big rewrite. |
+| **QA summarizer** | The three-step LLM compactor: summarize the about-to-drop slice, *question* what's missing, answer from the transcript before it's discarded. |
+| **Structured summarizer** | The LLM compactor that emits sectioned summaries (facts / decisions / pending / questions) with contractually stable headings. |
+| **Fallback compactor chain** | The never-fail compaction chain: quality-descending stages (QA → structured → truncate); the terminal `TruncatingCompactor` cannot fail, so the chain never fails to compact. |
+| **Terminal capture** | The chain's guarantee-floor wrapper: the last-resort truncate always preserves at least `terminal_min_recent` recent messages. |
+| **Landing target** | The post-compaction size the pass must actually reach — by default 15% of the trigger threshold, not the old 70%-of-threshold share. |
+| **Gate decision** | One permission decision as serializable data: tool, args digest, verdict, rule id + source, reason, timestamp — one record per gated dispatch, joinable by `call_id`. |
+| **Args digest** | A 16-hex fingerprint of a tool call's arguments over canonical (key-sorted) JSON — identifies the call without storing its content. |
+| **Ask channel** | The external-approver mechanism: a hook's `ask` *parks* the run at the pre-execution boundary; an async answer (or timeout/cancel) resumes it. |
+| **Grant** | A persisted approval rule ("allow `Read` on exactly these arguments") with a narrow scope ladder and a pinned tool-descriptor digest — re-asking is automatic when the tool changes. |
+| **Budget gate** | The engine-side spend guard: soft lines warn once per dimension (`on_budget_warn`), the hard line refuses the *next* request (`BudgetExhausted`) — budgets are gates. |
+| **Soft line / hard line** | The budget gate's two thresholds per dimension: crossing soft warns (once), crossing hard stops the next request before it is sent. |
+| **Event hub** | `EventHub` — one `LoopObserver` fanning every engine event into a broadcast `LoopEvent` stream a CLI/TUI can subscribe to. |
+| **Event ledger** | The per-event JSONL stream (`events.jsonl`, `TrajectoryEvent` records) — the ordered, replayable event spine. |
+| **Determinism seams** | The injectable `Clock`/`IdGen`/`Rng` traits: swap in a fixed clock and seeded generators and the same run produces the same bytes. |
+| **Manifest** | The `loop.yaml` document — a loop's declarative center: profiles deep-merge, `${VAR}` interpolates, validation reports spans, one `config_hash` identifies the resolved shape. |
+| **Cassette** | A recorded real HTTP exchange (request/response + streamed events, scrubbed) replayed hermetically in tests — the wire is the oracle. |
+| **Golden request bytes** | Committed canonical-JSON files pinning exactly what the engine builds per scenario — a red golden can only mean *our* construction drifted. |
+| **ContentSource** | The read seam: `ReadTool` reads through any source a host defines (files, remote trees) — `FileSource` ships as the filesystem implementation. |
+| **SearchSource** | The search seam: a `ContentSource` that can also walk entries, sniff binaries, and bound reads — one trait serves `Glob`/`Grep`/`CodeSearch`/`Tree`. |
 
 ## Design & pattern words
 
@@ -131,6 +158,9 @@ Terms from the [Principles](09-principles/01-sans-io.md) pages — the patterns 
 | **Epoch guard** | A counter that advances on each invalidation; work captures it before running and drops its result if it moved — closing the "invalidated while I was computing" race. |
 | **Wave (dispatch)** | A group of tool calls proven safe to run at the same time; waves execute one after another, calls within a wave concurrently. |
 | **Lane (stream)** | One interleaved content channel inside a single streamed reply — text, thinking, or one tool call — identified by its index; fragments route to slots by (kind, index). |
+| **Determinism seam** | The general shape behind `Clock`/`IdGen`/`Rng`: every nondeterministic input enters through a trait you can replace, so "same run, same bytes" becomes testable. |
+| **Park / resume** | Suspending a run at a safe boundary (nothing in flight, state coherent) and continuing it later from an external answer — the ask channel's lifecycle. |
+| **Landing verification** | Checking the *result* of an operation against the target it promised (post-compaction size vs landing target), not trusting the operator's self-report. |
 
 ## Provider words
 
@@ -153,6 +183,11 @@ Terms from the [Principles](09-principles/01-sans-io.md) pages — the patterns 
 | **Event-stream (AWS)** | Bedrock's binary framing for streamed replies (not SSE). |
 | **Converse API** | Bedrock's cross-model request shape (the non-Anthropic path). |
 | **Guided JSON** | vLLM's field for grammar-constrained output. |
+| **Prompt-cache breakpoint** | A `cache_control` marker on the Anthropic wire asking the provider to cache the request prefix — loopctl marks the last tool definition, the system prompt, and the tail blocks. |
+| **Cached input tokens** | The share of the input count the provider served from its prompt cache (`Usage::cached_input_tokens`) — the hit-rate number a cache actually pays for. |
+| **Thinking effort** | The off/low/medium/high/max knob (`RequestOptions::effort`) telling a reasoning model how much thinking to spend. |
+| **Session-scoped reasoning retention** | Prior turns' thinking blocks ride the conversation verbatim (until compaction ages them out) so the request prefix stays byte-stable and provider prompt caches keep hitting. |
+| **Embedder** | A real `EmbeddingProvider` backend — `OllamaEmbedder` (local, `/api/embed`) or `OpenAiEmbedder` (`/v1/embeddings`). |
 
 ## Rust words used here
 

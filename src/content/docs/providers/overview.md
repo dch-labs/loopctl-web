@@ -26,6 +26,8 @@ Enable Cargo features per provider; each feature turns on what it needs (all of 
 | `moonshot` | profile over `OpenAiClient` | OpenAI-compatible (Kimi) |
 | `zai` | profile over `AnthropicClient` | Anthropic-compatible (GLM) |
 
+Beyond providers, the feature set now covers whole subsystems — the full table with dependencies lives in the crate README: `builtin_tools` (Think/Read), `fs_tools` (Write/Edit/MultiEdit/FileViewer), `search_tools` (Glob/Grep/CodeSearch/Tree), `shell_tools` (Shell/Jobs), `vector_index` + `vector_memory` (semantic memory), `file_memory` (JSONL store), `file_grants` (persisted approvals), `manifest` (loop.yaml model), `mcp`, `redaction`, `tool_health`, `tool_shield`, `hooks`, `testing`, `derive`. Two provider features grow extra surfaces with `vector_index`: `openai` adds `OpenAiEmbedder`, `ollama` adds `OllamaEmbedder` (see [embeddings](/providers/embeddings/)).
+
 One function per profile — zero new wire code, just the right base URL, env vars, and defaults:
 
 ```rust
@@ -66,13 +68,13 @@ This is the tier for **config-file-driven hosts**: apply your own precedence on 
 
 ## What every client gives you
 
-## What every client gives you
-
 - **Both turn modes** — streaming (`stream_messages`) and non-streaming (`create_message`).
-- **Full `RequestOptions` support** — per-request model override, JSON-schema response formats, strict tool constraints. (Bedrock is the exception: it implements the base methods only.)
+- **Full `RequestOptions` support** — per-request model override, JSON-schema response formats, strict tool constraints, thinking effort. (Bedrock is the exception: it implements the base methods only.)
 - **Hot model swap** — `set_model` works on all shipped clients, enabling [`switch_model`](/engine/model-switch/).
 - **Neutral types** — every provider's quirks are translated into the same `Message`/`StreamEvent` vocabulary; the engine is blind to which provider is serving.
 - **Honest failure classification** — HTTP 429/503/529 and their SSE-shaped cousins become `ApiError::RateLimit` with parsed `Retry-After`; auth failures fail fast; a stream cut without its terminal event is reported as truncation, never as a clean stop.
+- **Window disclosure where it exists (0.4.0)** — the OpenAI-compatible client answers `model_context_window()` from llama.cpp `/props` and Ollama `/api/show`; everything else reports `None` and the declared window stands (see [context accounting](/engine/context-accounting/)).
+- **Cached-token accounting (0.4.0)** — every shipped provider fills `Usage::cached_input_tokens` from its native cache report.
 
 ## Provider conventions worth knowing once
 
@@ -88,11 +90,12 @@ This is the tier for **config-file-driven hosts**: apply your own precedence on 
 ## Per-provider pages
 
 - [OpenAI & the compatible family](/providers/openai/) — OpenAiClient, Ollama, DeepSeek, Grok, Azure, Moonshot, self-hosted.
-- [Anthropic](/providers/anthropic/) — Claude, thinking blocks, forced-tool JSON.
+- [Anthropic](/providers/anthropic/) — Claude, thinking blocks, forced-tool JSON, prompt caching.
 - [Gemini](/providers/gemini/) — Gemini quirks: model-in-URL, thoughts.
 - [Bedrock](/providers/bedrock/) — AWS signing, event-stream decoding, Converse.
 - [SSE under the hood](/providers/sse/) — how streaming bytes become events.
 - [Grammar constraints](/providers/grammar/) — vLLM `guided_json` for local models.
+- [Embeddings](/providers/embeddings/) — the `EmbeddingProvider` backends for semantic memory.
 
 ## Picking for local development
 

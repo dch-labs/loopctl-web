@@ -1,11 +1,12 @@
-# `src/middleware/verify.rs` — `VerifyMiddleware`
+# `src/middleware/verify.rs` + `verify/builtin.rs` — `VerifyMiddleware`
 
-Runs your verifier after write-class tools succeed and appends the verdict — "verify-on-write" made automatic.
+Runs your verifier after write-class tools succeed and appends the verdict — "verify-on-write" made automatic. Since 0.4.0 the module ships a **real builtin**: `CommandVerifier` (in `verify/builtin.rs`) judges write-class calls statically — a deny-glob check on shell commands (`rm -rf /` in any spacing, at token boundaries; wrapped `sh -c "…"` must name an allowed shell and the inner command is checked) and a target-path check on write inputs (parent exists and is writable) — with one-line diagnostics written for a small-model reader.
 
 **Key items**
 
-- `Verifier::verify(ctx, tool_name) -> VerifyResult { passed, diagnostics }` — async, boxed like `Tool::call`; `NoopVerifier` is the do-nothing default.
+- `Verifier::verify(ctx, tool_name) -> VerifyResult { passed, diagnostics }` — async, boxed like `Tool::call`; `NoopVerifier` is the explicit opt-out.
 - `VerifyMiddleware::new(verifier, write_tools)` — exact-match names.
+- `CommandVerifier::new()` (+ `with_deny_globs`, `with_allowed_shells`) and `WritePathExtractor` — the builtins the default pipeline wires since 0.4.0.
 
 **Behavior notes**
 

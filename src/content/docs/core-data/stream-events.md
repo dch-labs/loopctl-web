@@ -46,7 +46,9 @@ pub enum DeltaPart {
     Text      { text: String },          // visible text fragment
     InputJson { partial_json: String },  // tool-argument JSON, arriving in pieces
     ToolCall  { partial_json: Value },   // (legacy form)
-    Thinking  { text: String },          // the model's private reasoning fragment
+    Thinking  { text: String,            // the model's private reasoning fragment
+                signature: Option<String>,   // a provider signature over the block
+                redacted: Option<String> },  // an opaque redacted-block payload
 }
 ```
 
@@ -68,7 +70,7 @@ PartStop(0)
 
 - A `PartStart` whose `part` is `None` opens a **thinking lane** (reasoning has no content at open time).
 - `PartStop { index: None }` closes the oldest open lane (legacy providers); `Some(i)` closes the lane with that index.
-- `Thinking` deltas are **stream-only**: they never appear in the assembled message. Consume them via `on_thinking_delta`. An *empty* thinking delta means "reasoning was redacted" — render a placeholder, not silence.
+- `Thinking` deltas feed the live `on_thinking_delta` callback **and** the assembled message (since 0.4.0's reasoning persistence): a closed thinking lane flushes a `MessagePart::Thinking` carrying the concatenated text plus whatever `signature`/`redacted` payload the deltas latched — so the reasoning can ride the conversation and be replayed on continuation requests. An *empty* thinking delta with a `redacted` payload means "reasoning was withheld" — render a placeholder, not silence.
 
 ---
 
@@ -89,7 +91,7 @@ Its rules, briefly:
 
 - Text deltas append to the lane's buffer; on `PartStop`, the buffer flushes into a `MessagePart::Text`.
 - Tool lanes collect JSON fragments; on close, the fragments are parsed. Empty input becomes `{}`. Unparseable input is the one accumulator error (`StreamError::InvalidToolInputJson`).
-- Thinking lanes are tracked for routing but flush **nothing** into the message.
+- Thinking lanes buffer reasoning fragments and latch any `signature`/`redacted` payload; on close they flush a `MessagePart::Thinking` — the reasoning joins the conversation so continuations can replay it (see [messages](/core-data/messages/)).
 - Deltas with no matching open lane are silently dropped. Slots still open at `build()` are dropped too — only closed lanes produce parts.
 
 ### The slot machine, exactly
@@ -114,7 +116,7 @@ The rules that make interleaving safe:
 - **Deltas route by `(kind, index)`** — the payload's kind picks the lane kind, then the slot with that index is found. Indices may be *reused across kinds* (a text lane 0 and a tool lane 0 coexist), so a text fragment can never land in a tool slot or vice versa. A delta with no matching open slot is silently ignored — a misbehaving provider can't corrupt the assembly.
 - **Tool arguments accumulate as a raw string**, never as JSON values: fragments like `{"pa` + `th": "a` + `.rs"}` are appended, and `serde_json::from_str` runs **once**, at `PartStop`. An empty buffer parses to `{}`; a parse failure is the accumulator's one and only error (`InvalidToolInputJson`, carrying the raw text).
 - **`PartStop { index: Some(i) }`** closes the first slot with that index; **`index: None`** closes the *oldest* open slot (legacy providers that stop lanes FIFO).
-- **On close, slots flush under conditions**: a Text slot flushes a `MessagePart::text` only if non-empty; a Tool slot flushes a `tool_call` only if the name is non-empty; **a Thinking slot flushes nothing** — reasoning is stream-only, consumed via `on_thinking_delta`, and must never enter the conversation the model reads back.
+- **On close, slots flush under conditions**: a Text slot flushes a `MessagePart::text` only if non-empty; a Tool slot flushes a `tool_call` only if the name is non-empty; **a Thinking slot flushes a `MessagePart::Thinking` when anything was accumulated** — text, a signature, or a redacted payload all count, so a signature-only or withheld-reasoning block still survives into the conversation for replay.
 - **`build()` drops anything still open** — only closed lanes become parts. A stream that died mid-lane leaves no half-part behind; the truncation machinery upstream decides whether to retry.
 
 ```mermaid
@@ -126,12 +128,12 @@ flowchart LR
     end
     A --> TA["text slot flushes<br/>MessagePart::text('Let me check: done')"]
     B --> TB["tool slot keeps id + name,<br/>parses the JSON string once at close<br/>→ MessagePart::tool_call"]
-    C --> TC["thinking slot flushes<br/>NOTHING — stream-only"]
+    C --> TC["thinking slot flushes<br/>MessagePart::Thinking —<br/>text + latched signature/redacted"]
     TA --> M["build() → Message { text, tool_call }"]
     TB --> M
 ```
 
-`Usage` is the token accounting: `{ input_tokens, output_tokens }`, delivered on `MessageDelta`. `total_tokens()` is the sum.
+`Usage` is the token accounting: `{ input_tokens, output_tokens, cached_input_tokens }`, delivered on `MessageDelta`. `total_tokens()` is the sum; the cached share is a subset of the input (see [API client](/core-data/api-client/)).
 
 ### Stop reasons
 
@@ -250,7 +252,7 @@ When streaming gives up (deadline blown or transport budget spent) and `fallback
 The handler yields three things:
 
 - `Stream(StreamEvent)` — a raw provider event, forwarded after the handler has seen it.
-- `AttemptReset` — "that attempt failed; everything you buffered from it is void." Consumers **must** reset on this or they will concatenate a failed attempt's fragments with the retry's.
+- `AttemptReset` — "that attempt failed; everything you buffered from it is void." Consumers **must** reset on this or they will concatenate a failed attempt's fragments with the retry's. The engine resets its accumulator and fires the `on_attempt_reset` observer exactly once per retried attempt (never on the first) — the signal for live displays to wipe the partial render.
 - `Fallback { message, ... }` — "streaming gave up; here is the complete reply from the non-streaming rescue."
 
 Key behaviors pinned by tests:

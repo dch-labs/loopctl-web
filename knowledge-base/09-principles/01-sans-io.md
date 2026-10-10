@@ -90,7 +90,8 @@ impl LoopMachine {
 
     // the two maintenance calls, used only by the exit door
     fn commit_pending(&mut self);    // success exit: scratchpad → notebook
-    fn discard_pending(&mut self);   // failure exit: scratchpad → trash
+    fn salvage_pending(&mut self);   // cancel/failure exit: coherent prefix → notebook
+    fn discard_pending(&mut self);   // overflow exit: scratchpad → trash (whole)
 }
 ```
 

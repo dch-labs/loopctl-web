@@ -9,7 +9,7 @@ Session-scoped settings, stable across runs on one agent.
 
 - `SessionConfig { system_prompt: Option<String>, context_window: u64, compact_threshold: u8, auto_compact: bool }`
 - Defaults: `None`, **200,000**, **80**, **true**.
-- Builders: `with_system_prompt`, `with_context_window`, `with_compact_threshold` (clamped 0–100), `with_auto_compact`.
+- Builders: `with_system_prompt`, `with_context_window` (the *declared* window — a client disclosure from `model_context_window()` outranks it at run start since 0.4.0; `0` is the deliberate opt-out that beats any disclosure), `with_compact_threshold` (clamped 0–100), `with_auto_compact`.
 - `ParallelMode { Sequential, Parallel }` and `ParallelDispatchConfig { mode, max_concurrency }` — defaults Sequential / 8; clamped to `[1, batch size]` at dispatch.
 
 **Behavior notes**

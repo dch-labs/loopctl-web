@@ -46,7 +46,7 @@ Every request is signed: a canonical request (method, URI, headers, hashed paylo
 Bedrock streams responses as AWS **event-stream frames**: binary headers + payload chunks, not text lines. The client contains a hand-written incremental decoder (frame length, typed headers like `:event-type`, payload, CRCs), robust to partial frames arriving in arbitrary TCP chunk splits:
 
 - **Anthropic path** — each frame's payload is the same JSON event as the direct API; it feeds the shared Anthropic emitter.
-- **Converse path** — frames carry `messageStart` / `contentBlockDelta` (text, tool-input, or reasoning lanes) / `messageStop`, plus a final `metadata` frame that carries stop reason and usage together. The terminal pair is emitted exactly once, from `metadata`.
+- **Converse path** — frames carry `messageStart` / `contentBlockDelta` (text, tool-input, or reasoning lanes) / `messageStop`, plus a final `metadata` frame that carries stop reason and usage together. The terminal pair is emitted exactly once, from `metadata`. Usage (0.4.0): Converse's `cacheReadInputTokens` fills `Usage::cached_input_tokens`, and the Anthropic-shape responses get the same input normalization as the direct client (raw + cache reads + cache-creation spend).
 - Exception frames carry their `:exception-type` into the error.
 - A stream cut before the terminal frame emits no terminal — truncation, as everywhere else.
 

@@ -46,7 +46,7 @@ HeuristicTokenCounter:
 
 Two properties matter more than its accuracy:
 
-**It errs high.** The estimate over-counts rather than under-counts (images at a flat 256, message framing charged per message, tool-schema overhead reserved even when suppressed). A false "too big" costs one compaction pass. A false "fits" costs a rejected request and a **failed run** — asymmetric harm, so the bias is chosen to match.
+**It errs high — but 0.4.0 made it honest.** The raw estimate still over-counts rather than under-counts (images at a flat 256, message framing charged per message). But the estimate is no longer the whole story: suppressed tool schemas under a `response_format` are no longer reserved; backends that report real `input_tokens` feed a rolling **calibration ratio** (and can **anchor** the figure wholesale — see [context accounting](../02-engine/09-context-accounting.md)); and the window itself is **probed** where the provider discloses it (llama.cpp `/props`, Ollama `/api/show`) instead of trusting the declared guess. A false "fits" now costs one overflow-salvage compact-and-retry before it costs the run.
 
 **It errs *consistently*.** The same conversation always measures the same number. Consistency matters more than closeness, because — see below — mixing two counters is worse than either.
 

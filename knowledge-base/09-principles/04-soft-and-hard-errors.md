@@ -31,7 +31,7 @@ flowchart TD
     AGAIN -- "model recovered on its own" --> OK["the run continues — soft error did its job"]
     WATCH -- "repeated past a threshold:<br/>the model is NOT adapting" --> HARD2["HARD channel:<br/>the run ends"]
     Q -- "no — nothing to adapt to" --> HARD["HARD channel:<br/>LoopError"]
-    HARD --> FIN["finalize(): scratchpad discarded,<br/>run recorded, Err returns to YOUR code"]
+    HARD --> FIN["finalize(): coherent prefix salvaged<br/>(completed turns commit), run recorded,<br/>Err returns to YOUR code"]
     HARD2 --> FIN
 ```
 
@@ -44,7 +44,7 @@ flowchart TD
 | Shape | a tool result with `is_error: true` | a `LoopError` value |
 | Who sees it | **the model** (as message text) | **your code** (as `Err`) |
 | The run | continues | ends now |
-| The scratchpad | kept — the failure is part of the story | discarded — failed runs leave no trace |
+| The scratchpad | kept — the failure is part of the story | salvaged — completed turns commit, the in-flight tail drops (0.4.0; only the overflow family discards whole) |
 | Example | "file not found" | network unreachable mid-turn |
 
 Everything the dispatcher can produce lands on one side deliberately:

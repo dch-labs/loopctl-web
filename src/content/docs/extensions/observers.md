@@ -41,15 +41,21 @@ agent.register_observer(Arc::new(Metrics { requests: AtomicUsize::new(0) }));
 | `on_turn_start` | before each **served** model call (a turn deferred to compaction fires nothing; the retried turn fires once) | `turn`, `query` (display text) |
 | `on_response` | once per turn, after the full reply is assembled | `turn`, `text` (tool calls excluded), `usage` |
 | `on_text_delta` / `on_thinking_delta` | per streaming fragment | `turn`, `delta` (verbatim fragment) |
+| `on_attempt_reset` | exactly once before the first event of each **retried** stream attempt (never on the first) — the signal for live displays to wipe the partial render (0.4.0) | `turn` |
 | `on_tool_call_received` | once per model-requested call, before any dispatch — the earliest per-call signal; carries the input; fires even for pre-answered unknown tools | `turn`, `tool`, `call_id`, `input` |
 | `on_tool_pre` / `on_tool_post` | per dispatch **attempt** (retries re-fire both) | `turn`, `tool`, `tool_call_id`; post adds `result_hash`, `is_error`, `duration`, `display_hint` |
-| `on_turn_end` | end of the LLM phase and (separately) end of the tool phase — one model turn with tools produces **two** events | `turn`, `success`, `error`, `duration_ms`, token counts |
+| `on_gate_decision` | after every **gated** dispatch — exactly one record, ordered `tool_pre → gate → tool_post`; a dispatch no gate consulted emits none (0.4.0) | `turn`, `call_id`, `decision` (the `GateDecision`) |
+| `on_turn_end` | end of the LLM phase and (separately) end of the tool phase — one model turn with tools produces **two** events | `turn`, `success`, `error`, `duration_ms`, token counts, `stop_reason`, `history` (the machine's conversation at the boundary — committed + this run's turns, `Arc`-shared), `context_tokens`, `context_window` (0.4.0 fields) |
 | `on_stream_success` / `on_stream_failure` | after each model call, with the model that served it | `turn`, `model`, `usage` / `error` |
-| `on_compaction` | only when compaction **actually happened** (never on no-ops) | `tokens_before`, `tokens_after`, `tokens_saved` |
+| `on_transport_fallback` | when a turn was rescued by the non-streaming fallback — even when a later policy discards the record (0.4.0) | `turn`, the fallback detail |
+| `on_pre_compaction` | as a compaction pass **starts** — the pre-pass snapshot (0.4.0) | trigger reason, pre-pass stats (messages by role, token estimate) |
+| `on_compaction` | only when compaction **actually happened** (never on no-ops) | live `CompactTelemetry`: before/after stats, `tokens_saved`, the pass's wall-clock duration |
+| `on_compaction_failed` | when a pass fails outright — typed `CompactionFailed`/`CompactionStalled` at the run level (0.4.0) | the payload-comparable numbers |
 | `on_fallback` | when the breaker switches to a backup model | `from`, `to` |
 | `on_model_switched` | on explicit switch and on every fallback routing change | `from`, `to` |
 | `on_loop_detected` / `on_convergence_detected` | when detection flags a pattern | pattern text + repetitions / action string |
-| `on_run_end` | every run exit — success, error, cancel | `success`, `error`, `total_turns`, `duration_ms` |
+| `on_budget_warn` | when a [budget gate](/safety/budget-gate/) soft line is crossed — once per run per dimension (0.4.0) | the dimension and the numbers |
+| `on_run_end` | every run exit — success, error, cancel | `success`, `error`, `total_turns`, `duration_ms`, `calibration_ratio_bp`, `context_figure`, `unfinished_input` (0.4.0 fields) |
 | `reset` | once per session start | — |
 
 ## The fan-out machinery, exactly
@@ -74,7 +80,7 @@ Similarly, `on_tool_call_received` vs `on_tool_pre`: the former is once **per ca
 1. **Deltas of failed attempts fire too.** With a `StreamHandler` configured, the engine forwards every accepted event — including fragments of an attempt that later dies and replays. If you concatenate deltas into committed output, reset on retry boundaries (the accumulator does exactly this), or simply use `on_response` / `on_turn_end` for anything committed.
 2. **Keep delta handlers light.** They run inline on the stream-ingestion path. Append to a buffer and return; render elsewhere.
 
-Special case: an **empty** `on_thinking_delta` fragment means *redacted reasoning* — render a placeholder, not an empty string. Reasoning text never appears in `on_response` — it is stream-only by design.
+Special case: an **empty** `on_thinking_delta` fragment means *redacted reasoning* — render a placeholder, not an empty string. Reasoning text never appears in `on_response` (its `text` field is visible text only) — consume it via `on_thinking_delta`, or read the assembled `MessagePart::Thinking` from the turn-end history snapshot.
 
 ## The simple cousin — `text_streamer`
 
@@ -90,7 +96,20 @@ One consumer, no trait, no reset bookkeeping — but the same failed-attempt cav
 
 ## A ready-made observer — trajectory capture
 
-You don't have to write your own transcript keeper: `memory::trajectory::TrajectoryObserver` listens to these same events and assembles each run into a serializable `TrajectoryRecord` — per-turn queries and responses, tool calls paired by `tool_call_id` (a retried call appears once per attempt), durations, token totals, and a three-way outcome (`Success` / `Failure` / `Partial`). Keep finished records in memory (`records()`), optionally append one JSONL line per run to a directory (`writing_to(dir)`), and cap response text with `with_capture_limit` (default 2,000 characters). See the [file reference](/file-reference/memory-trajectory/) and [Memory](/extensions/memory/).
+You don't have to write your own transcript keeper: `memory::trajectory::TrajectoryObserver` listens to these same events and assembles each run into a serializable `TrajectoryRecord` — per-turn queries and responses, tool calls paired by `tool_call_id` (a retried call appears once per attempt), durations, token totals, and a three-way outcome (`Success` / `Failure` / `Partial`). Keep finished records in memory (`records()`), optionally append one JSONL line per run to a directory (`writing_to(dir)`), and cap response text with `with_capture_limit` (default 2,000 characters). Its sibling `EventLedgerObserver` writes the finer-grained per-event stream (`events.jsonl`, one `TrajectoryEvent` per engine event — see [the event hub](/extensions/event-hub/)). See the [file reference](/file-reference/memory-trajectory/) and [Memory](/extensions/memory/).
+
+## The metric stream — counters on the `loopctl::metrics` target
+
+Apart from observer callbacks, the engine emits **metric events** on the `loopctl::metrics` `tracing` target at `debug` level — a structured counter stream for whoever runs a metrics collector (you subscribe through `tracing`, not the `LoopObserver` trait). Most subsystems document their own counters inline (compaction's `loopctl.compaction.*`, the estimator's `loopctl.estimate.calibration`, embedding batching's `loopctl.embed.batch`, …); the engine-wide ones 0.4.0 added:
+
+- **`loopctl.tools.calls`** — one event per *settled* dispatch, on **both** dispatch paths (direct registry and the middleware pipeline), emitted at the single exit they share so no call is double-counted and none is missed. Fields: `tool`, `outcome` (`ok` / `error`), `duration_ms`.
+- **`loopctl.memory.retrieve.results`** — one event per memory retrieve, **origin-labeled** by `trigger`: `turn` for the engine's passive per-turn retrieve, `tool` for an active search the model itself ran (`SearchMemories`); both carry `outcome`, `k_requested`, `k_returned`. It makes the passive-vs-active split ([Memory](/extensions/memory/)) visible in the stream.
+- **Span → counter renames** — several 0.3.x span-style events migrated to counter style under the `loopctl.` prefix, notably `vector.index.search` → `loopctl.vector.index.search` and `vector.embed` → `loopctl.vector.embed`, so every vector tier (linear, HNSW, Qdrant, pgvector) now emits the same names.
+- **Deprecated** — the `Think` tool's `loopctl.think.calls` (shipped 0.3.1) is redundant double-counting: the engine's `loopctl.tools.calls` already counts every Think call. It still fires for backward compatibility and is slated for removal in a later `0.Y.0` (see [Think](/file-reference/tool-builtin-think/)).
+
+## From observer to event stream — the hub
+
+Need many consumers of one event stream (a TUI *and* a metrics collector *and* a logger), or consumers in other tasks? Register one [`EventHub`](/extensions/event-hub/) as the observer and subscribe to its broadcast channel — the observer-to-stream adapter.
 
 ---
 

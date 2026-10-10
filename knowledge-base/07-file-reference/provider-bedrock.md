@@ -12,7 +12,7 @@ The AWS client: SigV4-signed requests, two wire paths, binary event-stream decod
 
 **Behavior notes**
 
-- Streaming: the Anthropic path feeds the shared Anthropic emitter; the Converse path has its own emitter whose terminal pair (stop + usage) comes from the final `metadata` frame, emitted exactly once.
+- Streaming: the Anthropic path feeds the shared Anthropic emitter; the Converse path has its own emitter whose terminal pair (stop + usage) comes from the final `metadata` frame, emitted exactly once. Since 0.4.0 Converse's `cacheReadInputTokens` fills `Usage::cached_input_tokens`, and Anthropic-shape responses get the direct client's input normalization (raw + cache reads + creation).
 - Non-streaming responses are plain JSON in either shape; an unrecognized shape is an explicit error.
 - **No `RequestOptions` support** (base methods only) and HTTP errors aren't auto-classified into rate-limit/auth forms.
 - `max_tokens` defaults 8192; models with lower own caps reject bigger budgets — configure per client.

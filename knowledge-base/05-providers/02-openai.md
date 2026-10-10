@@ -43,9 +43,19 @@ Details that matter:
 - Endpoint: `{base_url}/chat/completions`; auth as `Authorization: Bearer <key>`.
 - System prompt → first `system`-role message; inline system messages pass through natively.
 - Tool calls stream in as `tool_calls[].function.arguments` fragments (JSON string built up piece by piece); the client maps them to `InputJson` deltas under a per-index lane. The lane bookkeeping matters: text and tool lanes can interleave, and the emitter closes lanes with addressed stops so fragments never land in the wrong slot.
-- Thinking (`reasoning_content`, as DeepSeek-R1 and o-series style models emit) routes to a separate thinking lane — visible via `on_thinking_delta`, never mixed into the text.
+- Thinking (`reasoning_content`, as DeepSeek-R1 and o-series style models emit) routes to a separate thinking lane — `on_thinking_delta` fragments, and (0.4.0) the assembled `MessagePart::Thinking` riding the conversation for continuation replay (`replay_reasoning(true)` on the builder, default on).
 - Finish reasons map: `tool_calls` → ToolCall, `length` → MaxTokens, `stop` → EndTurn.
+- Usage: `prompt_tokens_details.cached_tokens` fills `Usage::cached_input_tokens` (object and field both defaulted; a non-numeric placeholder from an OpenAI-compatible server reads as zero instead of dropping the whole usage object).
 - The stream ends on the `data: [DONE]` sentinel; a stream that ends **without** it (or without a finish reason) is reported as truncated — never a clean stop.
+
+### The context-window probe (0.4.0)
+
+This is the one shipped client that answers `model_context_window()` — from the two server families that disclose:
+
+- **llama.cpp `/props`** — `default_generation_settings.n_ctx` **divided by `total_slots`**: a `--parallel` server splits its KV budget, and the per-slot allocation is what a single request must fit.
+- **Ollama `/api/show`** — a POST carrying the model name; the `context_length` key matched by suffix (real Ollama keys it by architecture — `llama.context_length`).
+
+Probes hit the server root (one trailing `/v1`-style segment stripped from the base URL), reuse the client's pooled HTTP layer under their own 5-second total deadline, and cache per model — `set_model` clears the cache so a swapped model re-probes. Timeout, HTTP error, or garbage is `None` (fail-soft — the declared window stands); the engine resolves **probe over declaration** at run start ([context accounting](../02-engine/09-context-accounting.md)).
 
 ### Structured output on this client
 

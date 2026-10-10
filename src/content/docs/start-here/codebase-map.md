@@ -5,7 +5,7 @@ sidebar:
 ---
 
 
-loopctl lives in `src/`. Below is the whole map: what each module is for, in one or two lines, with links to the deep-dive article. Feature names in brackets (like `[feature: streaming]`) mean the module only exists when you enable that Cargo feature.
+loopctl lives in `src/`. Below is the whole map: what each module is for, in one or two lines, with links to the deep-dive article. Feature names in brackets (like `[feature: streaming]`) mean the module only exists when you enable that Cargo feature. The companion crates (`derive`, `sqlite`, `hnsw`, `client`, and the side-workspace `vector`) live under `crates/` — 0.4.0 moved them there from the repo top level.
 
 ```text
 loopctl/
@@ -14,41 +14,67 @@ loopctl/
 │   ├── engine/             THE agent loop (brain + hands)
 │   ├── api.rs              the ApiClient trait: "how to talk to a model"
 │   ├── provider/           ready-made clients: OpenAI, Anthropic, Gemini, Bedrock...
+│   │                       embeddings.rs — real embedders (Ollama /api/embed, OpenAI /v1/embeddings)
 │   ├── stream.rs           streaming event types + the accumulator that assembles them
 │   ├── message.rs          Message, MessagePart, roles — the conversation data model
 │   ├── tool.rs             the Tool trait and its output/error types
-│   ├── tool/builtin/       shipped tools: think.rs — the planning scratchpad [feature: builtin_tools]
+│   ├── tool/builtin/       shipped tools, each behind its own feature flag:
+│   │                       read.rs — line-aware ReadTool over a pluggable ContentSource
+│   │                       fs.rs — Write/Edit/MultiEdit/FileViewer + FileSource (fs_tools)
+│   │                       search.rs — Glob/Grep/CodeSearch/Tree over a SearchSource (search_tools)
+│   │                       shell.rs — the Shell + Jobs tools over a ShellBackend (shell_tools)
+│   │                       think.rs — the planning scratchpad (builtin_tools)
 │   ├── tool/registry.rs    ToolRegistry — name → tool lookup
-│   ├── tool/permission.rs  PermissionCheck — allow / deny / ask / modify
+│   ├── tool/permission.rs  PermissionCheck + GateDecision (decisions as audit data)
+│   ├── tool/grant.rs       the GrantStore — persisted approval grants (file_grants)
 │   ├── tool/health.rs      per-tool circuit breakers [feature: tool_health]
 │   ├── tool/shield.rs      tool safety scoring (UnixShield) [feature: tool_shield]
 │   ├── middleware/         a pipeline that wraps every tool call (timeout, caps, cache...)
 │   ├── hooks/              control-flow interception (block a tool before it runs) [feature: hooks]
-│   ├── observer.rs         watch everything that happens (no control) 
+│   ├── ask.rs              the external-approver channel: park a run, resume on approval
+│   ├── budget.rs           BudgetGate — soft/hard spend lines consulted before each request
+│   ├── observer.rs         watch everything that happens (no control)
+│   │                       hub.rs — EventHub: observers → one broadcast event stream
 │   ├── memory.rs           long-term memory for the agent
 │   ├── memory/             trajectory.rs — capture each run as a record (JSONL or memory)
+│   │                       trajectory/events.rs — the per-event ledger (TrajectoryEvent stream)
 │   │                       consolidate.rs — decay, merge, prune: memory curation primitives
 │   │                       extractor.rs — mine learned memories from recorded runs
 │   │                       file.rs — JSONL-persistent memory store [feature: file_memory]
 │   │                       score.rs — the shared retrieval scorer (ranking parity across backends)
 │   │                       vector.rs — embedding + nearest-neighbour primitives [feature: vector_index]
+│   │                       vector_memory.rs — the semantic LoopMemory backend [feature: vector_memory]
+│   │                       search_tool.rs — SearchMemoriesTool: the model queries memory itself
 │   ├── detection/          is the model stuck? (loop + convergence detection)
 │   ├── fallback.rs         circuit breaker over the model itself (switch to a backup model)
 │   ├── reflection/         analyze a failed tool call, decide how to retry
 │   ├── compact.rs          shrink the conversation when it nears the context window
+│   ├── compact/            the compactor family:
+│   │                       qa_summarizer.rs — the three-step LLM summarizer
+│   │                       structured_summarizer.rs — sectioned summaries with stable headings
+│   │                       fallback.rs — the never-fail chain (quality-descending, terminal truncate)
+│   │                       demote.rs — evicted turns become retrievable memories
+│   │                       rolling.rs — the rolling compactor over retention classes
 │   ├── cancel.rs           the cancellation signal (cooperative Ctrl-C)
 │   ├── config.rs           SessionConfig — session-level settings
 │   ├── error.rs            LoopError — the one error enum for everything
 │   ├── capabilities.rs     small traits: "does this bundle have observers? memory?"
 │   ├── contributor.rs      inject a reminder message before each turn
+│   ├── determinism.rs      injectable clock / id / rng seams — same run, same bytes
+│   ├── manifest.rs         the loop.yaml manifest model (parse → resolve → validate) [feature: manifest]
+│   ├── manifest/           merge.rs, interpolate.rs, validate.rs, schema.rs, types.rs, error.rs
 │   ├── managers.rs         LoopManagers — one bundle holding every optional part
 │   ├── presets.rs          ready-made settings profiles (Constrained, Frontier)
 │   ├── structured.rs       force the model to answer in JSON you can parse
-│   ├── mcp.rs              speak the MCP protocol (use foreign tools, serve your own)
+│   ├── mcp.rs              speak the MCP protocol (use foreign tools, serve your own) [feature: mcp]
 │   ├── testing.rs          fake model client + fake tools for your tests [feature: testing]
 │   └── numeric.rs          internal safe-math helpers (not public)
-├── derive/                 a companion crate: #[derive(Tool)] generates the Tool impl
-├── sqlite/                 a companion crate: loopctl-sqlite, durable SQLite memory
+├── crates/                 companion crates — 0.4.0 moved them here into a workspace
+│   ├── derive/             #[derive(Tool)] generates the Tool impl
+│   ├── sqlite/             loopctl-sqlite, durable SQLite memory
+│   ├── hnsw/               loopctl-hnsw, the HNSW VectorIndex
+│   ├── client/             loopctl-client, the shared daemon client
+│   └── vector/             side-workspace crate: loopctl-vector, Qdrant + pgvector backends
 ├── examples/               runnable example programs
 └── tests/                  integration tests
 ```
@@ -66,11 +92,12 @@ loopctl/
 | `src/engine/bare/llm_turn.rs` | How one model call is built and sent (streaming or not). |
 | `src/engine/bare/dispatch.rs` | How tool calls run — the full per-call pipeline, sequential or parallel. |
 | `src/engine/bare/compact.rs` | The driver side of a compaction pass. |
+| `src/engine/bare/prune.rs` | The no-LLM tool-output reclamation pass (opt-in `PruneConfig`). |
 | `src/engine/bare/emission.rs` | Every observer/hook notification is fanned out from here. |
 | `src/engine/bare/config.rs` | All the `set_*` / `with_*` builder methods of `BareLoop`. |
 | `src/engine/bare/model_switch.rs` | `switch_model()` — change the model atomically mid-session. |
 
-Deep dives: [state machine](/engine/state-machine/) · [driver loop](/engine/driver-loop/) · [compaction](/engine/compaction/)
+Deep dives: [state machine](/engine/state-machine/) · [driver loop](/engine/driver-loop/) · [compaction](/engine/compaction/) · [context accounting](/engine/context-accounting/)
 
 ## Talking to models
 
@@ -83,21 +110,28 @@ Deep dives: [state machine](/engine/state-machine/) · [driver loop](/engine/dri
 | `src/stream/rate_limit.rs` | A token-bucket rate limiter, shared per provider endpoint. |
 | `src/provider.rs` | Shared provider plumbing + one-function profiles (`ollama()`, `deepseek()`, ...). |
 | `src/provider/openai.rs` | OpenAI client (also the base for Ollama, DeepSeek, Grok, Azure, Moonshot). |
-| `src/provider/anthropic.rs` | Anthropic (Claude) client — also the base for Z.ai. |
+| `src/provider/anthropic.rs` | Anthropic (Claude) client — also the base for Z.ai; prompt-cache breakpoints. |
 | `src/provider/gemini.rs` | Google Gemini client. |
 | `src/provider/bedrock.rs` | AWS Bedrock client — request signing, two wire formats. |
+| `src/provider/embeddings.rs` | `OllamaEmbedder` + `OpenAiEmbedder` — the real `EmbeddingProvider` backends. |
 | `src/provider/sse.rs` | The reader for SSE (Server-Sent Events) — how streaming bytes arrive. |
 | `src/provider/grammar.rs` | Grammar-constrained tool calls for local models (vLLM `guided_json`). |
 
-Deep dives: [API client](/core-data/api-client/) · [stream events](/core-data/stream-events/) · [providers](/providers/overview/)
+Deep dives: [API client](/core-data/api-client/) · [stream events](/core-data/stream-events/) · [providers](/providers/overview/) · [embeddings](/providers/embeddings/)
 
 ## Tools and safety around them
 
 | File | What it is |
 |---|---|
-| `src/tool.rs` | The `Tool` trait, `ToolOutput`, `ToolError`, `ToolContext`, display hints. |
+| `src/tool.rs` | The `Tool` trait, `ToolOutput`, `ToolError`, `ToolContext`, display hints, retention classes. |
+| `src/tool/builtin/read.rs` | `ReadTool` + `ContentSource` — line-aware reads over any source. |
+| `src/tool/builtin/fs.rs` | `WriteTool`/`EditTool`/`MultiEditTool`/`FileViewerTool` + `FileSource` [feature: fs_tools]. |
+| `src/tool/builtin/search.rs` | `Glob`/`Grep`/`CodeSearch`/`Tree` over a `SearchSource` [feature: search_tools]. |
+| `src/tool/builtin/shell.rs` | `Shell` + `Jobs` over a `ShellBackend` [feature: shell_tools]. |
+| `src/tool/builtin/think.rs` | `ThinkTool` — the planning scratchpad [feature: builtin_tools]. |
 | `src/tool/registry.rs` | `ToolRegistry` — where tools are registered and looked up; plus `FnTool`. |
-| `src/tool/permission.rs` | `PermissionCheck` — the allow/deny/ask/modify decision type. |
+| `src/tool/permission.rs` | `PermissionCheck` + `GateDecision` — the decision type and its audit record. |
+| `src/tool/grant.rs` | `GrantStore` — persisted approvals with narrow scopes [feature: file_grants]. |
 | `src/tool/health.rs` | Per-tool failure counting and circuit breakers [feature: tool_health]. |
 | `src/tool/shield.rs` | `ToolSafetyShield` and `UnixShield` — risk scoring of dangerous commands [feature: tool_shield]. |
 | `src/middleware.rs` | The middleware pipeline: layers around every tool call. |
@@ -118,14 +152,16 @@ Deep dives: [tools](/core-data/tools/) · [middleware](/safety/middleware/) · [
 |---|---|
 | `src/observer.rs` | `LoopObserver` — get notified about everything (no control). |
 | `src/observer/context.rs` | The event payloads observers receive. |
+| `src/observer/hub.rs` | `EventHub` — one observer feeding a broadcast `LoopEvent` stream. |
 | `src/hooks/` | `Hook` — allow/block tool calls and compaction [feature: hooks]. |
 | `src/hooks/builtin/auto_commit.rs` | Auto-`git commit` the files your agent edited. |
 | `src/hooks/builtin/blocklist_hook.rs` | Simple block/allow lists of tool names. |
 | `src/hooks/builtin/confirmation_hook.rs` | Ask a human before named tools run. |
 | `src/hooks/builtin/logging_hook.rs` | Debug-log every hook event. |
+| `src/ask.rs` | The external-approver channel — park a run at a hook's ask, resume on the answer. |
 | `src/managers.rs` | `LoopManagers` — the one bundle holding every optional component. |
 
-Deep dives: [observers](/extensions/observers/) · [hooks](/extensions/hooks/) · [managers](/extensions/managers/)
+Deep dives: [observers](/extensions/observers/) · [hooks](/extensions/hooks/) · [approvals](/safety/approvals/) · [managers](/extensions/managers/)
 
 ## Keeping the agent healthy
 
@@ -138,7 +174,7 @@ Deep dives: [observers](/extensions/observers/) · [hooks](/extensions/hooks/) �
 | `src/reflection.rs` | Analyze a failed tool call (`Reflector`), decide the retry (`RecoveryStrategy`). |
 | `src/reflection/llm.rs` | Ask the model itself to analyze the failure. |
 | `src/reflection/backoff.rs` | Retry with exponentially growing delays. |
-| `src/memory/` | `LoopMemory` trait + the in-memory store; `file.rs` persists it to JSONL (`file_memory`); `consolidate.rs`/`score.rs` are the curation and ranking primitives every backend shares; `extractor.rs` mines learned memories from recorded runs; `trajectory.rs` captures each run as a serializable record (`TrajectoryObserver`, JSONL ledger). |
+| `src/memory/` | `LoopMemory` trait + the in-memory store; `file.rs` persists it to JSONL (`file_memory`); `consolidate.rs`/`score.rs` are the curation and ranking primitives every backend shares; `extractor.rs` mines learned memories from recorded runs; `trajectory.rs` captures each run as a serializable record; `trajectory/events.rs` is the per-event ledger; `vector.rs` holds the embedding primitives, `vector_memory.rs` the semantic store, `search_tool.rs` the model-callable search. |
 | `src/cancel.rs` | `CancelSignal` — cooperative cancellation, safe to share across tasks. |
 
 Deep dives: [loop detection](/safety/loop-detection/) · [fallback](/safety/fallback/) · [reflection](/safety/reflection/) · [memory](/extensions/memory/) · [cancellation](/engine/cancellation/)
@@ -154,19 +190,24 @@ Deep dives: [loop detection](/safety/loop-detection/) · [fallback](/safety/fall
 | `src/contributor.rs` | Inject a message (e.g. a goal reminder) before each turn. |
 | `src/compact.rs` | `ContextManager`, compactors, token counting — the whole shrink-the-conversation subsystem. |
 | `src/structured.rs` | Get parsed JSON answers out of the model. |
+| `src/determinism.rs` | `Clock`/`IdGen`/`Rng` seams — inject a fixed clock or seeded generator, get byte-stable runs. |
+| `src/manifest.rs` | The `loop.yaml` model: parse, deep-merge profiles, interpolate `${VAR}`, validate, hash [feature: manifest]. |
 | `src/presets.rs` | `ConstrainedProfile` / `FrontierProfile` — curated settings bundles. |
 
-Deep dives: [messages](/core-data/messages/) · [errors](/core-data/errors/) · [session config](/core-data/session-config/) · [compaction](/engine/compaction/)
+Deep dives: [messages](/core-data/messages/) · [errors](/core-data/errors/) · [session config](/core-data/session-config/) · [compaction](/engine/compaction/) · [manifest](/integration/manifest/)
 
 ## Everything else
 
 | Path | What it is |
 |---|---|
-| `derive/` | The `loopctl-derive` crate: `#[derive(Tool)]` writes the Tool impl for you. |
-| `sqlite/` | The `loopctl-sqlite` crate: a durable SQLite-backed memory store (bundled rusqlite, WAL). |
-| `examples/` | Ten runnable examples, from hello-world to persistent memory. |
-| `tests/` | Integration tests — good reading for "how is X supposed to behave?" |
+| `crates/derive/` | The `loopctl-derive` crate: `#[derive(Tool)]` writes the Tool impl for you. |
+| `crates/sqlite/` | The `loopctl-sqlite` crate: a durable SQLite-backed memory store (bundled rusqlite, WAL). |
+| `crates/hnsw/` | The `loopctl-hnsw` crate: an HNSW `VectorIndex` — approximate nearest-neighbour search at scale. |
+| `crates/client/` | The `loopctl-client` crate: the family's shared daemon client (UDS REST + SSE, one interface for in-process and daemon modes). |
+| `crates/vector/` | The `loopctl-vector` crate (side workspace): external vector stores — Qdrant and pgvector backends for `VectorIndex`. |
+| `examples/` | Eleven runnable examples, from hello-world to vector memory. |
+| `tests/` | Integration tests — good reading for "how is X supposed to behave?" — plus the `cassettes/` corpus and `golden/` request bytes. |
 | `Makefile` | `make ci`, `make test`, `make lint`, `make e2e` and friends. |
 | `TESTING.md` | The project's testing philosophy (written, but useful to users too). |
 
-Deep dives: [derive macro](/integration/derive-macro/) · [MCP](/integration/mcp/) · [testing](/integration/testing/) · [file-by-file reference](/file-reference/)
+Deep dives: [derive macro](/integration/derive-macro/) · [MCP](/integration/mcp/) · [testing](/integration/testing/) · [loopctl-client](/integration/loopctl-client/) · [file-by-file reference](/file-reference/)
