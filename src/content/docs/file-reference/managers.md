@@ -20,3 +20,5 @@ One struct holding every optional engine component; built by you, consumed by th
 - The default fallback manager has an **empty chain** — trips without changing the routed model until you configure backups.
 
 Deep dive: [Managers](/extensions/managers/).
+
+- 0.4.0 seams on the bundle: `with_ask_resolver` / `with_ask_timeout` (the ask channel) and `with_clock` / `with_id_gen` (the determinism seams — `FixedClock` + `SeededIdGen` make a run's timestamps and ids byte-reproducible). The budget gate installs per-loop (`BareLoop::with_budget_gate`, by value).

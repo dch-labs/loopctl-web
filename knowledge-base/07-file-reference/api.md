@@ -4,7 +4,7 @@ The border between loopctl and every model provider. Object-safe; two required m
 
 **Key items**
 
-- `ApiClient` — required: `model()`, `stream_messages(&StreamRequest)`, `create_message(&StreamRequest)`. Provided: `set_model` (default `false`), `base_url` (default `""`), `stream_messages_with_options` / `create_message_with_options` (default: reject non-empty options), `extract_structured` (default: tool-call input, else lenient JSON from text).
+- `ApiClient` — required: `model()`, `stream_messages(&StreamRequest)`, `create_message(&StreamRequest)`. Provided: `set_model` (default `false`), `base_url` (default `""`), `stream_messages_with_options` / `create_message_with_options` (default: reject non-empty options), `extract_structured` (default: tool-call input, else lenient JSON from text), `supports_tool_constraints` (default `false` — gates the default strict-tool wiring), `model_context_window` (default `None` — disclose the real window; the OpenAI-compatible client answers from llama.cpp `/props` and Ollama `/api/show`, 0.4.0).
 - `StreamRequest { messages, system, tools }` + `new`/`with_system`/`with_tools`.
 - `NonStreamingResponse { message, stop_reason, usage }`.
 - Type aliases `BoxedApiClient`, `SharedApiClient`.

@@ -34,7 +34,9 @@ pub enum MessagePart {
     Text      { text: String },                       // plain text
     Image     { source: ImageSource },                // base64-encoded image
     ToolCall  { id: String, name: String, input: Value },  // the model asks to run a tool
-    ToolResult{ call_id: String, name: String, output: ToolContent, is_error: Option<bool> },
+    Thinking  { text: String, signature: Option<String>, redacted: Option<String> },  // reasoning
+    ToolResult{ call_id: String, name: String, output: ToolContent,
+                is_error: Option<bool>, retention: Option<Retention> },
 }
 ```
 
@@ -50,6 +52,16 @@ User:       [ToolResult call_id="call_1" name="read_file" output="file contents.
 - `ToolResult.call_id` must match the `ToolCall.id` it answers.
 - `ToolResult.name` matters for providers that match by name (Gemini does); loopctl fills it for you.
 - `is_error: Some(true)` marks a failed tool run; `None` or `Some(false)` means success.
+- `retention` tags how compaction may treat the result (see [retention classes](#retention-classes--what-compaction-may-clear) below); `None` is the untagged default.
+
+### Thinking parts — reasoning, signatures, redaction
+
+`Thinking` is the model's private scratch reasoning, streamed separately from the answer text. Two optional fields exist for providers that *sign* their reasoning (Anthropic does):
+
+- **`signature`** — the provider's signature over a visible reasoning block. Some providers refuse to continue a conversation whose prior thinking lacks a valid signature, so loopctl latches it from the delta and replays it verbatim on later requests.
+- **`redacted`** — the opaque payload of a reasoning block the provider withheld (you see nothing; it still demands the placeholder back on continuations). `text` is empty in that case.
+
+**The retention policy (since 0.4.0): thinking rides the conversation verbatim.** Prior turns' thinking blocks stay in the message list until a compaction pass ages them out — the engine no longer strips them at turn boundaries. Why: every strip rewrote the request prefix, so provider-side prompt caches never hit and every call re-prefilled the whole conversation. Keeping history byte-stable keeps the cache hitting; the cost is window space for the reasoning's lifetime, which tightens the compaction cadence on reasoning-heavy models. The newest assistant message's thinking always rode its own tool loop — the interleaved-thinking replay contract providers require — and still does.
 
 ### Handy constructors and readers
 
@@ -124,14 +136,31 @@ This is what makes the "save the machine, resume later" trick possible — the c
 { "type": "text",        "text": "hello" }
 { "type": "image",       "source": { "encoding": "base64", "media_type": "image/png", "data": "…" } }
 { "type": "tool_call",   "id": "call_1", "name": "read_file", "input": { "path": "a.rs" } }
+{ "type": "thinking",    "text": "…", "signature": "…" }
 { "type": "tool_result", "call_id": "call_1", "name": "read_file", "output": "…", "is_error": true }
 ```
+
+`signature`/`redacted` serialize only when present (`skip_serializing_if`), and `retention` follows the same rule — old saved conversations load unchanged.
 
 `ToolContent` is **untagged**: `Text` serializes as a plain JSON string, `Multipart` as an array of `{"type":"text"|"image", …}` objects — no wrapper either way. An empty `parts` list is legal (and means silence).
 
 Reader semantics carry one subtlety worth pinning: `text_content()` concatenates text parts with **no separator** — consecutive text parts are one logical stream (`"a"` + `"b"` → `"ab"`). `Display` (what logging and `to_string()` produce) is different on purpose: it joins with **newlines** and renders non-text parts as brackets — `[Tool: read_file with input: {…}]`, `[Tool Result: …]`, `[Image: image/png]` — so log output and `text_content()` of the same message can legitimately differ.
 
 One deliberate omission: there is **no `Message::system()` constructor**. System-role messages are framework-built (`Message::new(Role::System, …)` — that's what contributors emit); your code expresses standing guidance through the session's system prompt, where every provider routes it correctly.
+
+---
+
+## Retention classes — what compaction may clear
+
+A tool result can carry a `Retention` tag (set with `MessagePart::tool_result(...).with_retention(...)` or by your tool through `ToolOutput` — see [tools](02-tools.md)):
+
+| Class | Meaning | What compaction and pruning do with it |
+|---|---|---|
+| *(untagged)* | Default | First to go: old untagged results are exactly what the [prune](../02-engine/09-context-accounting.md) pass clears. |
+| `Requery` | Re-derivable — the model can fetch it again (a file read, a search hit) | Cleared after the untagged pool is exhausted; the omission marker names the tool call so a summary cannot restate content it never saw. |
+| `Durable` | Non-re-derivable — losing it loses information | Exempt from pruning; compaction summarizes rather than deletes where the tag is honored. |
+
+The tag travels with the part through serialization, so a checkpointed conversation keeps its retention decisions.
 
 ---
 

@@ -114,7 +114,7 @@ The two-turn walk skipped the interesting states. Here is a run that compacts on
 | 6 | `Start` | step `CallLLM(1)`; feed `model_response` (no tool calls — final answer) | `Terminal(Completed)` |
 | 7 | `Terminal` | any further feed | ignored — forever |
 
-Swap row 6 for "user pressed Ctrl-C during the model call" and the trace ends: the driver routes the cancel to `machine.cancel()` (not `fail()`), the next `next_step` returns `Done(Cancelled)`, and the exit door discards the scratchpad. Two more edge behaviors worth knowing from this table:
+Swap row 6 for "user pressed Ctrl-C during the model call" and the trace ends: the driver routes the cancel to `machine.cancel()` (not `fail()`), the next `next_step` returns `Done(Cancelled)`, and the exit door salvages the coherent prefix (completed turns commit; only the in-flight exchange drops — 0.4.0). Two more edge behaviors worth knowing from this table:
 
 - **Row 4's darker twin:** had the compaction pass shaved *nothing* (`after >= before`), the feed itself ends the run — `Terminal(Failed(ContextExceeded))` — rather than let rows 4→5 repeat forever. The no-progress guard lives inside the feed.
 - **Row 5's sibling:** a pass that didn't rewrite anything feeds `compaction_noop` instead — and *both buffers are left untouched*. Feeding an unchanged conversation through `compaction_result` would glue a half-finished scratchpad into permanent history mid-run; the two feeds exist precisely to make that mistake unexpressable.

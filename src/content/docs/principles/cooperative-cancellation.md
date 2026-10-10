@@ -86,7 +86,7 @@ The exhaustive map, for reasoning about a specific hang — every place the sign
 
 Rows 2/3/5/8/9 are *races* (cancel wins instantly, mid-work); rows 1/6/7/10 are *polls* (the next unit of work never begins). Nothing else in the engine waits indefinitely without falling into one of these rows — that's the invariant that makes "how fast does a cancel land?" answerable: at worst, one event-poll or one await point.
 
-The result lands on the run's record as `Cancelled` — which is **not `Failed`**. A cancel is an expected, healthy outcome of an interactive program; the brain records it as its own terminal state, the scratchpad is discarded (a cancelled run is not committed — half a conversation is not a good conversation), and the run is logged with stop-reason *cancelled* so your telemetry can tell user-stops from malfunctions.
+The result lands on the run's record as `Cancelled` — which is **not `Failed`**. A cancel is an expected, healthy outcome of an interactive program; the brain records it as its own terminal state, the coherent prefix is salvaged (0.4.0: completed turns commit — a half-finished *exchange* is dropped, not the run's whole conversation; the overflow family remains the discard-whole exception), and the run is logged with stop-reason *cancelled* so your telemetry can tell user-stops from malfunctions.
 
 ## One cancel = exactly one cancelled run
 

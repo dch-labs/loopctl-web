@@ -7,7 +7,9 @@ The pipeline's enforcement point for the `PermissionCheck` decision type.
 
 **Key items**
 
-- Constructors: `deny_all()`, `allow_all()`, `from_context()` (honors `ctx.permission`); builders `with_check(fn)`, `with_ask_resolver(async fn)`.
+- Constructors: `deny_all()`, `allow_all()`, `from_context()` (honors `ctx.permission`); builders `with_check(fn)`, `with_named_check(rule_id, fn)` (0.4.0 — the rule id rides the gate record), `with_ask_resolver(async fn)`.
+- `evaluate(tool_name, input)` (0.4.0) — resolve a synthetic dispatch through the real rule stack without executing: the dry-run/`plan` API. An `Ask` evaluates to `Ask` with the prompt in `reason` (never consults the resolver).
+- Every decision mints a `GateDecision` record riding the dispatch result (see [tool/permission](/file-reference/tool-permission/)).
 - Types: `PermissionCheckFn`, `AskResolverFn` (args: prompt, tool name; `true` = allow).
 
 **Behavior notes**

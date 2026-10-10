@@ -12,8 +12,9 @@ pub trait ToolGrammarProvider: Send + Sync + Debug {
     fn grammar(&self) -> &str;
 }
 
-// The shipped implementation: build a JSON grammar from tool schemas:
-let provider = JsonSchemaGrammar::from_schemas(&registry.all_schemas());
+// The shipped implementation: build a JSON grammar from tool schemas —
+// and FAIL LOUD at construction (0.4.0) if the schemas can't produce one:
+let provider = JsonSchemaGrammar::from_schemas(&registry.all_schemas())?;
 ```
 
 `JsonSchemaGrammar` merges your tools into one JSON-Schema object — `{"type":"object","properties":{"tool_a": <tightened schema>, ...},"additionalProperties":false}` — serialized as a string. Each tool's schema is **tightened** first (every object closed, every property required), the same transform strict-mode APIs demand, so a sampler guided by this grammar emits the shape strict mode would enforce.
@@ -53,9 +54,7 @@ Rejections are `ApiError::config_validation` **before** any request is sent — 
 
 `Grammar` exists precisely for the local/small-model case where there is no cloud strict mode but you control the sampler.
 
-## Evidence it works
-
-The crate's end-to-end suite (run against a local vLLM server, gated behind `LOOPCTL_E2E=1`) drives a 7B model over a fixed corpus with the grammar enabled and asserts **≥99% valid tool-call JSON** — accumulated through the same `InputJson` fragments the engine consumes in production.
+Since 0.4.0 the feature is **fail-loud and honest about its envelope**: `from_schemas` returns a `Result` and refuses at construction when the schemas can't yield a usable grammar (previously a broken schema silently produced whatever it produced); and the old "≥99% valid tool-call JSON" claim is retired — the e2e evidence is stated as what it is (a local-server corpus run, not a guarantee for your sampler), and the grammar rides the request alongside the tools list exactly as described, never silently dropped.
 
 ## Related pages
 

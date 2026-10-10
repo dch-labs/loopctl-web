@@ -1,6 +1,6 @@
 # Compaction — shrinking the conversation so the run can continue
 
-Every model has a hard limit on how much text it can read per request: the **context window**. An agent that just keeps appending will eventually build a request the provider rejects. Compaction is the subsystem that notices the conversation approaching the ceiling and rewrites it into something smaller — then the run continues inside the budget. Sources: `src/compact.rs`, `src/compact/truncating.rs`, `src/engine/core/machine.rs`, `src/engine/bare/compact.rs`.
+Every model has a hard limit on how much text it can read per request: the **context window**. An agent that just keeps appending will eventually build a request the provider rejects. Compaction is the subsystem that notices the conversation approaching the ceiling and rewrites it into something smaller — then the run continues inside the budget. Sources: `src/compact.rs`, `src/compact/` (the compactor family), `src/engine/core/machine.rs`, `src/engine/bare/compact.rs`.
 
 **Read this if:** your agent runs long, your tools produce big outputs, or you have met `LoopError::ContextExceeded` and want to know exactly what happened.
 
@@ -16,8 +16,10 @@ Every model has a hard limit on how much text it can read per request: the **con
 | **Threshold** | Your soft line: past `compact_threshold`% of the window (default 80%), compact before the next model call. |
 | **Emergency line** | The hard line at 95% of the window. Always active, even with `auto_compact: false`. |
 | **Committed history / pending** | The two message buffers (see [the big idea](../00-start-here/02-the-big-idea.md)). Compaction replaces **both together**. |
-| **Compactor** | The strategy object deciding *how* to shrink. Default: `TruncatingCompactor` — cut the middle, keep head and tail. |
+| **Compactor** | The strategy object deciding *how* to shrink. Default install: `TruncatingCompactor` — cut the middle, keep head and tail. The real LLM strategies ship alongside it (see [the compactor family](#the-compactor-family)) and compose best inside a `FallbackCompactor` chain. |
 | **Context manager** | Owns the compactor plus the sizing policy (window, threshold, target size, counter). |
+| **Landing target** | The post-compaction size the pass must actually reach: by default **15% of the trigger threshold** (window 200k × 80% × 15% = 24k tokens). A pass that lands over its target **declines** — it reports no-change rather than passing silently (0.4.0). |
+| **Demotion sink** | Where the evicted messages go. Default: nowhere (dropped). Install a `MemoryDemotionSink` and evicted content becomes retrievable memory (see [below](#demotion--evicted-is-not-destroyed)). |
 
 Two distinctions prevent most confusion:
 
@@ -110,12 +112,20 @@ sequenceDiagram
 The classification rules, in the manager (`compact_with_reason`):
 
 - Compactor reported failure, or its result **still doesn't fit** the window (minus any reserved budget) → `Err(ContextOverflow)` — the run ends with `ContextExceeded`.
-- Same message count and no size reduction → `NoAction` — honest "nothing happened." Observers stay silent; hooks stay silent.
+- Same message count and no size reduction → `NoAction` — honest "nothing happened." Observers stay silent; hooks stay silent. Since 0.4.0 this includes **over-target landings**: a compactor that shrinks but lands above its target declines instead of passing silently — and on a threshold-triggered pass whose payload still fits the window, that decline *defers* the compaction and serves the turn (the emergency line still forces).
 - Anything else → `Compacted` — with `tokens_after`/`tokens_saved` **normalized to the manager's counter** (the compactor's self-report is overwritten).
+
+### Watching a pass — start to finish (0.4.0)
+
+Observers see the whole pass now, not just the success:
+
+- `on_pre_compaction(PreCompactionContext)` — the pass is starting: trigger reason, pre-pass conversation stats (message counts by role, token estimate).
+- `on_compaction(CompactedContext)` — a real pass landed, carrying live `CompactTelemetry`: trigger, before/after stats, tokens saved, and the pass's wall-clock duration measured around the whole span (snapshot, counting, the compactor call, and the demotion handoff — not just the compactor in isolation).
+- `on_compaction_failed(CompactionFailedContext)` — the pass failed (typed `LoopError::CompactionFailed`/`CompactionStalled` at the run level, with payload-comparable numbers).
 
 ### The target size
 
-The manager doesn't just say "shrink" — it passes a concrete target: by default **70% of the threshold line** (e.g. window 200k × threshold 80% × 70% = 112k tokens). Tune it with `with_compact_target(CompactBase::Threshold | Context)` and `with_compact_target_pct`.
+The manager doesn't just say "shrink" — it passes a concrete target: by default **15% of the threshold line** (e.g. window 200k × threshold 80% × 15% = 24k tokens; tightened from 70% in 0.4.0 — small context slots need landings well below the trigger). Tune it with `with_compact_target(CompactBase::Threshold | Context)` and `with_compact_target_pct`. The sizing also rides every pass as a `CompactSizing` argument — the reserve the landing must leave room for (per-request overhead plus a deferred turn's transients) and an optional one-pass target override (the engine's overflow-salvage arm uses the override to force a landing strictly under a refused payload).
 
 ---
 
@@ -210,7 +220,42 @@ compact(messages):
 
 The pair-safety machinery behind step 3 works like a bracket-matcher for tool traffic: a forward scan keeps, per tool-call id, a stack of *unconsumed* calls; each `ToolResult` pops the most recent unconsumed preceding call with that id, and the two become a **pair**. Leftovers are classified — an unmatched call is a `LoneCall` (its result may still be in flight), an unmatched result is a `LoneResult` (a result cannot exist without its call — it's a protocol violation). The sanitizer then applies three asymmetric rules to the output: **`LoneResult`s are dropped everywhere**; **`LoneCall`s are kept *outside* the dropped region** (compaction can run before results land) but strict pairing applies *inside* it; and messages left empty by filtering are removed. Even the `unchanged()` path runs the same filtering, so a "no change" report is honest about what it would have saved.
 
-`TokenSplitter` (same file, exported) gives you the same principled split for **custom** compactors — an old/recent boundary at a real turn transition, pair-safe — so an LLM summarizer can summarize `to_compact` and keep `preserved`.
+`TokenSplitter` (same file, exported) gives you the same principled split for **custom** compactors — an old/recent boundary at a real turn transition, pair-safe (it slides an orphaning cut instead of refusing it, so agent tool-loop histories never wedge the pass) — so an LLM summarizer can summarize `to_compact` and keep `preserved`.
+
+---
+
+## The compactor family
+
+0.4.0 ships the real strategies alongside the truncator. All are always compiled (no feature flags, no new dependencies):
+
+| Compactor | What it does | When to reach for it |
+|---|---|---|
+| `TruncatingCompactor` | Positional middle-cut, zero LLM calls. Still the default install and the chain's terminal. | Determinism, no client, the never-fail floor. |
+| `QaSummarizer` | The three-step LLM pass: **summarize** the about-to-drop slice into a dense running summary → **question gaps** (ask the model what it would need from the dropped context) → **answer** from the full transcript before it's discarded, folding recovered facts under `## Facts recovered`. Unknowns are dropped, not guessed. Accumulates across passes (`PriorSummary`); enforces its own summary budget (an over-budget response fails the pass, originals intact). | Maximum *retention* — the facts a future turn will need. |
+| `StructuredSummarizer` | One LLM call (+ at most one retry) producing a **sectioned** summary — key facts / decisions / pending tasks / open questions, each a bullet list — with contractually stable headings. Templates are configurable (`SummaryTemplate`, `default_template`, `action_only`); a malformed answer degrades to raw text, never an error. | Maximum *shape* — consumers that locate "pending tasks" without parsing prose. |
+| `FallbackCompactor` | The never-fail **chain**: stages in order until one succeeds. Default chain: QA → structured → `TerminalCapture(TruncatingCompactor)`. Failed stages' outputs are discarded (the next stage sees the *original* input); `last_report()` names the winning stage; `terminal_min_recent` (default 4) is a structural floor the last-resort truncate cannot go below. | Production — with a non-failing terminal, an out-of-tokens condition stops being a failed pass. |
+| `RollingCompactor` | Compacts only the groups older than `age_turns` (pair-safe role-transition boundaries), rolling them into micro-summaries on each pass — compaction as a maintenance cadence, not one big rewrite. | Long unattended runs where each pass should be cheap. |
+
+Two shared contracts worth knowing: every LLM compactor runs its client calls on a caller-supplied client (a dedicated cheaper model is the documented production shape), and a compactor's failure — API error, blank response, over-budget summary — fails **that stage** with the original messages intact, which is exactly the shape the `FallbackCompactor` chain consumes. The compactors' token spend is reported per pass through `loopctl.compaction.summarizer.tokens` metric events (the QA pass) and the chain emits `loopctl.compaction.passes` / `loopctl.compaction.degradations`.
+
+Both LLM compactors consume pre-compact hook guidance identically — `CompactionContext::instructions` rides as host instructions and every `additional_context` fragment as context to weave in — and both honor the **retention classes**: `Requery`-tagged results render as omission markers in the transcript (a summary physically cannot restate content it never saw), `Durable` results survive eviction.
+
+---
+
+## Demotion — evicted is not destroyed
+
+`CompactionOutcome` carries an `evicted` list — the messages the pass dropped. By default they go nowhere. Install a demotion sink and they become retrievable:
+
+```rust
+use loopctl::compact::{MemoryDemotionSink, FallbackConfig, ChainBuilder};
+
+// The store half: what compaction evicts, memory remembers.
+let sink = MemoryDemotionSink::new(memory_store, max_chars_per_message);
+// (installed on the context manager; the driver hands every pass's
+//  evicted messages to the sink after the history rewrite)
+```
+
+`MemoryDemotionSink` renders each evicted exchange (tool name, arguments, truncated result — `render_evicted` is the same renderer the QA summarizer feeds its transcript) into a `Trajectory`-category memory entry. Combined with `SearchMemoriesTool` ([memory](../04-extensions/03-memory.md)) this closes the loop: **what compaction evicts, the model can recall on demand.** The prune pass (see [context accounting](09-context-accounting.md)) hands its cleared tool outputs to the same sink under `CompactReason::Prune`.
 
 ## Writing your own compactor
 
@@ -256,11 +301,13 @@ agent.set_context_manager(Arc::new(manager));
 
 | `limit` means | Cause | Fix |
 |---|---|---|
-| the window | the compacted result still didn't fit | bigger window, or a compactor that can shrink harder (summarizer) |
-| the pre-pass size | no-progress guard: nothing was shaved (includes hook vetoes and short-but-fat conversations the truncator can't cut) | summarizing compactor, bigger window, or trim the seed content |
-| — | (engine form) `used`/`limit` are payload-comparable estimates including system prompt + tool schemas + reserved budget | — |
+| the window | the compacted result still didn't fit | bigger window, or a compactor that can shrink harder (the chain) |
+| the pre-pass size | no-progress guard: nothing was shaved (includes hook vetoes and short-but-fat conversations the truncator can't cut) — the typed form is now `CompactionStalled` | summarizing compactor, bigger window, or trim the seed content |
+| — | a compactor *error* surfaces as `CompactionFailed` (same payload-comparable numbers) | check the summarizer's client, or let the chain fall through to the terminal truncate |
 
-Three promises hold in every case: **no request is ever sent over the window** (the run fails first); **a failed run leaves no trace** (pending discarded); **the estimate is never faked** (a no-op is reported as a no-op).
+A threshold-triggered stall whose payload still fits the window no longer kills the run — the pass declines, the machine latches the deferral, and the next model call serves. Only a genuinely over-window (emergency-line) stall does.
+
+Four promises hold in every case: **no request is ever sent over the window** (the run fails first — or, since 0.4.0, the one [overflow-salvage](09-context-accounting.md) compact-and-retry runs under a target strictly below the refused payload); **an interrupt salvages the coherent prefix** (a failed run keeps its completed turns); **a `ContextExceeded` discard leaves the notebook clean** (an unshrinkable history is dropped whole); **the estimate is never faked** (a no-op is reported as a no-op).
 
 ---
 
@@ -292,11 +339,13 @@ ContextManager::new(Arc::new(TruncatingCompactor::default()))  // the seeded def
     .with_threshold(80)             // default 80, clamped 1..=100
     .with_auto_compact(true)        // default true
     .with_compact_target(CompactBase::Threshold)  // default
-    .with_compact_target_pct(70)    // default 70, clamped 1..=100
+    .with_compact_target_pct(15)    // default 15 (of the threshold line), clamped 1..=100
     .with_token_counter(Arc::new(HeuristicTokenCounter))  // default
 ```
 
-Host-facing calls on the manager: `ensure_context_fits(messages, turn)` (checks the threshold itself), `compact_manual(messages, turn)` (bypasses the threshold — hook trigger `Manual`), and `compact_with_reason(...)` (the engine's path). Watching: `on_compaction` observers fire **only** on real compactions; the `pre_compact` hook can veto or steer (its merged `new_instructions` reach the compactor's `CompactionContext`).
+The production shape is the chain: `FallbackCompactor::default_chain(client)` (QA → structured → truncate), or compose your own with `ChainBuilder::stage(name, compactor)...terminal(&truncator)` and set the floor via `FallbackConfig::terminal_min_recent`.
+
+Host-facing calls on the manager: `ensure_context_fits(messages, turn)` (checks the threshold itself), `compact_manual(messages, turn)` (bypasses the threshold — hook trigger `Manual`), and `compact_with_reason(..., sizing)` (the engine's path — the sizing argument carries the reserve and any one-pass target override). Watching: `on_pre_compaction` / `on_compaction` / `on_compaction_failed` observers bracket every pass; the `pre_compact` hook can veto or steer (its merged `new_instructions` reach the compactor's `CompactionContext`).
 
 ---
 

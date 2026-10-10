@@ -4,7 +4,7 @@ The single error enum for every framework operation, `#[non_exhaustive]`, serde 
 
 **Key items**
 
-- `LoopError` — 20 variants; see [the errors page](../01-core-data/05-errors.md) for the full table with triggers.
+- `LoopError` — 23 variants (0.4.0 adds `CompactionFailed`, `CompactionStalled`, `BudgetExhausted`); see [the errors page](../01-core-data/05-errors.md) for the full table with triggers.
 - `is_recoverable()` — true for `ToolExecution`, `Api`, `ContextExceeded`, `Reflection`, `RateLimitEscalation`.
 - `is_cancelled()` — true only for `Cancelled`.
 - `LoopError::tool_not_found(tool, available)` — builds the capped availability list (10 names + "... (and N more)").

@@ -8,7 +8,7 @@
   1. measure the true size (conversation + overhead — real measurements, never estimates-at-request-time);
   2. no `ContextManager` → unchanged outcome;
   3. pre-compact hook veto → unchanged outcome (hook guidance merged and threaded when not vetoing);
-  4. `compact_with_reason(history, turn, reason, instructions, additional_context, reserved)` — `reserved` = overhead + the deferred turn's transients budget;
+  4. `compact_with_reason(history, turn, reason, sizing)` — the `CompactSizing` argument (0.4.0) carries the reserve (overhead + the deferred turn's transients) and any one-pass target override (the overflow-salvage target strictly under a refused payload);
   5. `Compacted` → fire `on_compaction` + post-compact hooks, return the new messages; `NoAction` → re-measure, return unchanged; `Err(overflow)` → log + `LoopError::ContextExceeded`.
 
 **Behavior notes**
@@ -18,3 +18,5 @@
 - Vetoed passes at over-threshold end the run via the guard — documented, deliberate.
 
 Deep dive: [Compaction](../02-engine/06-compaction.md).
+
+- 0.4.0 additions bracketing the pass: `on_pre_compaction` fires as the pass starts; a failed pass fires `on_compaction_failed`; the evicted messages hand off to the configured demotion sink after the history rewrite (cancel-raced — a hanging sink ends the run typed `Cancelled`); the prune pass (`prune.rs`) runs at the pre-request site before the deferral.

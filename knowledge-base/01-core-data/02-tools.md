@@ -1,6 +1,6 @@
 # Tools — giving the model hands
 
-A **tool** is a function the model can ask your program to run: read a file, run a search, query a database. This page shows how to write one, register it, and what happens around every call. Sources: `src/tool.rs`, `src/tool/registry.rs`, the `derive/` crate.
+A **tool** is a function the model can ask your program to run: read a file, run a search, query a database. This page shows how to write one, register it, and what happens around every call. Sources: `src/tool.rs`, `src/tool/registry.rs`, the `crates/derive/` crate.
 
 ---
 
@@ -52,6 +52,8 @@ fn schema(&self) -> ToolSchema {
 | `resource_key(input)` | A shared-resource tag, e.g. the file path being edited. | Two calls with the **same** key never run in the same parallel wave. |
 | `is_read_only` | Does this tool change nothing? | Permission layers can auto-approve read-only tools. |
 | `system_prompt` | Extra instructions appended to the system prompt. | E.g. a git tool explaining its conventions. |
+| `descriptor_digest()` | A 16-hex fingerprint of `{name, description, schema}` over canonical JSON. | First-use approval can pin *what the user actually saw*; a changed digest is the re-ask signal (see [approvals](../03-safety/09-approvals.md)). Default derives it automatically. |
+| `records_trajectory()` | Should calls to this tool become memory entries? Default `true`. | A tool that recorded its own answers would find them in the next search — `SearchMemoriesTool` opts out. |
 
 ---
 
@@ -147,6 +149,8 @@ A panicking tool is caught (`catch_unwind`) and becomes a soft failure — the m
 
 The output type also carries the structured round-trip: `ToolOutput::structured(&any_serialize_value)` serializes into a JSON text payload (a serialization failure becomes an `error_text`, never a panic); `structured_value()` parses a JSON text payload back to a `Value` (`None` for multipart or non-JSON); `structured_as::<T>()` goes all the way to a typed value. And one join subtlety mirroring [messages](01-messages.md): `ToolOutput::text_content()` joins multipart text parts with **newlines**, while `Message::text_content()` concatenates with no separator — know which one your logging reads.
 
+A tool can also stamp a **retention class** on its output — `ToolOutput::text(...).with_retention(Retention::Durable)` — which rides the result into the conversation and tells compaction and pruning what may be cleared and when ([retention classes](01-messages.md#retention-classes--what-compaction-may-clear)).
+
 ### `ToolError` variants and what the model should do
 
 `NotFound`, `InvalidInput`, `Execution`, `Permission`, `FileNotFound`, `Timeout`, `Cancelled`, `Io`, `Json`. Each maps to advice for the model (invalid input → fix arguments; permission → ask the user; timeout → try a longer timeout...). loopctl's recovery machinery builds on these.
@@ -190,21 +194,31 @@ tools.concurrent_safe_tools()        // only the concurrency-safe subset
 
 The engine sends `all_schemas()` with every model request, and classifies model replies against `tool_names()`: a call to a name that was never advertised is answered with "tool 'x' is not available" before any dispatch happens (see [tool dispatch](../02-engine/04-tool-dispatch.md)).
 
-An ordering subtlety pinned by the implementation: `all_tools()` returns **registration order** (a re-registered name keeps its original slot), `tool_names()` returns **alphabetical order**, but `all_schemas()` iterates the internal storage map and is **order-unspecified** — the tool list the model sees can differ between processes. Nothing in the engine depends on schema order; if your tests or prompts do, sort the list yourself.
+An ordering fact pinned by the [golden request bytes](../06-integration/05-testing.md) harness: `all_tools()` and `all_schemas()` both return **registration order** (a re-registered name keeps its original slot), while `tool_names()` returns **alphabetical order**. Deterministic schema order is what makes request construction byte-reproducible — don't break it.
 
 ---
 
-## Built-in tools — `ThinkTool`
+## Built-in tools — four families, explicit registration
 
-The crate ships its first ready-made tool behind the `builtin_tools` feature: **`ThinkTool`**, a no-side-effect scratchpad the model reasons into before acting. It advertises exactly one field — `think(thought)` → the constant reply `"ok"`.
+The crate ships ready-made tools behind feature flags, each constructed and registered by hand — nothing is auto-installed and `default = []` is unchanged:
 
-The point is not the acknowledgement (the thought is already in the conversation as the call's input — echoing it back would double its token cost). The point is the **description**: it is written as an instruction template — restate the goal, list the options, check the plan against the constraints, decide — so the tool *teaches the procedure* rather than just naming itself. On small local models this is the cheap version of "think before you act": the reasoning happens in the open, in the transcript, where later turns can see it.
+| Family | Feature | Tools | Deep dive |
+|---|---|---|---|
+| Planning | `builtin_tools` | `Think` — the no-side-effect scratchpad | — |
+| Reading | `builtin_tools` | `Read` — line-aware reads over a pluggable `ContentSource` | [read tooling](../07-file-reference/tool-builtin-read.md) |
+| Filesystem | `fs_tools` | `Write`, `Edit`, `MultiEdit`, `FileViewer` (+ `FileSource`) | [fs family](../07-file-reference/tool-builtin-fs.md) |
+| Search | `search_tools` | `Glob`, `Grep`, `CodeSearch`, `Tree` (+ `FsSearchSource`) | [search family](../07-file-reference/tool-builtin-search.md) |
+| Shell | `shell_tools` | `Shell`, `Jobs` (+ `UnixShellBackend`) | [shell family](../07-file-reference/tool-builtin-shell.md) |
+
+**Wire names are CamelCase since 0.4.0** (breaking): every builtin registers as `Read`, `Think`, `Write`, `Edit`, `MultiEdit`, `FileViewer`, `Glob`, `Grep`, `CodeSearch`, `Tree`, `Shell`, `Jobs` — matching the naming convention models see in other agent tools. Gate rules and prompts written against the old lowercase names need updating.
+
+**ThinkTool** is still the planning scratchpad: it advertises exactly one field — `think(thought)` → the constant reply `"ok"`. The point is not the acknowledgement (the thought is already in the conversation — echoing it back would double its token cost); the point is the **description**, written as an instruction template (restate the goal, list the options, check the plan, decide) so the tool *teaches the procedure*. On small local models this is the cheap version of "think before you act".
 
 Facts worth knowing:
 
-- `is_read_only()` and `is_concurrency_safe()` are `true` by definition — the tool touches nothing.
-- A missing or non-string `thought` field is a `ToolError::InvalidInput` naming the field.
-- Registration is the only way it enters a session: enable `builtin_tools`, construct `tool::builtin::ThinkTool`, register it like any other tool. Nothing is auto-installed and `default = []` is unchanged.
+- `is_read_only()` and `is_concurrency_safe()` are `true` for the read-only families by definition; the shell family gates concurrency per-command through a read-only allowlist (see the [shell family page](../07-file-reference/tool-builtin-shell.md)).
+- A missing or wrong-typed field is a `ToolError::InvalidInput` naming the field and its expected type — never a silent default.
+- Registration is the only way any of them enters a session.
 
 ---
 

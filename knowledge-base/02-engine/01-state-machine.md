@@ -41,6 +41,7 @@ The driver rebuilds this struct every loop iteration from the session config, th
 | `tool_results` | `AwaitingTools` | results appended; **consumes `pending_tools`** (only feed that does) | `Start` |
 | `compaction_result` | `AwaitingCompaction` | `history` replaced wholesale, `pending` cleared, estimate = after | `Start`, or `Terminal(Failed)` on no-progress |
 | `compaction_noop` | `AwaitingCompaction` | **both untouched** | same two exits, buffers preserved |
+| `adopt_pruned` | `AwaitingCompaction` (prune pass) | adopts the rewritten conversation, splitting at the old history length | unchanged state |
 | `inject` | non-terminal | one message appended to `pending`; estimate **not** refreshed | unchanged |
 | `cancel` / `fail` | non-terminal | none (flag / terminal only) | flag set / `Terminal(Failed)` |
 
@@ -74,6 +75,7 @@ Reading the two compaction checks precisely:
 
 - **Emergency line:** `tokens >= window × 95%` — inclusive, fires **even when `auto_compact = false`**, ignores `compact_threshold`. The last-ditch net against overflowing the window.
 - **Threshold line:** `tokens > window × compact_threshold%` — strict (a payload exactly at the line serves normally), honored only when `auto_compact` is on.
+- **The deferral latch (0.4.0):** a threshold-triggered pass that *declined* while the payload still fits the window sets `deferred_compaction` — the next model call serves instead of compact-defer cycling. The emergency line ignores the latch: a genuinely over-window payload still forces the pass.
 - `context_window = 0` disables both (window policy off entirely).
 
 `next_step` is **pure and repeatable**: call it twice with nothing in between and you get the same answer. Nothing is recorded by asking.
@@ -120,10 +122,11 @@ The distinction matters: feeding an unchanged conversation through `compaction_r
 - `cancel()` — sets the flag; the next `next_step` returns `Done(Cancelled)`.
 - `fail(error)` — instant `Terminal(Failed)`; how driver errors are recorded.
 
-### The two maintenance operations
+### The three maintenance operations
 
 - `commit_pending()` — glue the scratchpad into the notebook. The driver calls this **only** on a successful run exit.
-- `discard_pending()` — throw the scratchpad away. Called on failure, keeping the notebook clean.
+- `salvage_pending()` — keep the coherent prefix, drop the tail (0.4.0's cancel/failure salvage). The longest prefix in which every assistant tool-call message is answered by its results glues into `history`; the unanswered remainder is returned for the demotion sink and discarded. An interrupt costs the in-flight turn, not the run's whole conversation.
+- `discard_pending()` — throw the scratchpad away whole. Called on the `ContextExceeded` family (an unshrinkable over-window history must not wedge every future run), keeping the notebook clean.
 
 ---
 
@@ -134,6 +137,7 @@ machine.history()        // committed messages only
 machine.full_history()   // history + pending — exactly what the next request would send
 machine.state()          // current MachineState
 machine.turns_taken()
+machine.context_tokens() // the current size estimate (read accessor, 0.4.0)
 machine.is_terminal()
 machine.is_cancelled()
 
@@ -156,7 +160,7 @@ One driver-level choice: `from_machine` builds a fresh manager bundle, so every 
 3. `next_step` is pure: asking never changes anything (except consuming the cancelled flag's transition).
 4. Feeds are the only way in; each step has exactly one matching feed; `tool_results` is the only feed that consumes `pending_tools`.
 5. Terminal is forever. Every outcome maps to at most one `LoopError` via `to_loop_error()` (`Completed` maps to `None`).
-6. Failed runs leave no trace: `pending` is discarded, `history` holds only successful history — except after a mid-run compaction, which is a commit point (the compacted history stays even if the run then fails).
+6. Failed runs keep the coherent prefix: `pending` is **salvaged** on cancellation and ordinary failure (completed turns commit, the in-flight tail drops) and **discarded** only on the `ContextExceeded` family — except after a mid-run compaction, which is a commit point (the compacted history stays even if the run then fails). A machine serialized mid-phase resumes at the run boundary — checkpoint/resume is documented and pinned for exactly that boundary, not mid-phase.
 
 ---
 

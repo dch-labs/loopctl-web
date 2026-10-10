@@ -5,7 +5,7 @@ Grammar-constrained tool calls for local, grammar-aware inference servers (vLLM'
 **Key items**
 
 - `ToolGrammarProvider` trait — `grammar() -> &str`; implement it for other sampler dialects (GBNF, TGI).
-- `JsonSchemaGrammar::from_schemas(&[ToolSchema])` — one merged, tightened JSON-Schema object serialized to a string; empty input yields a valid empty object.
+- `JsonSchemaGrammar::from_schemas(&[ToolSchema])` (returns `Result` since 0.4.0 — construction fails loud when the schemas can't yield a usable grammar) — one merged, tightened JSON-Schema object serialized to a string; empty input yields a valid empty object.
 
 **Behavior notes**
 

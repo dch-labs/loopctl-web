@@ -27,3 +27,5 @@ A ready-made `LoopObserver` that assembles every run into one serializable **tra
 - Ledger content is plaintext prompts, responses, and tool text — treat the directory as sensitive, and plan rotation yourself (it grows without bound). Records still queued at abrupt process exit are lost; drop the observer or call `flush()` for an orderly shutdown.
 
 Deep dive: [Memory](/extensions/memory/) — including the trajectory-capture section.
+
+- Since 0.4.0 the sibling `trajectory/events.rs` adds the **per-event ledger**: `EventLedgerObserver` writes one `TrajectoryEvent` per engine event to `events.jsonl` (eleven stable kinds — `run.start`, `turn.start`, `tool.call`, `tool.result`, `gate.decision`, `compaction.*`, `usage`, … — turn-scoped, joinable by `call_id`; Unknown future kinds parse with their envelope intact). Both ledger files are created owner-only `0600` on unix. See [the event hub](/extensions/event-hub/).

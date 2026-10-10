@@ -123,7 +123,8 @@ The loop continues. On turn 1 the model sees the whole conversation so far — i
 **7. `finalize()` — the single exit door.**
 Every run exit — success, error, max turns, cancellation — passes through the same `finalize()`:
 - On success: the scratchpad is glued into the notebook (`commit_pending`), and memory (if installed) is consolidated.
-- On failure: the scratchpad is thrown away (`discard_pending`).
+- On cancel/ordinary failure: the **coherent prefix is salvaged** (`salvage_pending`, 0.4.0) — completed turns commit, only the in-flight exchange drops.
+- On the `ContextExceeded` family: the scratchpad is thrown away whole (`discard_pending`) — an unshrinkable over-window history must not wedge future runs.
 - Either way: the run's end time and stop reason are recorded, observers get `on_run_end`, and the cancel signal is re-armed for the next run.
 
 **8. You get a `Run`.**

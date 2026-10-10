@@ -97,7 +97,7 @@ When a dispatched call misses the registry, this layer appends `Did you mean 'cl
 
 ### `MemoizingMiddleware` — a per-turn-window cache
 
-Caches results for named tools (e.g. `Read`, `Glob`, `Grep`), invalidated by named *write* tools (e.g. `Write`, `Edit`) via declared file paths.
+Caches results for named tools (e.g. `Read`, `Glob`, `Grep`), invalidated by named *write* tools (e.g. `Write`, `Edit`) via declared file paths — the builtin `WritePathExtractor` (`middleware::verify::builtin`) maps write-class calls to their paths for both this cache's invalidation and the verifier's targets.
 
 ```rust
 MemoizingMiddleware::new(
@@ -123,7 +123,7 @@ impl Verifier for CargoCheck {
 VerifyMiddleware::new(Arc::new(CargoCheck), vec!["Write".into(), "Edit".into()])
 ```
 
-Appends `"\n\n[verify] passed: ..."` or `"\n\n[verify] failed: ..."` to the output. **Never sets `is_error`** — a failed verify on a successful write stays a success; the model reads the diagnostics and decides. Skipped on tool errors. `NoopVerifier` is the do-nothing default used by the [Constrained preset](/integration/presets/).
+Appends `"\n\n[verify] passed: ..."` or `"\n\n[verify] failed: ..."` to the output. **Never sets `is_error`** — a failed verify on a successful write stays a success; the model reads the diagnostics and decides. Skipped on tool errors. The [Constrained preset](/integration/presets/) now wires the **real** builtin verifier by default (0.4.0): `CommandVerifier` judges write-class calls *statically* — a deny-glob check on shell commands (`rm -rf /` in any spacing, at token boundaries; wrapped `sh -c "…"` invocations must name an allowed shell and the inner command is what's checked) and a target-path check on write inputs (parent exists and is writable) — with one-line diagnostics written for a small-model reader. Execution-based verification (run the test suite) stays host territory: bring your own `Verifier`. `NoopVerifier` remains the explicit opt-out.
 
 ### `RedactingMiddleware` — scrub secrets [feature: redaction]
 
@@ -156,6 +156,8 @@ More rules of thumb:
 | Host layers that must see original calls | mind the preset rule | anything chained onto `ConstrainedProfile::pipeline_builder()` lands **inside** its memoize layer |
 
 And three universal guarantees: the engine stamps `tool_call_id` after the pipeline (middleware ids can't corrupt pairing); `DisplayHint` and `duration` survive every shipped layer; middleware is invisible to parallel-dispatch planning (waves come from tool declarations, not layers).
+
+One thing middleware is *not*: the [budget gate](/safety/budget-gate/) sits engine-side (consulted before each model request, not around tool calls), and the [ask channel](/safety/approvals/) parks at the engine's pre-execution boundary — both are intentionally outside the pipeline so they see the run, not just one dispatch.
 
 ---
 

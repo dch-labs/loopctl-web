@@ -9,7 +9,7 @@ The data shapes that flow between manager, compactor, and driver.
 - `ContextOverflow { tokens_used, context_window, message_count, trigger, compactor_error }` + `overflow()`, `utilization()` (infinity for a zero window).
 - `CompactReason { ThresholdExceeded, Emergency, Manual }`.
 - `CompactionContext { tokens_before, reason, context_window, turn, counter, instructions, additional_context }` — everything a custom compactor needs.
-- `CompactTelemetry` + `PreCompactStats` / `PostCompactStats` — the observer payload.
+- `CompactTelemetry` + `PreCompactStats` / `PostCompactStats` — the observer payload (live since 0.4.0: trigger, before/after stats, savings, and the pass's wall-clock duration measured around snapshot + counting + compactor + demotion handoff; `#[non_exhaustive]`, produced by the machinery, read by hosts).
 
 **Behavior notes**
 

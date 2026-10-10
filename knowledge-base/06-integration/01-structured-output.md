@@ -84,7 +84,11 @@ Now every model request carries the format. What happens per provider:
 | Anthropic | **synthesized as a single forced tool** — the answer arrives as a tool-call payload |
 | Gemini | `responseMimeType: application/json` + `responseJsonSchema` |
 
-Universal rule: **a response format suppresses `tools`** for that request — the format occupies the same slot. A turn under a format is a Q&A turn, not a tool-using turn. (The engine's context estimate still reserves the tool-schema overhead for such turns — conservative, never under.)
+Universal rule: **a response format suppresses `tools`** for that request — the format occupies the same slot. A turn under a format is a Q&A turn, not a tool-using turn. Since 0.4.0 the engine's estimate is honest about that: the suppressed tool schemas are no longer reserved (OpenAI/Gemini drop `tools` outright; Anthropic swaps in one synthesized forced tool, uncounted — a bounded under-reserve).
+
+## Thinking effort (0.4.0) — how hard the model thinks
+
+Reasoning models take a budget knob: `RequestOptions::effort(ThinkingEffort::…)` — `Off`, `Low`, `Medium`, `High`, `Max` — and the three built-in clients (`thinking_effort(...)` on their builders) can pin a default for every request. Effort rides the wire where the provider supports it; an unsupported combination is rejected loudly, like every other option.
 
 ## The three `ToolConstraint` modes — for tool-*calling* turns
 

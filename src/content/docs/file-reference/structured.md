@@ -11,6 +11,7 @@ Types and helpers for making the model answer in JSON you can parse.
 - `ResponseFormat { name, schema, strict }` + `from_type::<T>()` (strict default true).
 - `RequestOptions { response_format, tool_constraint, model }` + builders (`with_model` ignores empty names).
 - `ToolConstraint` — `None` / `Strict` / `Grammar(provider)` [grammar feature].
+- `ThinkingEffort` + `RequestOptions::effort(...)` (0.4.0) — Off/Low/Medium/High/Max for reasoning models; `RequestOptions` is `#[non_exhaustive]`.
 - `request_structured::<T>(client, messages, system)` — one-shot helper; **no parse-failure retry**.
 - `StructuredError { Deserialize, Api }`.
 - (internal) `parse_json_lenient` / `extract_json_substring` — the lenient JSON extractor; `tighten_json_schema` — the strict-mode schema transform.

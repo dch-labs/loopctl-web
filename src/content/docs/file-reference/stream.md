@@ -8,10 +8,10 @@ The neutral event vocabulary every provider speaks, and the folding machine that
 **Key items**
 
 - `StreamEvent` — `MessageStart`, `PartStart { index, part }`, `IndexedDelta { index, delta }`, `PartStop { index }`, `MessageDelta { stop_reason, usage }`, `MessageStop`, `Ping`.
-- `DeltaPart` — `Text`, `InputJson` (tool-argument fragments), `ToolCall` (legacy), `Thinking` (stream-only; empty = redacted reasoning).
+- `DeltaPart` — `Text`, `InputJson` (tool-argument fragments), `ToolCall` (legacy), `Thinking { text, signature, redacted }` (0.4.0: signatures/redacted payloads latch; a closed thinking lane flushes a `MessagePart::Thinking` into the assembled message — empty text with a redacted payload = withheld reasoning).
 - `StreamAccumulator` — `process(event)`, `build() -> Message`, `usage()`, `peek_parts()`.
 - `StreamStopReason` — `ToolCall`, `MaxTokens`, `StopSequence`, `EndTurn`; `from_api_str` maps provider spellings; `should_continue_tool_loop()` is true only for `ToolCall`.
-- `Usage { input_tokens, output_tokens }` + `total_tokens()`.
+- `Usage { input_tokens, output_tokens, cached_input_tokens }` + `total_tokens()` (the cached share is a subset of input; `with_cached_input(n)` attaches it — 0.4.0).
 - `StreamError::InvalidToolInputJson` — the accumulator's only error.
 
 **Behavior notes**

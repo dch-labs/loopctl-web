@@ -12,8 +12,8 @@ The stock reflector (`NoopReflector`) marks every failure non-recoverable, so ea
 **2. Setters must run before the first `run()`.**
 `set_memory`, `set_pipeline`, `register_observer`, ... — call them on a freshly built agent. Debug builds panic ("debug_assert_idle"); release builds misbehave quietly.
 
-**3. A failed run leaves history clean — but a run that compacted mid-run does not.**
-Compaction is a commit point: it folds the scratchpad into history. If that run later fails, the compacted history stays. That's by design; just don't expect "failed run = nothing changed" after mid-run compaction.
+**3. A failed run keeps its completed turns — but a run that compacted mid-run rewrote history.**
+Since 0.4.0, cancel/ordinary failure **salvages the coherent prefix** (completed turns commit; the in-flight exchange drops). Only the `ContextExceeded` family discards whole. And compaction is a commit point: it folds the scratchpad into history, so a run that compacted and *then* failed leaves the compacted history behind. Don't expect "failed run = nothing changed" after mid-run compaction.
 
 **4. `max_turns` counts model turns, not tool calls.**
 One turn can contain many tool calls (a whole parallel wave is one turn). Default is 200 turns — that's a lot of work.
@@ -57,14 +57,17 @@ The emergency line uses `>=`, the threshold line uses `>`. One token can matter 
 **16. `auto_compact: false` does NOT disable the emergency line.**
 Only `context_window: 0` disables all window policy — and that also disables overflow protection.
 
-**17. `context_window` must match your real model.**
-The default (200,000) is wrong for most local models. A too-big window means real overflows (provider 400s); too-small means needless compaction.
+**17. `context_window` must match your real model — or trust the probe.**
+The default (200,000) is wrong for most local models. Since 0.4.0 a client that discloses its real window (llama.cpp `/props` ÷ slots, Ollama `/api/show`) outranks the declaration at run start — but the hosted APIs disclose nothing, so the declared number still rules there. A too-big window means real overflows (one overflow-salvage retry, then `ContextExceeded`); too-small means needless compaction.
 
 **18. A pre-compact hook veto at over-threshold ends the run.**
 Nothing shrank → the no-progress guard fires `ContextExceeded`. A veto is a decision to stop, not to proceed.
 
 **19. The truncator can't shrink short-but-fat conversations.**
-Fewer than `min_messages` (6) messages pass through untouched — a 3-message conversation with 200k tokens of content reports NoAction and the run ends. Summarizers don't have this floor.
+Fewer than `min_messages` (6) messages pass through untouched — a 3-message conversation with 200k tokens of content reports NoAction and the run ends. The LLM compactors don't have this floor — and the `FallbackCompactor` chain makes "compaction failed" a non-event (it falls through to the truncate terminal).
+
+**19b. New defaults since 0.4.0 — check your assumptions.**
+Default construction now wires the **small-model profile**: builtin-verified pipeline, goal reminder, strict tool-calls (where the client supports them) — `FrontierProfile` is the opt-out. The compaction landing target tightened to **15% of the threshold line** (was 70%). The `Read` tool's default window is **400 lines / 32 KiB** (was 2,000 / 400 KB). Builtin wire names are **CamelCase** (`Read`, `Think`, `Write`, …) — gate rules and prompts written against lowercase names need updating. Prior-turn **thinking rides the conversation verbatim** — better prompt-cache hits, but reasoning-heavy models will compact more often.
 
 ## Streaming & providers
 
@@ -91,8 +94,8 @@ Enough distinct traffic between repetitions can slide them out of the window (de
 **27. Repeated shield blocks open the tool's circuit breaker.**
 Once open, the model sees "temporarily unavailable" (breaker gate) instead of the shield's reason. Precedence is pinned; don't be surprised.
 
-**28. `Ask` becomes `Block` in headless sessions.**
-Both hooks and permission middleware deny without an interactive resolver. Safe default; wire a resolver if you have a human.
+**28. `Ask` without a resolver becomes `Block` in headless sessions — with a resolver it parks.**
+Both hooks and permission middleware deny without an interactive resolver (safe default; one `AskUnresolved` gate record). Since 0.4.0, install an ask resolver (`ApprovalChannel::pair`) and a hook's `Ask` instead **parks the run** for an async answer — with a deadline, fail-closed drops, and one gate record per ending.
 
 **29. Memoize has no capacity limit.**
 Long sessions accumulate entries until TTL expiry. Pair with a short TTL or write a bounded cache.

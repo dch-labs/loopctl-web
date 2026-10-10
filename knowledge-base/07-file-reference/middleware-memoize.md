@@ -4,7 +4,7 @@ A per-turn-window cache for read-class tools, invalidated by write-class tools v
 
 **Key items**
 
-- `MemoizingMiddleware::new(tools, write_tools, path_extractor, ttl_turns)` — all four explicit; `ttl 0` caches nothing; `NoopPathExtractor` disables path invalidation.
+- `MemoizingMiddleware::new(tools, write_tools, path_extractor, ttl_turns)` — all four explicit; `ttl 0` caches nothing; `NoopPathExtractor` disables path invalidation; the builtin `WritePathExtractor` (`middleware::verify::builtin`, 0.4.0) maps write-class calls to their `path`-style fields.
 - `PathExtractor::paths(tool, input) -> Vec<String>` — matched **verbatim**; be generous (over-returning only over-invalidates).
 - Cache key: tool name + hash of canonicalized input JSON; entries carry result + turn + paths.
 

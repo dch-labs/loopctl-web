@@ -16,7 +16,7 @@ Request construction and the two turn paths.
 **Behavior notes**
 
 - The user's input reaches the model only via the scratchpad — `turn_input` is for memory retrieval and observers, never the request.
-- Overhead (system + schemas) is measured once with the configured counter; `response_format` turns suppress tools so their estimate over-reserves — conservative by design.
+- Overhead (system + schemas) is measured once with the configured counter; since 0.4.0 a `response_format` turn no longer reserves the tool schemas its request suppresses, and reported usage feeds the calibration ratio / anchor (see [context accounting](/engine/context-accounting/)).
 - Detection feeds only on terminal replies (no tool calls).
 
 Deep dive: [The LLM turn](/engine/llm-turn/).

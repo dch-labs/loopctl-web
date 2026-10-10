@@ -1,5 +1,5 @@
 ---
-title: "`derive/src/` — the `#[derive(Tool)]` crate [feature: derive]"
+title: "`crates/derive/src/` — the `#[derive(Tool)]` crate [feature: derive]"
 ---
 
 
@@ -15,6 +15,8 @@ The companion crate `loopctl-derive` (a Cargo workspace member): three files tha
 
 - All diagnostics are spanned `syn::Error`s → normal compile errors at the offending token; the macro itself never panics.
 - Generated code uses `loopctl::__private::serde_json` — downstream crates need no direct serde_json dependency.
-- The UI test suite (`derive/tests/ui/` with trybuild goldens) pins every error message, including the 0.3.2 serde-parity fixtures (`serde_flatten`, `serde_transparent`, `unknown_rename_all`, …).
+- The UI test suite (`crates/derive/tests/ui/` with trybuild goldens) pins every error message, including the 0.3.2 serde-parity fixtures (`serde_flatten`, `serde_transparent`, `unknown_rename_all`, …).
 
 Deep dive: [The derive macro](/integration/derive-macro/).
+
+- Since 0.4.0 the matrix is at full breadth (28 compile-fail + 3 pass cases) and a consumer-hygiene fixture (`crates/derive/tests/consumer/`) builds a downstream crate depending on the macro — which caught the hard-coded `loopctl::` paths: a renamed dependency now works.

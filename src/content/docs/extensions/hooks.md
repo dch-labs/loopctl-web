@@ -27,7 +27,10 @@ pub trait Hook: Send + Sync {
 
 - **`Allow`** — explicit allow; evaluation continues (later hooks still run).
 - **`Block { reason }`** — stop: the call does not run; the reason becomes a soft error the model reads.
-- **`Ask { message }`** — needs human confirmation. In a **headless** session (the default for `BareLoop`), `Ask` is automatically **downgraded to `Block`** — with the original message preserved in the reason. In `Interactive` mode it passes through for a confirmation handler.
+- **`Ask { message }`** — needs human confirmation. Three destinies, in order of capability:
+  1. **A resolver is installed** (0.4.0): the run **parks** at the pre-execution boundary — the [ask channel](/safety/approvals/) mints a `PendingAsk`, races the resolver against the cancel signal and the ask deadline, and resumes on the answer. Unattended runs can wait for a webhook.
+  2. **Interactive mode, no resolver**: passes through for a confirmation handler.
+  3. **Headless, no resolver** (the default for `BareLoop`): `Ask` is automatically **downgraded to `Block`** — with the original message preserved in the reason (plus one `AskUnresolved` gate record).
 
 **First non-Allow wins** for pre-tool-use: the first `Block`/`Ask` short-circuits, later hooks never see the event. Register safety-critical hooks first. Explicit `Allow` never short-circuits — a later hook can still block.
 
@@ -137,7 +140,7 @@ Debug-level `tracing` lines for every tool/compact event. No side effects; perfe
 
 ## Gotchas
 
-- `Ask` in a headless session becomes `Block` — `is_block()` on the final action may have started life as `Ask`.
+- `Ask` in a headless session without a resolver becomes `Block` — `is_block()` on the final action may have started life as `Ask`.
 - The same hook registered twice runs twice per event.
 - A pre-compact veto at over-threshold is a decision to **stop** (the no-progress guard ends the run), not a decision to proceed — see [compaction](/engine/compaction/).
 - Post-tool hooks fire for every executed attempt (retries included); pre-tool blocks do not produce post events for the blocked attempt — they get the engine's soft-result treatment instead.

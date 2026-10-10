@@ -4,13 +4,14 @@ The definition of "a tool" plus everything a tool produces and receives. (~2,300
 
 **Key items**
 
-- `Tool` — required: `name`, `description`, `schema`, `call`. Provided: `is_concurrency_safe` (false), `is_safe_for_concurrent_execution(input)`, `resource_key` (None), `is_read_only` (false), `system_prompt` (None).
+- `Tool` — required: `name`, `description`, `schema`, `call`. Provided: `is_concurrency_safe` (false), `is_safe_for_concurrent_execution(input)`, `resource_key` (None), `is_read_only` (false), `system_prompt` (None), `descriptor_digest()` (0.4.0 — 16-hex FNV-1a-64 over canonical `{name, description, schema}`; the grant store's rug-pull pin), `records_trajectory()` (true — set false when a tool must not become memory, as `SearchMemoriesTool` does).
 - `ToolSchema { tool, description, input_schema }` — the name field is **`tool`**; JSON Schema Draft 07; serialized into requests verbatim.
-- `ToolOutput` — `success/error/text/error_text/structured/with_hint/with_payload/structured_as`; `is_error` is the soft-failure flag.
+- `ToolOutput` — `success/error/text/error_text/structured/with_hint/with_payload/structured_as/with_retention`; `is_error` is the soft-failure flag; `with_retention(Retention::…)` stamps the compaction/prune class.
+- `Retention` — `Requery` (re-derivable: omission markers in compaction transcripts) / `Durable` (never evicted); untagged is the default (0.4.0, `#[non_exhaustive]`).
 - `ToolError` — NotFound, InvalidInput, Execution, Permission, FileNotFound, Timeout, Cancelled, Io, Json; `not_found(tool, available)` with the capped list.
 - `ToolContext { cwd, session_id, temp_dir, is_non_interactive, user_context, extensions }` — typed extensions via `set_extension`/`get_extension`.
 - `DisplayHint` — Text/Diff/Json/Code/Suppress/Markdown; advisory only; never affects loop semantics.
-- `ToolDispatchResult` — what the engine/pipeline produce per call: id, output, is_error, duration, resolved name, hint; constructors and builders.
+- `ToolDispatchResult` — what the engine/pipeline produce per call: id, output, is_error, duration, resolved name, hint, `retention`, `gate: Option<GateDecision>` (0.4.0 — the decision record when a gate decided).
 
 **Behavior notes**
 
