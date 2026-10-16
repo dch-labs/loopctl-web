@@ -1,21 +1,25 @@
 ---
-title: "`src/engine/bare/model_switch.rs` — `ModelSwitch`"
+title: "src/engine/bare/model_switch.rs"
 ---
 
+This file gives you the atomic mid-session model change: a `ModelSwitch` builder returned by `agent.switch_model(name)` and executed by `.apply()`.
 
-The atomic mid-session model change: a builder returned by `agent.switch_model(name)`, executed by `.apply()`.
+## Key items
 
-**Key items**
+`switch_model(&mut self, model)` hands you a `ModelSwitch` that holds `&mut BareLoop` and is deliberately not `Clone`.
 
-- `switch_model(&mut self, model)` → `ModelSwitch` — holds `&mut BareLoop`, deliberately not `Clone`.
-- `.with_context_window(tokens)` — set it when the new model's window differs.
-- `.apply()` — validate name → poison preflight → `client.set_model` (false = abort, nothing changed) → optional window update → breaker reset + original-model update → `on_model_switched`.
+Call `.with_context_window(tokens)` when your new model's window differs from the old one.
 
-**Behavior notes**
+`.apply()` runs the sequence: validate name, poison preflight, `client.set_model`, optional window update, breaker reset plus original-model update, then `on_model_switched`. A false from `set_model` aborts with nothing changed.
 
-- All-or-nothing: a rejection at any step leaves the loop exactly as it was.
-- Requires client support (`ApiClient::set_model`) — all shipped clients have it; the trait default rejects.
-- Resets the fallback breaker because old-model failure counts are meaningless for the new model.
-- Not gated by "configure before run" — mid-session use is the design (still: prefer between runs over during).
+## Behavior notes
+
+The switch is all-or-nothing. A rejection at any step leaves your loop exactly as it was.
+
+It requires client support through `ApiClient::set_model`. All shipped clients have it, and the trait default rejects.
+
+Your fallback breaker resets, because old-model failure counts are meaningless for the model you just chose.
+
+Nothing gates this behind "configure before run", since mid-session use is the design. Prefer switching between runs over during one when you can.
 
 Deep dive: [Model switch](/engine/model-switch/).

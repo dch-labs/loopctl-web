@@ -1,17 +1,14 @@
 ---
-title: "Recipes — complete, working patterns"
+title: "Recipes, complete working patterns"
 sidebar:
   order: 2
 ---
 
+These are copy-paste starting points for the most common agent builds. Every recipe is complete, so you get the features to enable, the code to write, and what to watch for.
 
-Copy-paste starting points for the most common agent builds. Every recipe is complete: features to enable, code to write, and what to watch for.
+## Recipe 1: Minimal agent against a local model
 
----
-
-## Recipe 1 — Minimal agent against a local model
-
-**Features:** `ollama` (or `openai`), `derive`, `testing` (dev).
+Enable the `ollama` feature, or `openai` instead, plus `derive`, and `testing` in dev.
 
 ```rust
 use loopctl::{provider, engine::{BareLoop, RunConfig}, engine::core::Loop, tool::ToolRegistry};
@@ -29,9 +26,9 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-## Recipe 2 — A typed tool, end to end
+## Recipe 2: A typed tool, end to end
 
-**Features:** `derive`.
+Enable the `derive` feature.
 
 ```rust
 use loopctl::{Tool, ToolContext, ToolOutput, ToolError};
@@ -59,9 +56,9 @@ impl ReadFile {
 tools.register(ReadFile { path: String::new() });
 ```
 
-Watch for: [output caps](/safety/middleware/) — an uncapped `ReadFile` can eat the whole context window (Recipe 5).
+Watch for [output caps](/safety/middleware/), because an uncapped `ReadFile` can eat your whole context window. Recipe 5 adds the cap.
 
-## Recipe 3 — Ctrl-C that actually stops the agent
+## Recipe 3: Ctrl-C that actually stops the agent
 
 ```rust
 let cancel = agent.cancel_signal();
@@ -79,7 +76,7 @@ match agent.run(input, &RunConfig::default()).await {
 // The agent is immediately reusable — the signal re-armed itself.
 ```
 
-## Recipe 4 — Production hardening: retries, fallback, timeouts
+## Recipe 4: Production hardening with retries, fallback, and timeouts
 
 ```rust
 use loopctl::stream::StreamHandler;
@@ -106,7 +103,7 @@ agent.set_reflector(reflector.into());
 agent.set_recovery_strategy(ExponentialBackoffRecovery::new(3).into());
 ```
 
-## Recipe 5 — A sane middleware pipeline
+## Recipe 5: A sane middleware pipeline
 
 ```rust
 use loopctl::middleware::*;
@@ -119,9 +116,9 @@ let builder = ToolPipeline::builder()
 agent.set_pipeline(builder)?;
 ```
 
-Order = execution order; first registered is outermost. Rationale per slot: [the middleware page](/safety/middleware/).
+Order is execution order, and the first registered layer is outermost. [The middleware page](/safety/middleware/) gives the rationale per slot.
 
-## Recipe 6 — Human approval for dangerous tools
+## Recipe 6: Human approval for dangerous tools
 
 ```rust
 // Hooks route (engine-level, no human → deny):
@@ -140,7 +137,7 @@ let mw = PermissionMiddleware::from_context()
     .with_ask_resolver(|prompt, _tool| async move { approval_webhook(prompt).await });
 ```
 
-## Recipe 7 — Save the conversation, resume tomorrow
+## Recipe 7: Save the conversation and resume tomorrow
 
 ```rust
 // Pause: extract the brain (pure data) and serialize it.
@@ -153,7 +150,7 @@ let mut agent = BareLoop::from_machine(machine, config, client, tools);
 // conversation() is intact; the next run() continues where you left off.
 ```
 
-## Recipe 8 — Watch everything (metrics + live text)
+## Recipe 8: Watch everything, metrics plus live text
 
 ```rust
 struct Telemetry { /* your counters */ }
@@ -175,7 +172,7 @@ agent.register_observer(Arc::new(Telemetry { /* ... */ }));
 agent.set_text_streamer(Arc::new(|chunk| print!("{chunk}")));
 ```
 
-## Recipe 9 — Small local model, full guardrails
+## Recipe 9: Small local model, full guardrails
 
 ```rust
 use loopctl::presets::ConstrainedProfile;
@@ -189,7 +186,7 @@ ConstrainedProfile::apply(&mut agent)?;
 // 32k-window / 100-turn shape explicit.
 ```
 
-## Recipe 10 — Verify every write
+## Recipe 10: Verify every write
 
 ```rust
 struct CargoCheck;
@@ -213,9 +210,9 @@ impl Verifier for CargoCheck {
 VerifyMiddleware::new(Arc::new(CargoCheck), vec!["Write".into(), "Edit".into()])
 ```
 
-Every successful write gets `"\n\n[verify] passed/failed: ..."` appended — the model reads the verdict and self-corrects.
+Every successful write gets `"\n\n[verify] passed/failed: ..."` appended, so your model reads the verdict and self-corrects.
 
-## Recipe 11 — Import foreign tools over MCP
+## Recipe 11: Import foreign tools over MCP
 
 ```rust
 let mcp = McpClient::stdio(CommandSpec {
@@ -227,7 +224,7 @@ let mut provider = McpToolProvider::connect(mcp, Some("gh".into()))?;
 provider.register_into(&mut tools);   // gh__create_issue, gh__search_code, ...
 ```
 
-## Recipe 12 — A deterministic test
+## Recipe 12: A deterministic test
 
 ```rust
 #[tokio::test]
@@ -249,9 +246,9 @@ async fn tool_failure_reaches_the_model() {
 }
 ```
 
-## Recipe 13 — Secrets never leave the tool layer
+## Recipe 13: Secrets never leave the tool layer
 
-**Features:** `redaction`.
+Enable the `redaction` feature.
 
 ```rust
 let redacting = RedactingMiddleware::new(
@@ -264,7 +261,7 @@ let redacting = RedactingMiddleware::new(
 // register it OUTER (before verifiers) so it also scrubs what they append
 ```
 
-## Recipe 14 — Serve your tools to other agents
+## Recipe 14: Serve your tools to other agents
 
 ```rust
 let adapter = McpServerAdapter::new(tools, ToolContext::default(),
@@ -273,7 +270,9 @@ let service = adapter.serve_stdio()?;
 service.waiting().await;   // any MCP client can now use your tools
 ```
 
-## Recipe 15 — Real compaction that never fails (0.4.0)
+## Recipe 15: Real compaction that never fails
+
+This recipe arrived in 0.4.0.
 
 ```rust
 use loopctl::compact::FallbackCompactor;
@@ -287,7 +286,9 @@ agent.set_context_manager(Arc::new(
 // Add the demotion sink and what compaction evicts becomes recallable memory.
 ```
 
-## Recipe 16 — A budget the engine enforces (0.4.0)
+## Recipe 16: A budget the engine enforces
+
+This gate arrived in 0.4.0.
 
 ```rust
 use loopctl::budget::{BudgetGate, BudgetLimits};
@@ -298,7 +299,9 @@ agent.with_budget_gate(BudgetGate::new(limits)?);
 // (Err(BudgetExhausted)) before it is sent — plus a budget.hard gate record.
 ```
 
-## Recipe 17 — Unattended runs with human approvals (0.4.0)
+## Recipe 17: Unattended runs with human approvals
+
+This channel arrived in 0.4.0.
 
 ```rust
 use loopctl::ask::ApprovalChannel;
@@ -312,7 +315,9 @@ let managers = LoopManagers::new()
 // until the answer, the deadline, or a cancel — one gate record per ending.
 ```
 
-## Recipe 18 — Semantic memory the model can search (0.4.0)
+## Recipe 18: Semantic memory the model can search
+
+This store arrived in 0.4.0.
 
 ```rust
 use loopctl::memory::{VectorMemoryStore, SearchMemoriesTool};
@@ -328,17 +333,15 @@ tools.register(SearchMemoriesTool::new(Arc::new(memory)));   // the model search
 // Pair with MemoryDemotionSink: what compaction evicts, the model recalls.
 ```
 
----
-
 ## Which recipe first?
 
 | Goal | Start with |
 |---|---|
-| "Just make it work locally" | 1 + 2 |
-| "It works — now make it survive reality" | 3 + 4 + 5 |
-| "It touches my filesystem / production" | 6 + 10 (+ 13 if secrets flow) |
-| "The model is small and wanders" | 9 (it's near the default now) |
-| "Long sessions blow the context" | 15 (+ 18 to keep what compaction evicts) |
-| "It must stop at a spend line" | 16 |
-| "It runs unattended but needs approvals" | 17 |
-| "I want proof it all works" | 12 |
+| Just make it work locally | Recipe 1 and Recipe 2 |
+| It works, now make it survive reality | Recipe 3, Recipe 4, and Recipe 5 |
+| It touches my filesystem or production | Recipe 6 and Recipe 10, plus Recipe 13 if secrets flow |
+| The model is small and wanders | Recipe 9, since it is near the default now |
+| Long sessions blow the context | Recipe 15, plus Recipe 18 to keep what compaction evicts |
+| It must stop at a spend line | Recipe 16 |
+| It runs unattended but needs approvals | Recipe 17 |
+| I want proof it all works | Recipe 12 |

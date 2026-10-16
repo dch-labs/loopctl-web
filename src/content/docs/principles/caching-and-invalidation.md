@@ -1,15 +1,20 @@
 ---
-title: "Caching — remembering answers, forgetting them on time"
+title: "Caching"
 sidebar:
   order: 9
 ---
 
+Your agents repeat themselves. A model will read the same file in turn 2 and turn 6, grep the same pattern twice, and list the same directory after every edit.
 
-Agents repeat themselves. A model will read the same file in turn 2 and turn 6, grep the same pattern twice, list the same directory after every edit. A **cache** skips the repeated work: remember the answer, replay it. That's the easy half. The hard half — the half this page is about — is **forgetting at the right moment**: a cached answer is only safe while the world it describes hasn't changed.
+A **cache** skips your repeated work: remember the answer, replay it.
 
-loopctl's memoizer (`MemoizingMiddleware`, in `src/middleware/memoize.rs`) is a small, complete example of a cache done carefully, and every choice in it illustrates a general rule.
+That is the easy half. The hard half, which is what this page is about, is **forgetting at the right moment**.
 
----
+A cached answer is only safe while the world it describes has not changed.
+
+loopctl's memoizer (`MemoizingMiddleware`, in `src/middleware/memoize.rs`) is a small, complete example of a cache done carefully.
+
+Every choice in it illustrates a rule you can reuse.
 
 ## The two clocks of staleness
 
@@ -20,29 +25,49 @@ A cache entry goes stale in two ways, and each has its own cure:
 | **Time** | the entry is simply old | **TTL** — "time to live": forget after N units |
 | **Events** | something happened that invalidates it | **invalidation** — forget when the world changes |
 
-Time-based forgetting is cheap and blunt: it doesn't know *what* changed, only that enough has happened since. Event-based forgetting is precise but only as good as its detection of "the world changed." Real caches use both — the TTL catches what invalidation misses, invalidation catches what TTL would let linger.
+Time-based forgetting is cheap and blunt. Your TTL does not know what changed, only that enough has happened since.
 
-loopctl's memoizer measures its TTL in **turns**, not seconds — a natural unit for agents, where "how long ago" matters less than "how much has happened since." A 5-turn TTL means: an answer is trusted for the next 5 turns of the run, then re-earned.
+Event-based forgetting is precise, but only as good as your detection of "the world changed".
 
-## What gets remembered — and what never does
+Real caches you build will use both. Your TTL catches what your invalidation misses, and your invalidation catches what a TTL would let linger.
 
-Before any timing question, the memoizer is picky about *what* enters the cache:
+loopctl's memoizer measures its TTL in **turns**, not seconds, which is a natural unit for your agents: "how long ago" matters less than "how much has happened since".
 
-- **Only successes are cached.** An error is not an answer — it's a report that the world was in a certain state. Retrying a failing call is cheap and might succeed; caching the failure would freeze it.
-- **Write-tool results are never cached.** A write's *value* is its effect, not its text — and its effect (see below) is to *evict* things.
-- **Only tools you name are cached.** You declare the cached tools (`Read`, `Glob`, `Grep`...) and the write tools (`Write`, `Edit`...) explicitly; nothing is cached by accident.
+A 5-turn TTL means your answer is trusted for the next 5 turns of your run, then re-earned.
 
-## The key — canonical form
+## What gets remembered, and what never does
 
-A cache answers "have I seen this question before?" — which requires two phrasings of the same question to produce the same key. The memoizer's key is:
+Before any timing question, your memoizer is picky about what enters the cache:
+
+- **Only successes are cached.** An error is not an answer. It is a report that the world was in a certain state.
+
+- Retrying a failing call of yours is cheap and might succeed, and caching the failure would freeze it.
+
+- **Write-tool results are never cached.** A write's value is its effect, not its text, and its effect is to evict things.
+
+- See the write rule below. **Only tools you name are cached.** You declare your cached tools (`Read`, `Glob`, `Grep`) and your write tools (`Write`, `Edit`) explicitly.
+
+- Nothing in your cache is there by accident.
+
+## The key: canonical form
+
+Your cache answers "have I seen this question before?", which requires two phrasings of your same question to produce the same key.
+
+The memoizer's key is:
 
 ```text
 key = ( tool name,  hash of the input JSON in canonical form )
 ```
 
-**Canonical form** means one agreed spelling for every equivalent input. Here the trick is almost free: the JSON serializer stores object keys in sorted order, so `{"path":"a.rs","line":1}` and `{"line":1,"path":"a.rs"}` serialize to *identical* bytes and hash to the same key — same question, cache hit. Hashing shrinks the input to one number (the same fingerprinting idea as [loop detection](/principles/measuring-repetition/)).
+**Canonical form** means one agreed spelling for every equivalent input. Here your trick is almost free: the JSON serializer stores object keys in sorted order.
 
-> The free-ness has a price tag: it depends on the serializer's key ordering. Turning on serde_json's `preserve_order` feature anywhere in your dependency graph would make the two spellings hash differently — silent cache misses, never wrong answers, but the cache quietly stops working.
+So `{"path":"a.rs","line":1}` and `{"line":1,"path":"a.rs"}` serialize to identical bytes and hash to your same key.
+
+Same question, cache hit. Hashing shrinks your input to one number, the same fingerprinting idea as [loop detection](/principles/measuring-repetition/).
+
+The free-ness has a price tag for you: it depends on your serializer's key ordering.
+
+Turning on serde_json's `preserve_order` feature anywhere in your dependency graph would make the two spellings hash differently. That means silent cache misses, never wrong answers, but your cache quietly stops working.
 
 ### The rules, precisely
 
@@ -60,29 +85,41 @@ expired  ⇔  current_turn.saturating_sub(entry.turn_inserted) ≥ ttl_turns
 //            ttl 0 caches nothing; 1 expires on the turn after insertion
 ```
 
-On a **hit**, four things happen, three of which are anti-footguns:
+On a **hit**, four things happen for you, three of which are anti-footguns:
 
-1. the `[cached]` marker is appended — `"\n[cached]"` onto a Text result, or a new `" [cached]"` text part pushed into a Multipart one — so the model *knows* it's reading a replay;
-2. the result is **re-stamped with the requesting call's id** — a replay must answer the call being made now, not the call that populated the cache;
-3. the **original call's duration is reported**, not ~0 — so [health statistics](/safety/tool-health/) keep measuring the real tool, never discovering an impossibly fast one;
-4. the inner pipeline is skipped entirely — that's the point.
+1. Your `[cached]` marker is appended, as `"\n[cached]"` onto a Text result. Or a new `" [cached]"` text part is pushed into a Multipart one, so your model knows it is reading a replay.
 
-On an **insert**, one guard runs (the epoch check below) and one invariant holds always: the lock is never held across the inner dispatch — a slow tool cannot block cache reads for every other call.
+2. The result is **re-stamped with your requesting call's id**: a replay must answer the call you are making now, not the call that populated the cache.
 
-## Invalidation — the write rule
+3. The **original call's duration is reported**, not ~0, so [health statistics](/safety/tool-health/) keep measuring your real tool instead of discovering an impossibly fast one.
 
-The event half. A `PathExtractor` you supply declares, per call, **which files a tool touches**. Then one rule drives everything:
+4. Your inner pipeline is skipped entirely. That is the point.
 
-> **After a successful write, evict every cached entry whose paths intersect the write's paths.**
+On an **insert**, one guard runs, the epoch check below, and one invariant holds always for you: the lock is never held across the inner dispatch.
 
-A write to `src/main.rs` throws out the cached `Read` of `src/main.rs` (and of anything else the extractor says that write touched). Two subtleties make the rule safe in practice:
+So a slow tool cannot block your cache reads for every other call.
 
-- **A failed write invalidates nothing.** The filesystem didn't change; the old answers are still true.
-- **Matching is exact string equality** — no globs, no prefixes. So extractors should *over-return* paths: naming extra paths costs a few harmless extra evictions, while missing a path costs **staleness** — a wrong answer served as truth. Over-erase is always safe; under-erase never is.
+## Invalidation: the write rule
 
-## The epoch guard — closing the race
+The event half. A `PathExtractor` you supply declares, per call, **which files your tool touches**. Then one rule drives everything for you:
 
-One race survives the rules above, and it's worth seeing in slow motion, because it's the classic cache bug:
+**After a successful write, evict every cached entry whose paths intersect the write's paths.**
+
+A write to `src/main.rs` throws out your cached `Read` of `src/main.rs` (and of anything else your extractor says that write touched).
+
+Two subtleties make your rule safe in practice:
+
+- **A failed write invalidates nothing.** Your filesystem did not change, so your old answers are still true.
+
+- **Matching is exact string equality**: no globs, no prefixes. So your extractors should over-return paths.
+
+- Naming extra paths costs you a few harmless extra evictions, while missing a path costs **staleness**, a wrong answer served as truth.
+
+- Over-erase is always safe for you, and under-erase never is.
+
+## The epoch guard: closing the race
+
+One race survives the rules above, and it is worth seeing in slow motion because it is the classic cache bug:
 
 ```mermaid
 sequenceDiagram
@@ -97,9 +134,9 @@ sequenceDiagram
     R->>C: insert result... ← stale answer now cached!
 ```
 
-The read *started before* the write and *finished after* the invalidation — its result describes the pre-write world, yet it enters the cache after the eviction that was meant to kill it, and would now survive until the TTL expires.
+The read started before your write and finished after the invalidation, so its result describes the pre-write world. It enters your cache after the eviction that was meant to kill it, and would then survive until your TTL expires.
 
-The memoizer closes this with an **epoch counter** — a number that advances on every invalidation:
+Your memoizer closes this for you with an **epoch counter**, a number that advances on every invalidation:
 
 ```mermaid
 sequenceDiagram
@@ -115,11 +152,13 @@ sequenceDiagram
     Note over C: the stale answer never enters the cache
 ```
 
-Capture the epoch when work starts; refuse to insert if it moved while you worked. Three lines of code, and the window where staleness can slip in closes completely.
+Capture your epoch when your work starts, and refuse to insert if it moved while you worked.
+
+Three lines of code, and the window where staleness can slip into your cache closes completely.
 
 ## A session, cached turn by turn
 
-All of the above in one concrete sequence — cached tools `Read`/`Glob`, write tools `Write`/`Edit`, TTL 5 turns:
+All of the above in one concrete sequence: cached tools `Read`/`Glob`, write tools `Write`/`Edit`, TTL 5 turns:
 
 | Turn | Call | What the cache does | Why |
 |---|---|---|---|
@@ -128,10 +167,12 @@ All of the above in one concrete sequence — cached tools `Read`/`Glob`, write 
 | 4 | `Edit("src/main.rs")` succeeds | run (writes are never cached) → **evict** the turn-2 entry | paths intersect `src/main.rs`; epoch 7 → 8 |
 | 5 | `Read("src/main.rs")` | miss → run against the *new* content → insert (turn 5) | the eviction worked — no stale answer |
 | 5 | `Read("src/main.rs")` again, same turn | **hit** — fresh entry, replayed | 5 − 5 = 0 < 5 |
-| 9 | `Read("src/main.rs")` | miss (5 − ... nothing cached since turn 5's entry would expire at turn 10 — hit, replayed) | TTL arithmetic: 9 − 5 = 4 < 5 |
-| 12 | (nothing) | entries from turn ≤ 7 are all expired on sight | lazy eviction — removed when a lookup touches them |
+| 9 | `Read("src/main.rs")` | **hit** — the turn-5 entry is replayed; it expires at turn 10 | TTL arithmetic: 9 − 5 = 4 < 5 |
+| 12 | (nothing) | entries from turn ≤ 7 are all expired on sight | lazy eviction: removed when a lookup touches them |
 
-Two things to notice: the edit at turn 4 is what keeps the cache *correct*, while the TTL is what keeps it *bounded* — remove either and the other's failure mode eventually bites. And nowhere in the table does a clock appear: "when" is always a turn number.
+Two things for you to notice: the edit at turn 4 is what keeps your cache correct, while your TTL is what keeps it bounded.
+
+Remove either and the other's failure mode eventually bites you. And nowhere in the table does a clock appear: "when" is always a turn number for you.
 
 ## The full decision, end to end
 
@@ -156,25 +197,38 @@ flowchart TD
 
 Details on that diagram worth pausing at:
 
-- **Eviction is lazy.** There is no background timer sweeping expired entries — a stale entry is removed when a lookup touches it. Simpler, and the cost lands exactly where the benefit would.
-- **A hit re-stamps the call id.** The model pairs calls to results by id; a replayed answer must answer *this* call, not the original one. (The engine stamps ids authoritatively after the pipeline anyway — belt and suspenders.)
-- **A hit replays the *original* duration.** If the first read took 900 ms, the hit reports 900 ms, not 0 — so [health statistics](/safety/tool-health/) keep tracking real latency instead of discovering an impossible fast tool.
-- **No capacity limit.** The cache grows with distinct (tool, input) pairs until entries expire. For long sessions, the fix is a shorter TTL, not hope.
+- **Eviction is lazy.** Your cache has no background timer sweeping expired entries. A stale entry is removed when your lookup touches it.
 
----
+- That is simpler, and the cost lands where your benefit is.
+
+- **A hit re-stamps the call id.** Your model pairs calls to results by id.
+
+- A replayed answer must answer this call, not the original one.
+
+- Your engine stamps ids authoritatively after the pipeline anyway, so this is belt and suspenders for you.
+
+- **A hit replays the original duration.** Your first read took 900 ms, so the hit reports 900 ms rather than 0.
+
+- That way [health statistics](/safety/tool-health/) keep tracking real latency instead of discovering an impossibly fast tool.
+
+- **No capacity limit.** Your cache grows with distinct (tool, input) pairs until entries expire. For your long sessions the fix is a shorter TTL, not hope.
 
 ## The principles, compressed
 
-1. **Storing is easy; forgetting is the design.** TTL for time, invalidation for events, both together.
-2. **Only facts worth freezing enter the cache** — successes, read-only, declared tools.
-3. **Canonical keys or no hits** — two spellings of one question must hash the same.
-4. **Invalidation may over-fire, never under-fire** — extra evictions are cheap; staleness is corruption.
-5. **Races need epochs** — "checked before, inserting after" needs a guard, not good intentions.
+1. **Storing is easy. Forgetting is the design.** Your TTL covers time, your invalidation covers events, both together.
 
----
+2. **Only facts worth freezing enter your cache:** successes, read-only, declared tools.
+
+3. **Canonical keys or no hits.** Two spellings of your one question must hash the same.
+
+4. **Your invalidation may over-fire, never under-fire.** Extra evictions are cheap, staleness is corruption.
+
+5. **Your races need epochs.** "Checked before, inserting after" needs a guard, not good intentions.
 
 ## Related pages
 
-- [Middleware](/safety/middleware/) — the memoizer's configuration and pipeline position (innermost, beside the core).
-- [Waves](/principles/scheduling-parallel-work/) — the parallel execution that creates the epoch race in the first place.
-- [Windows, averages, and similarity](/principles/measuring-repetition/) — the same fingerprint-hashing idea used for repetition instead of caching.
+- [Middleware](/safety/middleware/): your memoizer's configuration and pipeline position, innermost beside the core.
+
+- [Parallel tool calls](/principles/scheduling-parallel-work/): the parallel execution that creates your epoch race in the first place.
+
+- [Windows, averages, and similarity](/principles/measuring-repetition/): the same fingerprint-hashing idea used for repetition instead of caching.

@@ -5,8 +5,8 @@ const paper = {
   name: 'paper',
   type: 'light',
   colors: {
-    'editor.background': '#efe5cc',
-    'editor.foreground': '#1c1813',
+    'editor.background': '#f7f6f2',
+    'editor.foreground': '#1a1814',
   },
   tokenColors: [
     { scope: ['comment', 'punctuation.definition.comment'], settings: { foreground: '#847a64', fontStyle: 'italic' } },
@@ -55,8 +55,13 @@ export default defineConfig({
         'A Rust framework for building agents: a sans-IO engine that runs the loop, pluggable model providers, plain-Rust tools, and the safety systems to keep runs alive.',
       favicon: '/favicon.svg',
       social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/dch-labs/loopctl' }],
-      customCss: ['./src/styles/custom.css'],
-      components: { Head: './src/overrides/Head.astro' },
+      customCss: ['./src/styles/custom.css', './src/styles/docs.css'],
+      components: {
+        Head: './src/overrides/Head.astro',
+        // The docs header carried Starlight's plain text title while the landing
+        // masthead carries the wordmark; render the same brand on both.
+        SiteTitle: './src/overrides/SiteTitle.astro',
+      },
       expressiveCode: {
         themes: [paper, dim],
         styleOverrides: {

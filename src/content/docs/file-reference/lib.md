@@ -1,21 +1,25 @@
 ---
-title: "`src/lib.rs` — the crate root"
+title: "src/lib.rs"
 ---
 
+This file is the front door of the library. It declares every public module with its feature gate, carries the crate-level documentation map, and re-exports two conveniences you will actually type.
 
-The front door of the library: declares every public module (with its feature gate), carries the crate-level documentation map, and re-exports two conveniences.
+## Key items
 
-**Key items**
+`pub use tool::Tool` puts the trait at your crate root, so `use loopctl::Tool` works without reaching into a module.
 
-- `pub use tool::Tool;` — the trait at the crate root, so `use loopctl::Tool;` works.
-- Under `feature = "derive"`: re-exports `loopctl_derive::Tool` — the derive macro — so the same import brings trait *and* derive.
-- `pub mod __private` (hidden, derive only) — re-exports `serde_json` so downstream crates don't need it directly for generated code.
-- Feature-gated modules: `hooks` (feature), `mcp` (feature), `provider` (under `providers`), `testing` (feature).
+Under `feature = "derive"` you also re-export `loopctl_derive::Tool`, the derive macro, so one import brings you the trait and the derive together.
 
-**Behavior notes**
+`pub mod __private` is hidden and derive-only. It re-exports `serde_json` so your downstream crate never needs that dependency directly for generated code.
 
-- `#![warn(missing_docs)]` — every public item in the crate is documented; the doc comments are excellent primary reading.
-- `numeric` is `pub(crate)` — internal safe math, intentionally not public.
-- Test builds relax the strict no-unwrap clippy set — production code never panics, test code may assert freely.
+Your feature-gated modules are `hooks`, `mcp`, `provider` under `providers`, and `testing`.
+
+## Behavior notes
+
+`#![warn(missing_docs)]` means every public item in the crate is documented, so the doc comments reward you as primary reading.
+
+`numeric` stays `pub(crate)`. It is internal safe math, intentionally not public.
+
+Test builds relax the strict no-unwrap clippy set. Your production code never panics, while test code may assert freely.
 
 Deep dive: [the codebase map](/start-here/codebase-map/).

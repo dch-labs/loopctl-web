@@ -1,22 +1,39 @@
 ---
-title: "`src/memory/file.rs` — `FileMemoryStore` [feature: file_memory]"
+title: "src/memory/file.rs"
 ---
 
+This file gives you the JSONL-backed `LoopMemory`, behind the `file_memory` feature. It is an in-memory mirror with one compact-JSON `MemoryEntry` appended per line, so your agent's learned memory survives a process restart.
 
-The JSONL-backed `LoopMemory`: an in-memory mirror with one compact-JSON `MemoryEntry` appended per line, so an agent's learned memory survives a process restart. The feature adds zero dependencies.
+The feature adds zero dependencies.
 
-**Key items**
+## Key items
 
-- `FileMemoryStore::open(path)` — load an existing file (a missing one is created without truncating, so concurrent opens cannot discard a writer's lines) and share state with every live handle on that path; `new(path)` starts fresh without reading.
-- `store` — a single O(1) append: the line and its terminator in one write, so concurrent appenders through any handle can never weld a line. A non-finite `relevance` is refused before anything is written — serialized, it would be a `null` the loader treats as fatal mid-file corruption.
-- `retrieve` — ranks through the shared `score_entry` scorer, so results, ordering, and tie-breaking are identical to `InMemoryStore`. A query that actually matched stamps the entry's access (folded in by the next consolidation); baseline-only returns are never stamped.
-- `consolidate` / `flush` — rewrite the whole file atomically and durably: an exclusively-created, unpredictably-named temp file (a planted symlink at a predictable temp name cannot redirect the rewrite) renamed over the target, with the containing directory synced so the rename survives power loss. `consolidate` runs the shared consolidation pass first; `with_consolidation(config)` tunes it.
-- `fail_next_rewrite_at(path, stage)` + `RewriteFaultStage` [feature: testing] — deterministic fault injection for the rewrite path, for hosts pinning crash behavior on runners where permission bits cannot force a failure.
+`FileMemoryStore::open(path)` loads an existing file, and a missing one is created without truncating, so concurrent opens cannot discard another writer's lines. Handles you open on that path share state, and `new(path)` starts fresh without reading.
 
-**Behavior notes**
+`store` is a single O(1) append, meaning the line and its terminator in one write, so concurrent appenders through any of your handles can never weld a line.
 
-- `open` repairs a torn final line (a crash mid-append) and drops its fragment with a warning, so a later append cannot weld onto it; a malformed complete line anywhere earlier fails the open — corruption is loud, not silent.
-- A failed append latches the store unusable — every handle converging on the path refuses further writes — until a fresh `open` repairs the tail. A failed rewrite never removes bytes; a durability-unconfirmed rewrite (the rename landed, the directory sync did not) still commits.
-- Handles on one path within one process share state, spellings that resolve to one file unify into a single store; cross-process access is unsupported by contract — no file locking, two processes will corrupt the file. For multi-process durability use the `loopctl-sqlite` companion.
+A non-finite `relevance` is refused before anything is written. Serialized, it would be a `null` that the loader treats as fatal mid-file corruption.
 
-Deep dive: [Memory](/extensions/memory/) — the persistent-backends section.
+`retrieve` ranks through the shared `score_entry` scorer, so your results, ordering, and tie-breaking are identical to `InMemoryStore`.
+
+A query that actually matched stamps the entry's access, which the next consolidation folds in, and baseline-only returns are never stamped.
+
+`consolidate` and `flush` rewrite your whole file atomically and durably. They write an exclusively-created, unpredictably-named temp file, so a planted symlink at a predictable temp name cannot redirect the rewrite, and then rename over the target.
+
+The containing directory is synced too, so the rename survives power loss. `consolidate` runs the shared consolidation pass first, and `with_consolidation(config)` tunes it.
+
+`fail_next_rewrite_at(path, stage)` plus `RewriteFaultStage` give you deterministic fault injection for the rewrite path under the `testing` feature, which you need on runners where permission bits cannot force a failure.
+
+## Behavior notes
+
+`open` repairs a torn final line from a crash mid-append and drops its fragment with a warning, so a later append cannot weld onto it.
+
+A malformed complete line anywhere earlier fails your open, because corruption is loud rather than silent.
+
+A failed append latches the store unusable, and every handle converging on that path refuses further writes until you `open` again and repair the tail.
+
+A failed rewrite never removes bytes, and a durability-unconfirmed rewrite, where the rename landed but the directory sync did not, still commits.
+
+Handles on one path within one process share state, and spellings that resolve to one file unify into a single store. Cross-process access is unsupported by contract, since there is no file locking and two processes will corrupt your file. For multi-process durability, use the `loopctl-sqlite` companion.
+
+For the deep dive, see the persistent-backends section of [Memory](/extensions/memory/).

@@ -1,22 +1,41 @@
 ---
-title: "`src/provider/anthropic.rs` — `AnthropicClient` [feature: anthropic]"
+title: "src/provider/anthropic.rs"
 ---
 
+This file holds `AnthropicClient`, the Messages API client behind the `anthropic` feature, and it is shared by the Z.ai profile and Bedrock's native path.
 
-The Messages API client — shared by the Z.ai profile and Bedrock's native path. (~3,640 lines with tests.)
+It runs to about 3,640 lines with tests.
 
-**Key items**
+## Key items
 
-- `from_env()` + builder including `with_max_tokens` (default 8192, **0 rejected at build**), `replay_reasoning` (true default, 0.4.0), and `prompt_caching(bool)` (0.4.0, off by default — up to four `cache_control` breakpoints per request: last tool definition, system prompt, last two eligible tail blocks; thinking blocks skipped as breakpoints); headers `x-api-key` + `anthropic-version: 2023-06-01`.
-- `RequestBodySpec` + `build_request_body` — system always a top-level field (folded from inline system messages, `""` when empty; a marked text block under `prompt_caching`); tool_use/tool_result blocks; `is_error: true` travels on the wire.
-- The shared `StreamEmitter` (reused by Bedrock): typed SSE events; usage latched at `message_start`, max-merged at `message_delta` (input normalized to raw + cache reads + creation since 0.4.0, with `cache_read_input_tokens` filling `Usage::cached_input_tokens`); thinking/redacted-thinking lanes — **signatures latch since 0.4.0** (`signature` / the redacted payload ride `MessagePart::Thinking` for continuation replay); `message_stop` is the terminal event.
-- Forced-tool `response_format` synthesis + the two up-front rejections (strict formats, grammar constraints).
-- `pub(super) DEFAULT_MAX_TOKENS` — shared with Bedrock.
+`from_env()` and the builder give you a client. `with_max_tokens` defaults to 8192 and rejects 0 at build time, `replay_reasoning` defaults to true since 0.4.0, and `prompt_caching(bool)` arrived in 0.4.0 and is off by default.
 
-**Behavior notes**
+With prompt caching you get up to four `cache_control` breakpoints per request: the last tool definition, the system prompt, and the last two eligible tail blocks. Thinking blocks are skipped as breakpoints.
 
-- Tool-input deltas carry no index — the emitter remembers the open block from `content_block_start`.
-- Late events after `message_stop` swallowed (desync guard); a late error after a clean stop is dropped.
-- Since 0.4.0 prior-turn thinking rides the request verbatim (`replay_reasoning`) and non-streaming replies carry their thinking blocks too — the strip-on-boundary behavior is gone; images dropped by the converter.
+Your headers are `x-api-key` plus `anthropic-version: 2023-06-01`.
 
-Deep dive: [Anthropic](/providers/anthropic/).
+`RequestBodySpec` and `build_request_body` keep system always a top-level field, folded from inline system messages, with `""` when empty, and a marked text block when you enable `prompt_caching`.
+
+Tool use and tool result blocks ride along, and `is_error: true` travels on the wire.
+
+The shared `StreamEmitter`, which Bedrock also reuses, gives you typed SSE events. Usage is latched at `message_start` and max-merged at `message_delta`.
+
+Since 0.4.0 the input total is normalized to raw plus cache reads plus creation, and `cache_read_input_tokens` fills `Usage::cached_input_tokens`.
+
+Thinking and redacted-thinking lanes exist on their own indexes, and signatures latch since 0.4.0, meaning `signature` and the redacted payload ride `MessagePart::Thinking` for your continuation replay. `message_stop` is the terminal event.
+
+Forced-tool `response_format` synthesis lives here, along with the two up-front rejections for strict formats and grammar constraints.
+
+`pub(super) DEFAULT_MAX_TOKENS` is shared with Bedrock.
+
+## Behavior notes
+
+Tool-input deltas carry no index, so the emitter remembers the open block from `content_block_start`.
+
+Late events after `message_stop` are swallowed as a desync guard, and a late error after a clean stop is dropped.
+
+Since 0.4.0 your prior-turn thinking rides the request verbatim through `replay_reasoning`, and non-streaming replies carry their thinking blocks too, so the old strip-on-boundary behavior is gone.
+
+Images are dropped by the converter.
+
+For the deep dive, see [Anthropic](/providers/anthropic/).

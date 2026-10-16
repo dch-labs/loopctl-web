@@ -1,20 +1,27 @@
 ---
-title: "`src/reflection/llm.rs` — the model-powered reflector"
+title: "src/reflection/llm.rs"
 ---
 
+This file asks your model to analyze its own tool failures, and it is the first in-tree consumer of structured output. It is Opt-in. You pay one model round-trip per analyzed failure.
 
-Asks the model to analyze its own tool failures — the first in-tree consumer of structured output. Opt-in; one model round-trip per analyzed failure.
+## Key items
 
-**Key items**
+You build an `LlmReflector::new(client)` and optionally `with_system_prompt(...)`.
 
-- `LlmReflector::new(client)` + `with_system_prompt(...)` — the built-in analyst prompt specifies the exact `FailureAnalysis` JSON shape and instructs the model to prefer `is_recoverable: false` over inventing corrections.
-- `analyze` — builds one user message (Tool / Input / Schema / Error / Task / Attempt lines; schema omitted when unavailable; attempt rendered 1-indexed), calls `request_structured::<FailureAnalysis>`, validates.
-- `validate_modified_input` [feature: schema_validation] — rejects an `InputFix` whose `modified_input` fails the tool's real schema **before** the retry; without the feature, corrections are trusted as-is.
+The built-in analyst prompt specifies the exact `FailureAnalysis` JSON shape. It instructs the model to prefer `is_recoverable: false` over inventing corrections.
 
-**Behavior notes**
+`analyze` builds one user message from Tool, Input, Schema, Error, Task, and Attempt lines. It omits the schema when that schema is unavailable and renders attempt 1-indexed.
 
-- Any reflector-side failure (`ReflectionError::Internal`) becomes a conservative `Fail` in the engine.
-- The client is held as `Arc<dyn ApiClient>` so the boxed future can reach it without borrowing.
-- Cost model: one model call per failure analysis — the reason it isn't the default.
+Then it calls `request_structured::<FailureAnalysis>` and validates what came back.
+
+`validate_modified_input`, under the `schema_validation` feature, rejects an `InputFix` whose `modified_input` fails the tool's real schema before you retry. Without the feature, corrections are trusted as-is.
+
+## Behavior notes
+
+Any reflector-side failure, meaning `ReflectionError::Internal`, becomes a conservative `Fail` in your engine.
+
+The client is held as `Arc<dyn ApiClient>` so the boxed future can reach it without borrowing.
+
+Cost one model call per failure analysis, and that is the reason this is not your default reflector.
 
 Deep dive: [Reflection](/safety/reflection/).

@@ -1,20 +1,33 @@
 ---
-title: "`src/provider/embeddings.rs` — the real embedders"
+title: "src/provider/embeddings.rs"
 ---
 
+This file holds the two `EmbeddingProvider` backends a real semantic-memory consumer needs, one local and one frontier.
 
-The two `EmbeddingProvider` backends a real semantic-memory consumer needs — one local, one frontier — behind the provider feature each belongs to plus `vector_index`. No new features; `default = []` untouched.
+Each sits behind the provider feature it belongs to plus `vector_index`, so there are no new features and `default = []` is untouched.
 
-**Key items**
+## Key items
 
-- `OllamaEmbedder` — Ollama's *native* `/api/embed` endpoint (a chat-profile `/v1` suffix normalized away); defaults to `nomic-embed-text` (768 dims), key-free; `from_env()` requires `OLLAMA_EMBEDDING_MODEL` and deliberately refuses `OLLAMA_MODEL`; `OLLAMA_EMBEDDING_DIM` optionally pins the geometry.
-- `OpenAiEmbedder` — `/v1/embeddings`; defaults `text-embedding-3-small` (1536 dims); `with_dimensions(256..=3072)` rides the 3-series' Matryoshka truncation only when set; the key is redacted in `Debug`.
-- Both: validated builders with the family's shared HTTP config, `embed_texts` batching (256 inputs or ~250k estimated tokens per request), dimension-derived bounded response reads, optional `normalized()` (exact L2 in place), per-batch `loopctl.embed.batch` metric events.
+`OllamaEmbedder` talks to Ollama's native `/api/embed` endpoint, and a chat-profile `/v1` suffix is normalized away.
 
-**Behavior notes**
+It defaults to `nomic-embed-text` at 768 dims and is key-free. `from_env()` requires `OLLAMA_EMBEDDING_MODEL` and deliberately refuses `OLLAMA_MODEL`, and `OLLAMA_EMBEDDING_DIM` optionally pins the geometry for you.
 
-- **Dimension honesty**: a server answer whose length differs from the configured `dim()` fails as a config-validation error naming both numbers — embedding models are not interchangeable across a store's lifetime.
-- OpenAI responses reassemble by `data[].index`, never array position; duplicate or out-of-range sets refuse. Every input guards against the 8191-token ceiling *before* the wire, naming the input index.
-- Component finiteness is enforced on every answer (normalized or not); non-finite answers fail the embed.
+`OpenAiEmbedder` calls `/v1/embeddings` and defaults to `text-embedding-3-small` at 1536 dims.
 
-Deep dive: [Embeddings](/providers/embeddings/)
+`with_dimensions(256..=3072)` rides the 3-series Matryoshka truncation only when you set it, and the key is redacted in `Debug`.
+
+Both give you validated builders with the family's shared HTTP config and `embed_texts` batching at 256 inputs or about 250k estimated tokens per request.
+
+Both read responses with a bound derived from your dimension, offer optional `normalized()` for exact L2 in place, and emit per-batch `loopctl.embed.batch` metric events.
+
+## Behavior notes
+
+Dimension honesty is enforced. A server answer whose length differs from your configured `dim()` fails as a config-validation error naming both numbers, because embedding models are not interchangeable across a store's lifetime.
+
+OpenAI responses are reassembled by `data[].index` and never by array position, and duplicate or out-of-range sets refuse.
+
+Every input guards against the 8191-token ceiling before the wire, naming the input index to you.
+
+Component finiteness is enforced on every answer, normalized or not, and non-finite answers fail the embed.
+
+For the deep dive, see [Embeddings](/providers/embeddings/).

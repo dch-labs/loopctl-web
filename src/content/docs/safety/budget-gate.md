@@ -1,42 +1,58 @@
 ---
-title: "The budget gate — spend lines the engine refuses to cross"
+title: "The budget gate"
 sidebar:
   order: 10
 ---
 
+A budget gate is a spend line the engine refuses to cross. It accumulates spend on three dimensions and consults them engine-side, before each turn's model request.
 
-"Budgets are gates": spend accumulation with **soft** and **hard** lines per dimension, consulted engine-side before each turn's model request. One `BudgetGate` (`src/budget.rs`), installed with `BareLoop::with_budget_gate(...)` — no middleware, no feature flag, no manifest-type change.
+Read this when a run must stop at N tokens, N turns, or N minutes. Not "eventually, if something notices", but refused before the next request goes out. Source: `src/budget.rs`.
 
-**Read this if:** a run must stop at N tokens / N turns / N minutes — not "eventually, if something notices," but *refused before the next request is sent*.
-
----
+You install one `BudgetGate` with `BareLoop::with_budget_gate(...)`. It is not middleware, it needs no feature flag, and it changes no manifest type.
 
 ## The three dimensions
 
 | Dimension | Measured by | Notes |
 |---|---|---|
-| `Tokens` | provider-reported `input + output` from usage records — **never estimates** | usage-less turns contribute nothing (the honest count, not a guess) |
-| `Turns` | completed turns, counted at turn end | an in-flight turn never counts against itself |
-| `Duration` | the elapsed reading of the caller's clock seam, passed in as a `Duration` | the gate itself never reads a clock — a replayed run crosses the same lines at the same logical instants |
+| `Tokens` | Provider-reported `input + output` from usage records, never estimates | Usage-less turns contribute nothing. That is the honest count rather than a guess. |
+| `Turns` | Completed turns, counted at turn end | An in-flight turn never counts against itself. |
+| `Duration` | The elapsed reading of your clock seam, passed in as a `Duration` | The gate never reads a clock, so a replayed run crosses the same lines at the same logical instants. |
 
-`BudgetLimits { turns, tokens, duration }` — `None` (the default) disables a dimension's lines entirely.
+You hand the gate a `BudgetLimits { turns, tokens, duration }`. Each field defaults to `None`, and a `None` disables that dimension's lines entirely.
 
-## Soft line, hard line
+## Two lines per dimension
 
-Per dimension, two thresholds:
+### The soft line
 
-- **Soft line** — a fraction of the hard limit, default **80%**, movable via `with_soft_fraction(f)` (validated: out-of-range — including below the `0.0001` rationalization floor — is a loud `InvalidInput`, never clamped). Crossing it fires **`on_budget_warn`** (`BudgetWarnContext`, forwarded by the event hub as `LoopEvent::BudgetWarn`) **exactly once per run per dimension**, however many checks pass between the lines.
-- **Hard line** — refuses the **next request before it is sent** (the litellm `max_budget` shape): the turn fails with the non-recoverable `LoopError::BudgetExhausted { dimension, spent, limit }` (the `MaxTurnsExceeded` precedent, with numbers for diagnostics) and mints a `GateDecision` deny record (rule id `budget.hard`, rule source middleware, tool `model_request`, reason naming the dimension and numbers) onto the same gate-decision trail every other gate writes — audit and replay see budget enforcement like any gate.
+The soft line is a fraction of the hard limit, default 80%. Move it with `with_soft_fraction(f)`, which validates rather than clamps. An out-of-range value is a loud `InvalidInput`, including anything below the `0.0001` rationalization floor.
 
-A spend rocketing past both lines in one response still records its warn alongside the refusal. Every enabled dimension latches its warn in the same check; the tokens → turns → wall-clock priority picks only the refusal.
+Crossing the soft line fires `on_budget_warn` exactly once per run per dimension. Your handler receives a `BudgetWarnContext`, and the event hub forwards it as `LoopEvent::BudgetWarn`. The one-shot rule holds however many checks pass between the two lines.
 
-## The arithmetic — exact, by construction
+### The hard line
 
-The soft line is computed with exact integer math on the fraction's four-decimal rational form — no float casts, no rounding above the product, a `u128` intermediate that cannot saturate below it — **so the warn can never trail the refusal**. (Pinned by a sweep of limits 1..100,000 × fractions 0.1..1.0.)
+The hard line refuses the next request before it is sent, which is the shape litellm's `max_budget` has. The turn fails with `LoopError::BudgetExhausted { dimension, spent, limit }`, and that error is not recoverable.
 
-The duration grammar (also exposed as `parse_duration` for hosts): number-then-unit pairs over `s`/`m`/`h` — `90s`, `5m`, `4h`, `1h30m`, `2h45m10s`; garbage is a loud `InvalidInput`.
+It follows the `MaxTurnsExceeded` precedent and carries the numbers, so your diagnostics can name the spend and the limit.
+
+The refusal also mints a `GateDecision` deny record. It carries rule id `budget.hard`, rule source `middleware`, tool `model_request`, and a reason naming the dimension and the numbers. It lands on the same gate-decision trail every other gate writes, so your audit and replay see budget enforcement like any other gate.
+
+Two details about a large spend. A response that rockets past both lines in one step still records its warn alongside the refusal. And every enabled dimension latches its warn in the same check, while the `tokens → turns → wall-clock` priority picks only which refusal you get.
+
+## The arithmetic
+
+The soft line is computed with exact integer math on the fraction's four-decimal rational form. There are no float casts, no rounding above the product, and a `u128` intermediate that cannot saturate below it. So the warn can never trail the refusal.
+
+That is pinned by a sweep of limits 1..100,000 × fractions `0.1..1.0`.
+
+A sweep of limits 1 to 100,000 against fractions 0.1 to 1.0 pins that property.
+
+### Duration grammar
+
+You can write durations as number-then-unit pairs over `s`, `m`, and `h`: `90s`, `5m`, `4h`, `1h30m`, `2h45m10s`. The same parser is exposed as `parse_duration` for your own host code. Garbage is a loud `InvalidInput`.
 
 ## How the engine wires it
+
+Four hook points, in order:
 
 ```text
 run start:   gate.begin()                     — counters reset for this run
@@ -46,15 +62,16 @@ on usage:    gate.observe_usage(in, out)       — from real usage records
 turn end:    gate.observe_turn_end()
 ```
 
-Accounting is local to each loop by construction (`with_budget_gate` takes the gate by value): a second loop nested inside the first's tool dispatch, spending under its own gate, never shortens the first loop's served requests.
+Accounting is local to each loop by construction, because `with_budget_gate` takes the gate by value. A second loop nested inside the first one's tool dispatch spends under its own gate and never shortens the requests the first loop has left.
 
-The manifest's advisory `Budgets` stanza maps into `BudgetLimits` behind the `manifest` feature, with `cost_usd` deliberately mapping to nothing — no price table is consulted, so cost has no line (the gate refuses to guess a cost); an unparseable `duration` disables the wall-clock line with a warn rather than guessing.
+The manifest's advisory `Budgets` stanza maps into `BudgetLimits` behind the `manifest` feature. Two choices there are deliberate:
 
----
+- `cost_usd` maps to nothing. No price table is consulted, so cost has no line. The gate refuses to guess a cost.
+- An unparseable `duration` disables the wall-clock line with a warn, rather than guessing what you meant.
 
 ## Related pages
 
-- [Errors](/core-data/errors/) — `BudgetExhausted`.
-- [Permissions](/safety/permission/) — the gate-decision records the hard refusal mints.
-- [The driver loop](/engine/driver-loop/) — where the consult sits.
+- [Errors](/core-data/errors/) covers `BudgetExhausted`.
+- [Permissions](/safety/permission/) covers the gate-decision records a hard refusal mints.
+- [The driver loop](/engine/driver-loop/) covers where the consult sits.
 - [File reference: budget.rs](/file-reference/budget/)

@@ -1,17 +1,16 @@
 ---
-title: "Tools — giving the model hands"
+title: "Tools"
 sidebar:
   order: 2
 ---
 
+A tool is a function the model can ask your program to run: read a file, run a search, query a database. You write it, you register it, and the engine calls it when the model asks.
 
-A **tool** is a function the model can ask your program to run: read a file, run a search, query a database. This page shows how to write one, register it, and what happens around every call. Sources: `src/tool.rs`, `src/tool/registry.rs`, the `crates/derive/` crate.
-
----
+Three routes reach the same result. The sections after them cover what happens once per call. Sources: `src/tool.rs`, `src/tool/registry.rs`, and the `crates/derive/` crate.
 
 ## The Tool trait
 
-A tool is any type implementing four things:
+A tool is any type that implements four required methods:
 
 ```rust
 pub trait Tool: Send + Sync {
@@ -30,7 +29,9 @@ pub trait Tool: Send + Sync {
 }
 ```
 
-**JSON Schema** (the `schema()` part) is a standard way to describe the shape of JSON data. The model reads it to learn what arguments to send. Example:
+The first three methods are metadata the model reads. The fourth is the code you want running.
+
+`schema()` returns JSON Schema, which is the standard way to describe the shape of JSON data. The model reads it to learn which arguments to send, so write it as carefully as the function body. Example: an echo tool's schema.
 
 ```rust
 fn schema(&self) -> ToolSchema {
@@ -46,25 +47,27 @@ fn schema(&self) -> ToolSchema {
 }
 ```
 
-> **Gotcha:** the name field on `ToolSchema` is called **`tool`**, not `name`. Everyone trips on this once.
+One field name trips up everyone who writes this by hand. The name field on `ToolSchema` is `tool`, not `name`.
 
-### The optional methods, in plain words
+### Optional methods
+
+The trait's defaults cover most tools. Each one changes how the engine schedules or renders your tool:
 
 | Method | Meaning | Why it matters |
 |---|---|---|
-| `is_concurrency_safe` | Can two calls run at the same time safely? | Gates [parallel dispatch](/engine/tool-dispatch/). Default `false` (safe choice). |
-| `is_safe_for_concurrent_execution(input)` | Same, but per-call — some inputs are safe, some not. | Overrides the static flag for one call. |
-| `resource_key(input)` | A shared-resource tag, e.g. the file path being edited. | Two calls with the **same** key never run in the same parallel wave. |
+| `is_concurrency_safe` | Can two calls run at the same time safely? | Gates [parallel dispatch](/engine/tool-dispatch/). Default `false`, which is the safe choice. |
+| `is_safe_for_concurrent_execution(input)` | Same question, answered per-call. Some inputs are safe and some are not. | Overrides the static flag for one call. |
+| `resource_key(input)` | A shared-resource tag, such as the file path being edited. | Two calls with the same key never run in the same parallel wave. |
 | `is_read_only` | Does this tool change nothing? | Permission layers can auto-approve read-only tools. |
-| `system_prompt` | Extra instructions appended to the system prompt. | E.g. a git tool explaining its conventions. |
-| `descriptor_digest()` | A 16-hex fingerprint of `{name, description, schema}` over canonical JSON. | First-use approval can pin *what the user actually saw*; a changed digest is the re-ask signal (see [approvals](/safety/approvals/)). Default derives it automatically. |
-| `records_trajectory()` | Should calls to this tool become memory entries? Default `true`. | A tool that recorded its own answers would find them in the next search — `SearchMemoriesTool` opts out. |
-
----
+| `system_prompt` | Extra instructions appended to the system prompt. | A git tool can explain its own conventions. |
+| `descriptor_digest()` | A 16-hex fingerprint of `{name, description, schema}` over canonical JSON. | First-use approval can pin what the user actually saw. A changed digest is the re-ask signal, and the default derives it automatically. See [approvals](/safety/approvals/). |
+| `records_trajectory()` | Should calls to this tool become memory entries? Default `true`. | A tool that recorded its own answers would find them in the next search, so `SearchMemoriesTool` opts out. |
 
 ## A complete tool, three ways
 
-### Way 1: implement the trait
+### Implement the trait
+
+The explicit route works everywhere and shows you what the other two generate:
 
 ```rust
 struct EchoTool;
@@ -83,7 +86,11 @@ impl Tool for EchoTool {
 }
 ```
 
-### Way 2: `FnTool` — register a plain function
+That `Pin<Box<dyn Future ...>>` return type is the price of an object-safe trait. Read it as "an async function you can store in a list".
+
+### Register a plain function
+
+`FnTool` wraps a free function, so a tool can be one function and no struct:
 
 ```rust
 fn echo_fn(input: Value, _ctx: &ToolContext)
@@ -100,9 +107,11 @@ let echo = FnTool::new("echo", "Echoes the message back", json!({
     .read_only();
 ```
 
-### Way 3: `#[derive(Tool)]` — let a macro write it
+The trailing `.read_only()` is where the optional methods live. `FnTool` has a builder method for each one.
 
-Enable the `derive` feature, then describe the input as a struct and write an ordinary async method:
+### Derive the trait
+
+Enable the `derive` feature, describe the input as a struct, and write an ordinary async method:
 
 ```rust
 use loopctl::Tool;                       // brings the trait AND the derive
@@ -128,11 +137,15 @@ impl EchoInput {
 registry.register(EchoInput { message: String::new() });
 ```
 
-The macro generates `name()`, `description()` (from the doc comment or attribute), `schema()` (from the field types — `String` → string, `bool` → boolean, `Vec<T>` → array, `Option<T>` → not required), and `call()` (deserializes input into the struct, then calls `run`). Details and every attribute: [the derive macro page](/integration/derive-macro/).
+The macro writes the rest of the trait. Your tool's name comes from the attribute, or from the snake_case struct name if you leave the attribute off. The doc comment becomes the description.
 
----
+`schema()` comes from the field types. `String` becomes string, `bool` becomes boolean, `Vec<T>` becomes array, and `Option<T>` becomes not required.
 
-## Output: `ToolOutput` and soft vs hard failure
+The macro is `#[derive(Tool)]`, and you put it on a `Deserialize` struct. `call()` deserializes the input into your struct, then calls `run`. [The derive macro page](/integration/derive-macro/) lists every attribute.
+
+## ToolOutput
+
+A tool returns one of these:
 
 ```rust
 let out = ToolOutput::text("file contents...");        // success
@@ -141,28 +154,40 @@ let out = ToolOutput::structured(&my_data);            // any Serialize → JSON
 let out = out.with_hint(DisplayHint::Diff);            // how a UI should render it
 ```
 
-Two very different ways to fail, and the difference matters:
+### Soft and hard failure
+
+Two very different ways to fail, and the difference decides whether the run survives:
 
 | Kind | Shape | What happens to the run |
 |---|---|---|
-| **Soft failure** | `Ok(ToolOutput { is_error: true, ... })` or an `Err(ToolError)` returned from `call` | The error text is fed back **to the model**. The run continues; the model can adapt. |
-| **Hard failure** | The engine gives up: cancel, loop detected, retries exhausted | The run ends with a `LoopError`. |
+| Soft failure | `Ok(ToolOutput { is_error: true, ... })` or an `Err(ToolError)` returned from `call` | The error text is fed back to the model. The run continues, and the model can adapt. |
+| Hard failure | The engine gives up: cancel, loop detected, retries exhausted | The run ends with a `LoopError`. |
 
-A panicking tool is caught (`catch_unwind`) and becomes a soft failure — the model sees "tool 'x' panicked: ..." and the run continues.
+A panicking tool is caught with `catch_unwind` and becomes a soft failure. The model sees "tool 'x' panicked: ..." and the run continues.
 
-`DisplayHint` (`Text`, `Diff`, `Json`, `Code`, `Markdown`, `Suppress`) is a **rendering suggestion only**. The loop ignores it; your UI can use it. `Suppress` means "show a preview in the UI" — the model still receives the full text.
+### Rendering hints
 
-The output type also carries the structured round-trip: `ToolOutput::structured(&any_serialize_value)` serializes into a JSON text payload (a serialization failure becomes an `error_text`, never a panic); `structured_value()` parses a JSON text payload back to a `Value` (`None` for multipart or non-JSON); `structured_as::<T>()` goes all the way to a typed value. And one join subtlety mirroring [messages](/core-data/messages/): `ToolOutput::text_content()` joins multipart text parts with **newlines**, while `Message::text_content()` concatenates with no separator — know which one your logging reads.
+`DisplayHint` has six variants: `Text`, `Diff`, `Json`, `Code`, `Markdown`, `Suppress`. Treat it as a rendering suggestion only. The loop ignores it, and your UI can use it. `Suppress` means show a preview in the UI, while the model still receives the full text.
 
-A tool can also stamp a **retention class** on its output — `ToolOutput::text(...).with_retention(Retention::Durable)` — which rides the result into the conversation and tells compaction and pruning what may be cleared and when ([retention classes](/core-data/messages/#retention-classes--what-compaction-may-clear)).
+### Structured payloads
 
-### `ToolError` variants and what the model should do
+`ToolOutput::structured(&value)` serializes anything that implements `Serialize` into a JSON text payload. A serialization failure becomes an `error_text`, never a panic.
 
-`NotFound`, `InvalidInput`, `Execution`, `Permission`, `FileNotFound`, `Timeout`, `Cancelled`, `Io`, `Json`. Each maps to advice for the model (invalid input → fix arguments; permission → ask the user; timeout → try a longer timeout...). loopctl's recovery machinery builds on these.
+Reading it back completes the structured round-trip, and it has three depths. `structured_value()` parses a JSON text payload into a `Value`, and returns `None` for multipart or non-JSON. `structured_as::<T>()` goes all the way to a typed value.
 
----
+One join rule differs from [messages](/core-data/messages/), so check which one your logging reads. `ToolOutput::text_content()` joins multipart text parts with newlines, while `Message::text_content()` concatenates with no separator.
 
-## `ToolContext` — what your tool receives
+A tool can also stamp a retention class on its output with `ToolOutput::text(...).with_retention(Retention::Durable)`. The tag rides the result into the conversation and tells compaction and pruning what may be cleared and when. See [retention classes](/core-data/messages/#retention-classes).
+
+### ToolError variants
+
+Nine variants cover tool failure: `NotFound`, `InvalidInput`, `Execution`, `Permission`, `FileNotFound`, `Timeout`, `Cancelled`, `Io`, and `Json`.
+
+Each one carries advice for the model. Invalid input means fix the arguments. Permission means ask the user. Timeout means try a longer timeout. loopctl's recovery machinery builds on this list, so pick the honest variant when you return an error.
+
+## ToolContext
+
+Every call receives this:
 
 ```rust
 pub struct ToolContext {
@@ -175,13 +200,15 @@ pub struct ToolContext {
 }
 ```
 
-- `temp_dir` deserves attention: `BareLoop` creates `{temp}/loopctl-{session_id}/` per session, gives every tool its path, and **removes it when the loop is dropped**. Clean scratch space, automatic cleanup. (`with_temp_dir(base)` moves it; `with_managed_temp_disabled()` opts out.)
-- `extensions` is the escape hatch for host state: `ctx.set_extension(my_state)` / `ctx.get_extension::<MyState>()`. When the engine dispatches tools, the sanctioned place to enrich contexts is a middleware (register it first in your pipeline).
-- There is **no** cancellation handle on the context. Cancellation is engine-side: your tool future is simply dropped when a cancel arrives mid-call. Write tools that are safe to drop mid-write (write to temp, rename at the end).
+Three fields deserve attention:
 
----
+- `temp_dir` is worth using. `BareLoop` creates `{temp}/loopctl-{session_id}/` per session, gives every tool that path, and removes the directory when the loop is dropped. You get clean scratch space with automatic cleanup. Call `with_temp_dir(base)` to move it, or `with_managed_temp_disabled()` to opt out.
+- `extensions` is the escape hatch for host state. Use `ctx.set_extension(my_state)` and `ctx.get_extension::<MyState>()`. When the engine dispatches tools, the sanctioned place to enrich contexts is a middleware, and you register it first in your pipeline.
+- There is no cancellation handle on the context. Cancellation is engine-side: your tool future is dropped when a cancel arrives mid-call. Write tools that are safe to drop mid-write, such as writing to a temp file and renaming at the end.
 
-## `ToolRegistry` — the phone book
+## ToolRegistry
+
+The registry maps names to tools, and registration is by `name()`:
 
 ```rust
 let mut tools = ToolRegistry::new();
@@ -197,47 +224,53 @@ tools.all_tools()                    // everything, in registration order
 tools.concurrent_safe_tools()        // only the concurrency-safe subset
 ```
 
-The engine sends `all_schemas()` with every model request, and classifies model replies against `tool_names()`: a call to a name that was never advertised is answered with "tool 'x' is not available" before any dispatch happens (see [tool dispatch](/engine/tool-dispatch/)).
+Re-registering a name replaces the tool silently, apart from a warn log, and the new tool keeps the old slot in listing order.
 
-An ordering fact pinned by the [golden request bytes](/integration/testing/) harness: `all_tools()` and `all_schemas()` both return **registration order** (a re-registered name keeps its original slot), while `tool_names()` returns **alphabetical order**. Deterministic schema order is what makes request construction byte-reproducible — don't break it.
+The engine sends `all_schemas()` with every model request. It classifies model replies against `tool_names()`, so a call to a name that was never advertised is answered with "tool 'x' is not available" before any dispatch happens. See [tool dispatch](/engine/tool-dispatch/).
 
----
+One ordering fact is pinned by the [golden request bytes](/integration/testing/) harness, so treat it as an API promise. `all_tools()` and `all_schemas()` both return registration order, and a re-registered name keeps its original slot. `tool_names()` returns alphabetical order. Deterministic schema order is what makes request construction byte-reproducible.
 
-## Built-in tools — four families, explicit registration
+## Built-in tools
 
-The crate ships ready-made tools behind feature flags, each constructed and registered by hand — nothing is auto-installed and `default = []` is unchanged:
+The crate ships five families of ready-made tools behind four feature flags. You construct each one and register it by hand. Nothing is auto-installed, and `default = []` is unchanged:
 
 | Family | Feature | Tools | Deep dive |
 |---|---|---|---|
-| Planning | `builtin_tools` | `Think` — the no-side-effect scratchpad | — |
-| Reading | `builtin_tools` | `Read` — line-aware reads over a pluggable `ContentSource` | [read tooling](/file-reference/tool-builtin-read/) |
-| Filesystem | `fs_tools` | `Write`, `Edit`, `MultiEdit`, `FileViewer` (+ `FileSource`) | [fs family](/file-reference/tool-builtin-fs/) |
-| Search | `search_tools` | `Glob`, `Grep`, `CodeSearch`, `Tree` (+ `FsSearchSource`) | [search family](/file-reference/tool-builtin-search/) |
-| Shell | `shell_tools` | `Shell`, `Jobs` (+ `UnixShellBackend`) | [shell family](/file-reference/tool-builtin-shell/) |
+| Planning | `builtin_tools` | `Think`, the no-side-effect scratchpad | — |
+| Reading | `builtin_tools` | `Read`, line-aware reads over a pluggable `ContentSource` | [read tooling](/file-reference/tool-builtin-read/) |
+| Filesystem | `fs_tools` | `Write`, `Edit`, `MultiEdit`, `FileViewer`, plus `FileSource` | [fs family](/file-reference/tool-builtin-fs/) |
+| Search | `search_tools` | `Glob`, `Grep`, `CodeSearch`, `Tree`, plus `FsSearchSource` | [search family](/file-reference/tool-builtin-search/) |
+| Shell | `shell_tools` | `Shell`, `Jobs`, plus `UnixShellBackend` | [shell family](/file-reference/tool-builtin-shell/) |
 
-**Wire names are CamelCase since 0.4.0** (breaking): every builtin registers as `Read`, `Think`, `Write`, `Edit`, `MultiEdit`, `FileViewer`, `Glob`, `Grep`, `CodeSearch`, `Tree`, `Shell`, `Jobs` — matching the naming convention models see in other agent tools. Gate rules and prompts written against the old lowercase names need updating.
+Wire names are CamelCase, and this was a breaking change in 0.4.0. Every builtin registers as `Read`, `Think`, `Write`, `Edit`, `MultiEdit`, `FileViewer`, `Glob`, `Grep`, `CodeSearch`, `Tree`, `Shell`, or `Jobs`.
 
-**ThinkTool** is still the planning scratchpad: it advertises exactly one field — `think(thought)` → the constant reply `"ok"`. The point is not the acknowledgement (the thought is already in the conversation — echoing it back would double its token cost); the point is the **description**, written as an instruction template (restate the goal, list the options, check the plan, decide) so the tool *teaches the procedure*. On small local models this is the cheap version of "think before you act".
+That matches the naming convention models see in other agent tools. If you wrote gate rules or prompts against the old lowercase names, they need updating.
 
-Facts worth knowing:
+### ThinkTool
 
-- `is_read_only()` and `is_concurrency_safe()` are `true` for the read-only families by definition; the shell family gates concurrency per-command through a read-only allowlist (see the [shell family page](/file-reference/tool-builtin-shell/)).
-- A missing or wrong-typed field is a `ToolError::InvalidInput` naming the field and its expected type — never a silent default.
+ThinkTool is the planning scratchpad. It advertises exactly one field: `think(thought)`, which returns the constant reply `"ok"`.
+
+An acknowledgement is not the point. The thought is already in the conversation, so echoing it back would double its token cost.
+
+The description is the point. It is written as an instruction template: restate the goal, list the options, check the plan, decide. This tool teaches the procedure, which on small local models is the cheap version of thinking before you act.
+
+Three more facts about the built-ins:
+
+- `is_read_only()` and `is_concurrency_safe()` are `true` for the read-only families by definition. The shell family gates concurrency per command through a read-only allowlist, covered in the [shell family page](/file-reference/tool-builtin-shell/).
+- A missing field or a wrong-typed field is a `ToolError::InvalidInput` naming the field and its expected type. You never get a silent default.
 - Registration is the only way any of them enters a session.
 
----
+## Schema rules
 
-## Schemas — brief but important
+The framework does not validate your schema, so a broken schema means the model sends broken arguments. Test yours against a real run before you ship it.
 
-- The framework does **not** validate your schema. A broken schema means the model sends broken arguments. Test it.
-- With `ToolConstraint::Strict` (see [structured output](/integration/structured-output/)), loopctl *tightens* schemas automatically: every object becomes closed (`additionalProperties: false`) and every property becomes required — the shape strict-mode APIs demand.
-- Under the MCP server adapter, schemas are validated with a real JSON Schema validator before being advertised; tools with invalid schemas are skipped with a warning (see [MCP](/integration/mcp/)).
+Two places do check. With `ToolConstraint::Strict`, covered in [structured output](/integration/structured-output/), loopctl tightens schemas automatically: every object becomes closed with `additionalProperties: false`, and every property becomes required. That is the shape strict-mode APIs demand.
 
----
+Gotcha: under the MCP server adapter, [MCP](/integration/mcp/) validates schemas with a real JSON Schema validator before advertising them. A tool with an invalid schema is skipped with a warning.
 
 ## Related pages
 
-- [Tool dispatch](/engine/tool-dispatch/) — everything that wraps each call.
-- [Middleware](/safety/middleware/) — timeouts, caching, permissions as stackable layers.
-- [The derive macro](/integration/derive-macro/) — every attribute explained.
+- [Tool dispatch](/engine/tool-dispatch/) is where the wrapping of each call is explained.
+- [Middleware](/safety/middleware/) covers timeouts, caching, and permissions as stackable layers.
+- [The derive macro](/integration/derive-macro/) explains every attribute.
 - [File reference: tool.rs](/file-reference/tool/)

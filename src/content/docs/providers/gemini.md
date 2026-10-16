@@ -1,13 +1,12 @@
 ---
-title: "Gemini client — Google's model, its three quirks"
+title: "Gemini client"
 sidebar:
   order: 4
 ---
 
+`GeminiClient` speaks the Google Gemini protocol, and the source is `src/provider/gemini.rs`.
 
-`GeminiClient` speaks the Google Gemini protocol. Source: `src/provider/gemini.rs`. It's a well-behaved client with three quirks worth knowing: the model lives in the URL, the API key never does, and "thinking" is a per-request opt-in.
-
----
+It is a well-behaved client with three quirks worth knowing. The model lives in the URL, the API key never does, and thinking is a per-request opt-in.
 
 ## Construction
 
@@ -22,38 +21,60 @@ let client = GeminiClient::builder()
     .build()?;
 ```
 
-**Quirk 1 — model in the URL.** Requests go to `{base}/models/{model}:streamGenerateContent?alt=sse` (or `:generateContent`). A per-request model override (`RequestOptions::with_model`) therefore changes the *URL* for that request — the client builds it correctly, but it's why the override works differently than in body-model providers.
+### Quirk 1: the model lives in the URL
 
-**Quirk 2 — key in a header.** The key travels as `x-goog-api-key`, never as a `?key=` query parameter (pinned by a test — keys in URLs leak into logs). Also note `include_thoughts`:
+Your requests go to `{base}/models/{model}:streamGenerateContent?alt=sse`, or to `:generateContent` for a non-streaming call.
 
-**Quirk 3 — thinking is opt-in per client.** Reasoning models need `thinkingConfig.includeThoughts = true` on the request; non-reasoning models *reject* that field with a 400. So: `with_include_thoughts(true)` when your model supports thoughts (its `thought: true` parts then stream to `on_thinking_delta` and its thought tokens are counted in output usage); leave it off otherwise. The response parser routes thought parts correctly regardless of the flag.
+A per-request model override through `RequestOptions::with_model` therefore changes the URL for that request. The client builds it correctly, and that is why your override behaves differently than on a body-model provider.
+
+### Quirk 2: the key never travels in the URL
+
+Your key travels in a header, `x-goog-api-key`, and never as a `?key=` query parameter, which a test pins, because keys in URLs leak into logs.
+
+### Quirk 3: thinking is opt-in per client
+
+Reasoning models need `thinkingConfig.includeThoughts = true` on the request, and non-reasoning models reject that field with a 400.
+
+So set `with_include_thoughts(true)` when your model supports thoughts. Its `thought: true` parts then stream to `on_thinking_delta`, and its thought tokens are counted in your output usage. Leave the flag off otherwise.
+
+The response parser routes thought parts correctly either way.
 
 ## What this client translates for you
 
-- **System prompts:** Gemini rejects inline `system` roles — folded into the top-level `systemInstruction` field (omitted entirely when empty).
-- **Tool calls:** `functionCall` parts; your results become `functionResponse` parts carrying **both name and id** — Gemini correlates by function name, which is why loopctl's tool results always carry the name. `is_error` has no wire form on Gemini; error text conveys it.
-- **Usage:** `promptTokenCount` → input; `candidatesTokenCount + thoughtsTokenCount` → output.
-- **Finish reasons:** `MAX_TOKENS` → MaxTokens; everything else (STOP, SAFETY, ...) → EndTurn.
+- **System prompts.** Gemini rejects inline `system` roles, so they are folded into the top-level `systemInstruction` field, which is omitted entirely when empty.
+- **Tool calls.** These become `functionCall` parts, and your results become `functionResponse` parts carrying both name and id. Gemini correlates by function name, which is why your tool results always carry the name. `is_error` has no wire form here, so error text conveys it.
+- **Usage.** `promptTokenCount` becomes your input, and `candidatesTokenCount + thoughtsTokenCount` becomes your output.
+- **Finish reasons.** `MAX_TOKENS` becomes MaxTokens, and everything else, including STOP and SAFETY, becomes EndTurn.
 
 ## Structured output
 
-- **`response_format`** → `generationConfig.responseMimeType: "application/json"` + `responseJsonSchema`. `strict: true` is **rejected up front** (the API has no strict switch) rather than silently non-strict.
-- **`ToolConstraint::Grammar`** → rejected (no grammar-constrained decoding).
-- **`ToolConstraint::Strict`** → supported via schema tightening, same as the others.
+Three behaviors match the pattern you saw on the other clients:
+
+- **`response_format`** maps to `generationConfig.responseMimeType` set to `application/json` plus `responseJsonSchema`. A `strict: true` is rejected up front, rather than running silently non-strict, because the API has no strict switch.
+- **`ToolConstraint::Grammar`** is rejected, because there is no grammar-constrained decoding.
+- **`ToolConstraint::Strict`** is supported through schema tightening, same as the others.
 
 ## Streaming specifics
 
-Gemini streams JSON chunks over SSE without a `[DONE]` sentinel — the terminal signal is a chunk carrying `finishReason`, and only that completes the turn (a stream without it is truncation). Proxies sometimes split the finish reason and the usage into separate final chunks; the client latches the latest non-empty `usageMetadata` and emits stop+usage together. Tool calls arrive as complete `functionCall` parts — the client emits them as open-fill-close sequences (part start, one JSON delta, part stop) so downstream consumers see the same shape as on other providers. Errors embedded in chunks classify by code/status: 429/503/529 or `RESOURCE_EXHAUSTED`/`UNAVAILABLE` → rate limit; else plain API error.
+Gemini streams JSON chunks over SSE without a `[DONE]` sentinel. Your terminal signal is a chunk carrying `finishReason`, and only that completes the turn, so a stream without it is truncation.
 
----
+Proxies sometimes split the finish reason and the usage into separate final chunks. The client latches the latest non-empty `usageMetadata` and emits stop plus usage together.
+
+Tool calls arrive as complete `functionCall` parts. The client emits them as open-fill-close sequences, meaning part start, one JSON delta, then part stop, so your downstream consumers see the same shape as on other providers.
+
+Errors embedded in chunks classify by code or status. Codes 429, 503, and 529 plus `RESOURCE_EXHAUSTED` and `UNAVAILABLE` become rate limits, and anything else becomes a plain API error.
 
 ## Gotchas
 
-1. **Images dropped** by the converter (same as the other shipped clients).
-2. A non-reasoning model + `include_thoughts(true)` = 400 `INVALID_ARGUMENT`. Match the flag to the model.
-3. Streaming usage from Gemini proxies can be partial — the client latches whatever arrives; `usage` may be `None` behind quirky proxies.
-4. An empty `functionCall.args` normalizes to `{}`; a malformed args value passes through verbatim (visible to you, not hidden).
+1. Images are dropped by the converter, same as the other shipped clients.
+
+2. A non-reasoning model with `include_thoughts(true)` gives you a 400 `INVALID_ARGUMENT`, so match the flag to the model.
+
+3. Streaming usage from Gemini proxies can be partial. The client latches whatever arrives, so your `usage` may be `None` behind a quirky proxy.
+
+4. An empty `functionCall.args` normalizes to `{}`, and a malformed args value passes through verbatim so you see it rather than having it hidden.
 
 ## Related pages
 
-- [Overview](/providers/overview/) · [Structured output](/integration/structured-output/)
+- [Overview](/providers/overview/) is the provider map.
+- [Structured output](/integration/structured-output/) covers the constraint modes.

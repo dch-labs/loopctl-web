@@ -1,15 +1,14 @@
 ---
-title: "Model switch — changing the model mid-session, atomically"
+title: "Model switch"
 sidebar:
   order: 8
 ---
 
+Sometimes you need to change the model while the agent lives. The task turns out harder than you expected, a cheaper model suffices, or the provider retires the old name.
 
-Sometimes you need to change the model while the agent lives: the task turns out harder than expected, a cheaper model suffices, the provider retires the old name. `BareLoop::switch_model(...)` (in `src/engine/bare/model_switch.rs`) does it in one careful sequence so no half-switched state survives a failure.
+`BareLoop::switch_model(...)` does it for you, in `src/engine/bare/model_switch.rs`. It runs one careful sequence, so no half-switched state survives a failure.
 
-This is the *manual*, host-driven switch. The *automatic* one (on provider failures) is the [fallback manager](/safety/fallback/) — different mechanism, same notification.
-
----
+This page covers the manual, host-driven switch you drive from your host. The automatic one, which fires on provider failures, is the [fallback manager](/safety/fallback/). That is a different mechanism with the same notification.
 
 ## The basics
 
@@ -25,11 +24,11 @@ agent.switch_model("claude-sonnet-4-5")
 agent.switch_model("gpt-4o-mini").apply()?;
 ```
 
-`switch_model(...)` returns a small builder — `ModelSwitch` — and nothing happens until `.apply()`. It is deliberately **not** `Clone`: two concurrent switches would race on shared state, and the type system stops you.
+`switch_model(...)` hands you a small builder, `ModelSwitch`, and nothing happens until you call `.apply()`.
 
-`apply()` either fully succeeds or changes nothing.
+You will notice it is deliberately **not** `Clone`. Two concurrent switches would race on shared state, so the type system stops you before that can happen.
 
----
+`apply()` either fully succeeds or changes nothing. You never see a partial switch.
 
 ## What one apply does, in order
 
@@ -44,31 +43,36 @@ flowchart TD
     N --> OK["done"]
 ```
 
-Each step exists for a reason:
+Each step exists for a reason you can act on.
 
-- **Client acceptance first.** Some clients can't hot-swap (their `set_model` returns `false`). The switch aborts *before* touching anything else — no half-updated window, no reset breaker.
-- **The window is optional but usually right.** If the new model has a different context window and you don't update it, the compactor keeps using the old threshold — too small (needless compaction) or too big (overflow risk). `with_context_window(tokens)` when the window differs. Since 0.4.0 the window re-sync converts into the manager's *raw units* under a settled calibration ratio (writing the provider window verbatim left the manager's target and the trigger line in different scales), and a switch also **invalidates the window-probe cache and the run's resolved window** — the next run re-probes for the new model ([context accounting](/engine/context-accounting/)).
-- **The breaker resets because old-model failures are meaningless for the new model.** Failure counts, tripped state — all wiped; the new model starts with a clean slate as primary.
-- **Observers find out.** `on_model_switched(ModelSwitchedContext { from, to })` fires exactly once per apply (a 0.4.0 fix — it previously double-fired for programmatic switches) — your UI or logs can track what's serving.
+- **Client acceptance first.** Some clients cannot hot-swap, because their `set_model` returns `false`. The switch aborts before touching anything else. So you get no half-updated window and no reset breaker.
+- **The window is optional but usually right.** Your new model may carry a different context window. If you do not update it, your compactor keeps using the old threshold. That is either too small, which causes needless compaction, or too big, which risks overflow.
+
+  So call `with_context_window(tokens)` when the window differs.
+- Since 0.4.0 the window re-sync converts into the manager's raw units under a settled calibration ratio. Writing the provider window verbatim left your manager's target and your trigger line in different scales.
+- A switch also **invalidates the window-probe cache and the run's resolved window**. So your next run re-probes for the new model, as [context accounting](/engine/context-accounting/) covers.
+- **The breaker resets because old-model failures are meaningless for the new model.** Failure counts and tripped state are wiped. Your new model starts with a clean slate as primary.
+- **Observers find out.** `on_model_switched(ModelSwitchedContext { from, to })` fires exactly once per apply. That is a 0.4.0 fix, since it previously double-fired for programmatic switches. Your UI or logs can then track what is serving.
 
 ## Requirements
 
-The client must support hot-swapping: `ApiClient::set_model(&str) -> bool`. All shipped provider clients return `true` and swap an internal mutex-guarded model string; `MockApiClient` does too (so you can test switching). The default trait implementation returns `false` — a custom client that doesn't override it rejects every switch cleanly.
+Your client must support hot-swapping, which is `ApiClient::set_model(&str) -> bool`. Every shipped provider client returns `true` and swaps an internal mutex-guarded model string. `MockApiClient` does too, so you can test switching in your own suite.
 
-Per-request overrides (via `RequestOptions::with_model`) are a different, lighter tool: they change one request's model without touching the client — used internally by the fallback machinery. `ModelSwitch` is for "the session's model *is* now X."
+The default trait implementation returns `false`. So a custom client that does not override it rejects every switch, and it rejects them cleanly.
 
----
+Per-request overrides through `RequestOptions::with_model` are a lighter tool. They change one request's model without touching your client, and your fallback machinery uses them internally. `ModelSwitch` answers a different question, which is that your session's model is now X.
 
 ## Gotchas
 
-1. **Call it between runs, not during.** Nothing mechanically explodes, but a switch racing an in-flight run means the run's requests may span two models. The clean pattern: finish or cancel the run, switch, run again.
-2. **Concurrent loops over one shared client**: per-request overrides don't cross-wire (they live on the request, not the client) — but a `ModelSwitch` mutates the shared client for *everyone* using it. One client per loop if their models must differ.
-3. **The fallback manager's `original_model` becomes the new name.** After a switch, "fall back to primary" means the *new* primary — usually exactly what you want, but worth knowing if you kept references to the old name.
-4. **`switch_model` is not gated by the "configure before run" rule** — unlike `set_memory` and friends, it's designed for mid-session use. (Setters panic-in-debug after the machine advanced; switching doesn't.)
+1. **Call it between runs, not during.** Nothing mechanically explodes, but a switch racing an in-flight run means the run's requests may span two models. The clean pattern is to finish or cancel the run, switch, then run again.
 
----
+2. **Concurrent loops over one shared client.** Per-request overrides do not cross-wire, because they live on the request rather than the client. A `ModelSwitch` mutates the shared client for everyone using it. So keep one client per loop when their models must differ.
+
+3. **The fallback manager's `original_model` becomes the new name.** After your switch, "fall back to primary" means the new primary. That is usually what you want. It is worth knowing if you kept references to the old name.
+
+4. **`switch_model` is not gated by the "configure before run" rule**, unlike `set_memory` and friends. It is designed for mid-session use. Your setters panic-in-debug after the machine advanced, while switching does not.
 
 ## Related pages
 
-- [Fallback](/safety/fallback/) — the automatic model switching.
-- [Observers](/extensions/observers/) — `on_model_switched` and friends.
+- [Fallback](/safety/fallback/): the automatic model switching.
+- [Observers](/extensions/observers/): `on_model_switched` and friends.

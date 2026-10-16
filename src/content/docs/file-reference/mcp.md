@@ -1,23 +1,29 @@
 ---
-title: "`src/mcp.rs` — the MCP client side [feature: mcp]"
+title: "src/mcp.rs"
 ---
 
+This file connects you to MCP servers under the `mcp` feature, discovers their tools, and adapts them as loopctl tools. It is built on the `rmcp` library, hidden from your public client surface.
 
-Connect to MCP servers, discover their tools, adapt them as loopctl tools. Built on the `rmcp` library (hidden from the public client surface).
+## Key items
 
-**Key items**
+Your `McpClient` offers `stdio(CommandSpec)`, `http_sse(endpoint)` plus `http_sse_with_client`, `in_process(server)`, and `from_service(...)`. Call `reconnect(&StreamRetryConfig)` when a link drops.
 
-- `McpClient` — `stdio(CommandSpec)`, `http_sse(endpoint)` (+ `http_sse_with_client`), `in_process(server)`, `from_service(...)`; `reconnect(&StreamRetryConfig)`.
-- `CommandSpec { program, args, env, cwd }` — struct-literal construction.
-- `McpToolProvider::connect(client, name_prefix)` — snapshots the server's tools; `register_into(&mut registry)`; `with_call_timeout` (default 60s); `refresh()`; `tools()`; `client()`.
-- `McpTool` — the adapted `Tool`: server schema verbatim, `is_concurrency_safe` false, `is_read_only` from `readOnlyHint`.
-- `McpError` — Handshake / Protocol / EmptyToolError.
+`CommandSpec { program, args, env, cwd }` uses struct-literal construction, with no builder to chase.
 
-**Behavior notes**
+`McpToolProvider::connect(client, name_prefix)` snapshots the server's tools for you. Then use `register_into(&mut registry)`, `with_call_timeout` which defaults to 60s, `refresh()`, `tools()`, and `client()`.
 
-- The prefix namespaces names client-side (`prefix__tool`); the un-prefixed name is what `tools/call` forwards.
-- Call timeout exceeded → **soft error** naming tool and budget — a wedged server costs one result, not the loop.
-- Stdio children die with the client handle (rmcp kills, 3s grace); in-process needs a tokio runtime and can't reconnect.
-- Refresh doesn't retro-update already-registered tools; duplicate names after prefixing collapse (first kept).
+`McpTool` is your adapted `Tool`: server schema verbatim, `is_concurrency_safe` false, and `is_read_only` taken from `readOnlyHint`.
+
+`McpError` covers Handshake, Protocol, and EmptyToolError.
+
+## Behavior notes
+
+Your prefix namespaces names client-side as `prefix__tool`, and the un-prefixed name is what `tools/call` forwards.
+
+Exceed the call timeout and you get a soft error naming the tool and its budget, so a wedged server costs you one result, not the loop.
+
+Stdio children die with your client handle, since rmcp kills them with a 3s grace. In-process needs a tokio runtime and cannot reconnect.
+
+Refresh does not retro-update tools you already registered, and duplicate names after prefixing collapse with the first kept.
 
 Deep dive: [MCP](/integration/mcp/).

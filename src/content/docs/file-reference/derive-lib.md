@@ -1,22 +1,63 @@
 ---
-title: "`crates/derive/src/` — the `#[derive(Tool)]` crate [feature: derive]"
+title: "crates/derive/src/"
 ---
 
+`loopctl-derive` is a companion crate in your Cargo workspace. It implements `#[derive(Tool)]`.
 
-The companion crate `loopctl-derive` (a Cargo workspace member): three files that turn a `Deserialize` struct into a full `Tool` impl.
+Three files turn a `Deserialize` struct into a full `Tool` impl you can register.
 
-**Files**
+The crate exists only when you enable the `derive` feature.
 
-- [`lib.rs`](#librs) — the proc-macro entry point: `#[proc_macro_derive(Tool, attributes(tool))]`, re-exported by loopctl under the `derive` feature.
-- [`attr.rs`](#attrrs) — attribute parsing: container keys (`name`, `description`, `read_only`, `concurrency_safe`, `system_prompt`, `handler`, `allow_extra`) and field keys (`name`, `description`, `skip`, `default`); serde-rename agreement checking; serde `rename_all`/`default` parity (0.3.2 — the split `rename_all` form follows the deserialization side, flag keys reject misuse with a named error); the snake-case/acronym-aware name derivation; later-attribute-wins.
-- [`expand.rs`](#expandrs) — code generation: the `impl Tool` (name/description literals, statically emitted `json!` schema, `call` that clones the `ToolContext`, deserializes, and dispatches to the handler — default `run`), the Rust-type→JSON-Schema map, the `Option`/serde-default required-list rules, and every spanned error case.
+## Files
 
-**Behavior notes**
+- [`lib.rs`](#librs): the proc-macro entry point.
+- [`attr.rs`](#attrrs): attribute parsing.
+- [`expand.rs`](#expandrs): code generation.
 
-- All diagnostics are spanned `syn::Error`s → normal compile errors at the offending token; the macro itself never panics.
-- Generated code uses `loopctl::__private::serde_json` — downstream crates need no direct serde_json dependency.
-- The UI test suite (`crates/derive/tests/ui/` with trybuild goldens) pins every error message, including the 0.3.2 serde-parity fixtures (`serde_flatten`, `serde_transparent`, `unknown_rename_all`, …).
+### lib.rs
+
+The proc-macro entry point is `#[proc_macro_derive(Tool, attributes(tool))]`.
+It is re-exported by loopctl under the `derive` feature.
+
+### attr.rs
+
+Reads the container keys `name`, `description`, `read_only`, `concurrency_safe`,
+`system_prompt`, `handler`, and `allow_extra`. Reads the field keys `name`,
+`description`, `skip`, and `default`.
+
+It checks that the derive keys agree with the serde renames. Added in 0.3.2: the
+split `rename_all` form follows the deserialization side, and flag keys reject
+misuse with a named error.
+
+Name derivation is snake-case and acronym-aware. When the same key appears twice,
+the later attribute wins.
+
+### expand.rs
+
+It generates your `impl Tool`: the name and description literals, a statically emitted `json!` schema, and a `call` you can invoke.
+
+That `call` clones the `ToolContext`, deserializes your input, and dispatches to the handler, which defaults to `run`.
+
+It also generates the Rust-type to JSON-Schema map, plus the `Option` and serde-default rules for your required list.
+
+Every error case carries a span so you can find it.
+
+## Compile-time guarantees
+
+Every diagnostic is a spanned `syn::Error`, so it surfaces as a normal compile
+error at the offending token. The macro itself never panics.
+
+Generated code reaches `serde_json` through `loopctl::__private::serde_json`, so
+downstream crates need no direct serde_json dependency.
+
+The UI test suite pins every error message. It lives in
+`crates/derive/tests/ui/` with trybuild goldens. Added in 0.3.2: the serde-parity
+fixtures `serde_flatten`, `serde_transparent`, and `unknown_rename_all`.
+
+Added in 0.4.0: the matrix is at full breadth, with 28 compile-fail cases and 3 pass cases.
+
+A consumer-hygiene fixture in `crates/derive/tests/consumer/` builds a downstream crate that depends on the macro.
+
+It caught the hard-coded `loopctl::` paths, so a renamed dependency now works for you.
 
 Deep dive: [The derive macro](/integration/derive-macro/).
-
-- Since 0.4.0 the matrix is at full breadth (28 compile-fail + 3 pass cases) and a consumer-hygiene fixture (`crates/derive/tests/consumer/`) builds a downstream crate depending on the macro — which caught the hard-coded `loopctl::` paths: a renamed dependency now works.

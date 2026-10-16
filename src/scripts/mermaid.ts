@@ -9,39 +9,43 @@ const PLUS_ICON =
 const RESET_ICON =
   '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>';
 
+/* Mermaid bakes colours into the SVG from these values, so it cannot read the
+ * stylesheet — this is a second copy of the light palette and must be kept in
+ * step with the `html[data-kb]` block in src/styles/docs.css. Flat and ink-only:
+ * nodes differ by fill weight, hairlines carry the structure, no accent fill. */
 const paperVars: ThemeVars = {
-  background: '#f3ebd9',
-  primaryColor: '#eee0c0',
-  primaryTextColor: '#1c1813',
-  primaryBorderColor: '#8a2317',
-  secondaryColor: '#efe5cc',
-  secondaryTextColor: '#1c1813',
-  secondaryBorderColor: '#847a64',
-  tertiaryColor: '#faf3e2',
-  tertiaryTextColor: '#1c1813',
-  tertiaryBorderColor: '#c9be9f',
-  lineColor: '#847a64',
-  textColor: '#1c1813',
-  titleColor: '#8a2317',
-  clusterBkg: '#faf3e2',
-  clusterBorder: '#c9be9f',
-  edgeLabelBackground: '#f3ebd9',
-  noteBkgColor: '#a87714',
-  noteTextColor: '#f3ebd9',
-  noteBorderColor: '#a87714',
-  actorBkg: '#e9dec3',
-  actorTextColor: '#1c1813',
-  actorBorder: '#4a4338',
-  actorLineColor: '#847a64',
-  signalColor: '#4a4338',
-  signalTextColor: '#1c1813',
-  labelBoxBkgColor: '#e9dec3',
-  labelBoxBorderColor: '#847a64',
-  labelTextColor: '#1c1813',
-  loopTextColor: '#1c1813',
-  activationBkgColor: '#faf3e2',
-  activationBorderColor: '#847a64',
-  sequenceNumberColor: '#f3ebd9',
+  background: '#fbfaf8',
+  primaryColor: '#ffffff',
+  primaryTextColor: '#1a1814',
+  primaryBorderColor: '#dedad2',
+  secondaryColor: '#f7f6f2',
+  secondaryTextColor: '#1a1814',
+  secondaryBorderColor: '#dedad2',
+  tertiaryColor: '#f1efe9',
+  tertiaryTextColor: '#1a1814',
+  tertiaryBorderColor: '#dedad2',
+  lineColor: '#7f7869',
+  textColor: '#1a1814',
+  titleColor: '#1a1814',
+  clusterBkg: '#f7f6f2',
+  clusterBorder: '#dedad2',
+  edgeLabelBackground: '#fbfaf8',
+  noteBkgColor: '#f1efe9',
+  noteTextColor: '#1a1814',
+  noteBorderColor: '#dedad2',
+  actorBkg: '#ffffff',
+  actorTextColor: '#1a1814',
+  actorBorder: '#dedad2',
+  actorLineColor: '#dedad2',
+  signalColor: '#46413a',
+  signalTextColor: '#1a1814',
+  labelBoxBkgColor: '#f1efe9',
+  labelBoxBorderColor: '#dedad2',
+  labelTextColor: '#1a1814',
+  loopTextColor: '#1a1814',
+  activationBkgColor: '#f1efe9',
+  activationBorderColor: '#dedad2',
+  sequenceNumberColor: '#46413a',
 };
 
 const dimVars: ThemeVars = {
@@ -93,14 +97,30 @@ let resizeWatchInstalled = false;
 
 const isDark = () => document.documentElement.dataset.theme === 'dark';
 
+/* Mermaid bakes its face and label size into the SVG at render time, so it
+ * cannot follow the stylesheet: both are read off the rendered page at init
+ * (and again on every theme re-render). docs.css owns the values — the
+ * fallbacks here only cover the sheet not being applied yet. Size is read from
+ * the prose itself rather than assumed, so diagram labels land on the same body
+ * size as the paragraph above them. */
+const kbFontFamily = () =>
+  getComputedStyle(document.documentElement).getPropertyValue('--font-display').trim() ||
+  "'Lucida Console', 'DejaVu Sans Mono', ui-monospace, Menlo, Consolas, monospace";
+
+const kbFontSize = () => {
+  const prose = document.querySelector<HTMLElement>('.sl-markdown-content');
+  const px = parseFloat(getComputedStyle(prose ?? document.body).fontSize);
+  return `${Number.isFinite(px) && px > 0 ? px : 16}px`;
+};
+
 const mermaidConfig = () => ({
   startOnLoad: false,
   securityLevel: 'strict' as const,
   suppressErrorRendering: true,
-  fontFamily: "'Newsreader Variable', Georgia, serif",
+  fontFamily: kbFontFamily(),
   flowchart: { curve: 'basis' as const, diagramPadding: 14, nodeSpacing: 65, rankSpacing: 80 },
   theme: 'base' as const,
-  themeVariables: isDark() ? dimVars : paperVars,
+  themeVariables: { fontSize: kbFontSize(), ...(isDark() ? dimVars : paperVars) },
 });
 
 const fitCache = new WeakMap<SVGSVGElement, true>();
@@ -267,13 +287,6 @@ function enablePanning(view: HTMLElement, figure: HTMLElement) {
   };
   view.addEventListener('pointerup', stop);
   view.addEventListener('pointercancel', stop);
-  const panBy = (dx: number, dy: number) => {
-    figure.dataset.panX = String(Number(figure.dataset.panX ?? '0') + dx);
-    figure.dataset.panY = String(Number(figure.dataset.panY ?? '0') + dy);
-    const svgEl = view.querySelector('svg');
-    if (svgEl) applyView(figure, svgEl as SVGSVGElement, Number(figure.dataset.zoom ?? '1'));
-  };
-
   const zoomBy = (factor: number) => {
     const next = Math.min(3, Math.max(0.5, Number(figure.dataset.zoom ?? '1') * factor));
     figure.dataset.zoom = String(next);
@@ -289,17 +302,18 @@ function enablePanning(view: HTMLElement, figure: HTMLElement) {
     if (plus) plus.disabled = next >= 3;
   };
 
+  // There is deliberately no plain-wheel case. Fingers on a diagram should
+  // scroll the page the way they do over prose; this handler used to pan the
+  // diagram instead, and swallowed the gesture outright once the diagram was
+  // zoomed (measured: 0px of page scroll for any wheel). Zoom stays on the
+  // modifier chord, which is what a trackpad pinch reports, and on the +/−
+  // buttons; moving the diagram stays a left-mouse-button drag, which the
+  // pointer handlers above already insist on.
   view.addEventListener('wheel', (e) => {
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
-      const units = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
-      zoomBy(Math.exp(-units * 0.0022));
-      return;
-    }
-    if (e.deltaX !== 0 || view.scrollHeight > view.clientHeight || view.scrollWidth > view.clientWidth) {
-      e.preventDefault();
-      panBy(e.deltaX, e.deltaY);
-    }
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    const units = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+    zoomBy(Math.exp(-units * 0.0022));
   }, { passive: false });
 }
 

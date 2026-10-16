@@ -1,24 +1,43 @@
 ---
-title: "`src/compact.rs` — the `ContextManager`"
+title: "src/compact.rs"
 ---
 
+This file is the policy half of compaction. It owns your compactor plus the window, threshold, target size, and token counter, and it classifies every pass.
 
-The policy half of compaction: owns the compactor plus window, threshold, target size, and the token counter; classifies every pass.
+## Key items
 
-**Key items**
+`ContextManager::new(compactor)` takes builders: `with_context_window` at 200k, `with_threshold` at 80 clamped 1 to 100, and `with_auto_compact` true.
 
-- `ContextManager::new(compactor)` + builders `with_context_window` (200k), `with_threshold` (80, clamped 1–100), `with_auto_compact` (true), `with_compact_target` (`Threshold` default), `with_compact_target_pct` (**15** since 0.4.0 — of the threshold line), `with_token_counter`.
-- `TokenCounter` trait + `HeuristicTokenCounter` — 4 chars/token + 20 chars/message overhead; images 256 flat; deliberately over-estimates (~±30%). `RatioTokenCounter` presets since 0.3.1.
-- `CompactSizing { reserved_tokens, target_override }` (0.4.0) — the sizing argument every pass carries: the reserve the landing must leave room for, and the optional one-pass target override (the overflow-salvage arm's strictly-under-the-refused-payload target).
-- Entry points: `compact_with_reason(messages, turn, reason, sizing)` — the engine's path; `ensure_context_fits` (host path, checks its own threshold with `>=`); `compact_manual`.
-- `should_compact(used)` / `is_emergency(used)` / `compact_reason(used)` — the manager's own trigger view.
-- `build_telemetry(...)` — an instance method since 0.4.0, reading the manager's own window.
+It also takes `with_compact_target` with `Threshold` as default, `with_compact_target_pct`, and `with_token_counter`.
 
-**Behavior notes**
+That target percentage is 15 of the threshold line since 0.4.0, where it used to be 40.
 
-- **Measurements decide, hints describe:** the manager re-counts the compactor's output with its own counter and overwrites the self-reported numbers.
-- Classification: same message count and no shrink → `NoAction`; **an over-target landing declines the same way (0.4.0)**; result over window (minus reserve) → `ContextOverflow`; else `Compacted` with normalized figures.
-- `CompactSizing.reserved_tokens` (per-request overhead + a deferred turn's transients) shrinks both the target and the fit check.
-- One counter everywhere: the driver reuses the manager's counter for trigger estimates.
+The `TokenCounter` trait comes with `HeuristicTokenCounter`, which counts 4 chars per token plus 20 chars of message overhead and prices images at 256 flat.
 
-Deep dive: [Compaction](/engine/compaction/).
+That heuristic deliberately over-estimates by about plus or minus 30%. `RatioTokenCounter` has been available since 0.3.1.
+
+`CompactSizing { reserved_tokens, target_override }` arrived in 0.4.0 and is the sizing argument every pass carries.
+
+It holds the reserve your landing must leave room for, and the optional one-pass target override, which is the overflow-salvage arm's strictly-under-the-refused-payload target.
+
+Your entry points are `compact_with_reason(messages, turn, reason, sizing)` for the engine's path, `ensure_context_fits` for the host path, and `compact_manual`.
+
+Note that your host path checks its own threshold with `>=`.
+
+`should_compact(used)`, `is_emergency(used)`, and `compact_reason(used)` give you the manager's own trigger view.
+
+`build_telemetry(...)` became an instance method in 0.4.0, so it reads your manager's own window.
+
+## Behavior notes
+
+Measurements decide and hints describe. Your manager re-counts the compactor's output with its own counter and overwrites the self-reported numbers.
+
+Classification works like this: same message count and no shrink is `NoAction`, and an over-target landing declines the same way since 0.4.0.
+
+A result over your window minus reserve is `ContextOverflow`, and anything else is `Compacted` with normalized figures.
+
+`CompactSizing.reserved_tokens` covers per-request overhead plus a deferred turn's transients, and it shrinks both your target and your fit check.
+
+One counter runs everywhere, because your driver reuses the manager's counter for trigger estimates.
+
+For the deep dive, see [Compaction](/engine/compaction/).

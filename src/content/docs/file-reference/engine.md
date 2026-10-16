@@ -1,17 +1,23 @@
 ---
-title: "`src/engine.rs` — the engine module root"
+title: "src/engine.rs"
 ---
 
+This file is the re-export root for the whole engine, holding `pub use bare::*; pub use core::*;`.
 
-The re-export root for the whole engine: `pub use bare::*; pub use core::*;` — so `loopctl::engine::{BareLoop, RunConfig, Loop, ...}` all resolve from here.
+So when you write `loopctl::engine::{BareLoop, RunConfig, Loop, ...}`, every name resolves from here.
 
-**Key items**
+## Key items
 
-- `engine::BareLoop` — the driver (from `bare`).
-- `engine::core::{Loop, Run, Session, Turn, RunConfig, TurnMode, LoopMachine, MachineState, MachineStep, MachineOutcome, MachinePolicy}` (from `core`).
+`engine::BareLoop` is your driver, and it comes from `bare`.
 
-**Behavior notes**
+`engine::core` gives you `Loop`, `Run`, `Session`, `Turn`, `RunConfig`, and `TurnMode`.
 
-- Two namespaces behind one door: `engine::core` holds the brain-side types, `engine::bare` the driver — most user code imports from `engine` directly and never notices.
+It also gives you `LoopMachine`, `MachineState`, `MachineStep`, `MachineOutcome`, and `MachinePolicy`, all from `core`.
 
-Deep dives: [state machine](/engine/state-machine/) · [driver](/engine/driver-loop/). Sibling root: [engine-core.md](/file-reference/engine-core/).
+## Behavior notes
+
+Two namespaces sit behind one door. `engine::core` holds the brain-side types, and `engine::bare` holds the driver.
+
+Most user code imports from `engine` directly, so the split never notices a change to your imports.
+
+For the deep dives, see [the state machine](/engine/state-machine/) and [the driver](/engine/driver-loop/). For the sibling root, see [engine-core](/file-reference/engine-core/).

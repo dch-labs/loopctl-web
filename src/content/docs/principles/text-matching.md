@@ -1,19 +1,26 @@
 ---
-title: "Text matching — similarity without understanding"
+title: "Text matching"
 sidebar:
   order: 12
 ---
 
+Several places in your agent must ask a fuzzy question: "did the model mean `read_file` when it asked for `read_fille`?"
 
-Several places in loopctl must ask a fuzzy question: *"did the model mean `read_file` when it asked for `read_fille`?"* or *"which memory entries have anything to do with this query?"* There is no language model available to answer — the engine is *made of* the model's plumbing, and these questions must be answered instantly, offline, every call.
+Or: "which of my memory entries have anything to do with this query?" There is no language model available to answer.
 
-The answer is a family of **character-and-word tricks**: similarity measures that understand nothing about meaning but are fast, dependency-free, and wrong in known, bounded ways. loopctl uses three of them (plus Jaccard, covered with [convergence detection](/principles/measuring-repetition/)). This page explains each with its real formula and a worked example.
+Your engine is made of the model's plumbing, and these questions must be answered instantly, offline, on every call.
 
----
+The answer is a family of character-and-word tricks: similarity measures that understand nothing about meaning but are fast, dependency-free, and wrong in known, bounded ways.
 
-## 1. Longest common subsequence — "did you mean...?"
+loopctl uses three of them for you, plus Jaccard, which is covered with [convergence detection](/principles/measuring-repetition/).
 
-When a dispatched call misses the registry, `UnknownToolMiddleware` appends a suggestion: `Did you mean 'read_file'?` The similarity behind it is the **longest common subsequence** (LCS) — the longest sequence of characters that appears in *both* strings, in order, with gaps allowed:
+Each one is explained below with its real formula and a worked example you can check by hand.
+
+## 1. Longest common subsequence
+
+When your dispatched call misses the registry, your `UnknownToolMiddleware` appends a suggestion: `Did you mean 'read_file'?`
+
+The similarity behind it is the **longest common subsequence** (LCS): the longest sequence of characters that appears in both your strings, in order, with gaps allowed:
 
 ```text
 "read_fille"   r e a d _ f i l l e
@@ -21,14 +28,16 @@ When a dispatched call misses the registry, `UnknownToolMiddleware` appends a su
 LCS:           r e a d _ f i l   e   → length 9 of a max length of 10
 ```
 
-"Subsequence, not substring" is the point: the extra `l` in the typo doesn't break the match, because matching may skip it. The similarity score:
+"Subsequence, not substring" is the point: the extra `l` in your typo does not break the match, because matching may skip it.
+
+Here is your similarity score:
 
 ```text
 similarity = LCS_length / max(len_a, len_b)        (after lowercasing)
            + 0.1 × (shared leading characters / max length)   ← prefix bonus
 ```
 
-The **prefix bonus** rewards names that start the same way — `read_fille` vs `read_file` shares 8 leading characters, so:
+The **prefix bonus** rewards names that start the same way. Your `read_fille` and `read_file` share 8 leading characters, so:
 
 ```text
 LCS part:      9/10 = 0.90
@@ -39,11 +48,15 @@ vs "write_file":  LCS = 7 ("r_e_file"), prefix = 0 → 0.70   (also above
                   threshold, but 0.98 wins — best match is suggested)
 ```
 
-The middleware suggests the **best** scoring registered name, but only above a threshold (default **0.4**) — below it, silence beats a nonsense suggestion.
+Your middleware suggests the best-scoring registered name, but only above a threshold, default **0.4**. Below it, silence beats a nonsense suggestion for you.
 
-### How LCS is computed — the classic dynamic-programming trick
+### How LCS is computed
 
-Finding the LCS by trying every subsequence would explode combinatorially. The insight that makes it cheap: *the LCS of two strings can be built from the LCS of their prefixes.* Fill a table where cell `(i, j)` = LCS length of the first `i` characters of A and first `j` of B:
+This is the classic dynamic-programming table. Finding the LCS by trying every subsequence would explode combinatorially.
+
+The insight that makes it cheap for you: the LCS of two strings can be built from the LCS of their prefixes.
+
+Fill a table where cell `(i, j)` is the LCS length of the first `i` characters of A and the first `j` of B:
 
 ```text
             f   i   l   e          ← B = "file"
@@ -54,9 +67,11 @@ Finding the LCS by trying every subsequence would explode combinatorially. The i
     e   0   1   2   3   4          else        → max(up, left)
 ```
 
-Each cell costs constant work, so the whole table is O(len × len) time — and since only the previous *row* is ever read, only two rows are kept: memory O(min(len)). Tool names are short, so this runs in nanoseconds; the same algorithm scales to diff tools on whole files.
+Each cell costs constant work, so your whole table is O(len × len) time. Only the previous row is ever read, so only two rows are kept: memory O(min(len)).
 
-Run the full matrix for the typo pair `"fille"` vs `"file"` — the double `l` surviving is visible in the numbers:
+Your tool names are short, so this runs in nanoseconds. The same algorithm scales to diff tools over whole files.
+
+Run the full matrix yourself for the typo pair `"fille"` and `"file"`. The double `l` surviving is visible in the numbers:
 
 ```text
                   f   i   l   e        ← B = "file" (columns)
@@ -69,9 +84,11 @@ A =     l     0   1   2   3   3        the second 'l' row repeats the
                                       matching 'e' at the end can: 3 → 4
 ```
 
-Bottom-right: LCS = 4, so `4/5 = 0.80`, plus a prefix bonus of `0.1 × 3/5 = 0.06` (they share `f`, `i`, `l` up front) → **0.86**, comfortably above the 0.4 threshold.
+Bottom-right: LCS = 4, so `4/5 = 0.80`. Your prefix bonus adds `0.1 × 3/5 = 0.06`, because they share `f`, `i`, `l` up front.
 
-And `similarity()`, end to end — the exact order of operations:
+That is **0.86**, comfortably above your 0.4 threshold.
+
+And `similarity()`, end to end, in its exact order of operations:
 
 ```text
 similarity(a, b):
@@ -84,11 +101,15 @@ similarity(a, b):
   6. clamp to [0, 1]
 ```
 
-The suggestion itself is then a max-search over registered names: the best scorer wins, and it is *suggested at all* only if it clears the threshold (`with_threshold` — lower it for more suggestions and more false positives, raise it for fewer of each).
+The suggestion itself is then a max-search over your registered names. The best scorer wins, and it is suggested at all only if it clears your threshold.
 
-## 2. Word overlap — "is this memory relevant?"
+You tune it with `with_threshold`: lower it for more suggestions and more false positives, raise it for fewer of each.
 
-The built-in memory store ([memory](/extensions/memory/)) must rank which stored entries a new question should surface. No embeddings — just counting shared words. Each candidate entry scores:
+## 2. Word overlap
+
+Your built-in memory store ([memory](/extensions/memory/)) must rank which stored entries a new question of yours should surface. No embeddings, only counting shared words.
+
+Each candidate entry scores:
 
 ```text
 score = 0.5 × entry.relevance                                  ← its stored importance
@@ -97,14 +118,14 @@ score = 0.5 × entry.relevance                                  ← its stored i
       + 0.1                                                     ← baseline
 ```
 
-Worked example — query `"deploy the blue service"`, two entries:
+Worked example for you. Query `"deploy the blue service"`, two entries:
 
 | Entry | relevance | word hits | tag? | score |
 |---|---|---|---|---|
 | `"deploys go to the blue cluster"` (tags: infra) | 0.8 | deploy, the, blue → 3/4 = 0.75 | no | 0.5×0.8 + 0.4×0.75 + 0 + 0.1 = **0.80** |
 | `"meetings are on tuesdays"` (tags: deploy) | 1.0 | the → 1/4 = 0.25 | yes | 0.5×1.0 + 0.4×0.25 + 0.3 + 0.1 = **1.00** |
 
-The scorer, line by line — including the two details the formula alone doesn't show:
+Your scorer, line by line, including the two details the formula alone does not show:
 
 ```text
 retrieve(query, limit):
@@ -120,19 +141,41 @@ retrieve(query, limit):
   4. sort by score, descending; take the first `limit`
 ```
 
-The substring detail in step 3 is doing quiet work: `"deploy"` matches `"deploys"`, `"deployed"`, `"deployment"` — word-*stemming* for free, at the cost of also matching `"deployed"` inside unrelated words. And the snapshot discipline in step 2 is the whole "cheap store" trick: scoring a large snapshot costs nothing to writers, so retrieve stays lock-friendly no matter how slow the scoring grows.
+The substring detail in step 3 is doing quiet work for you: `"deploy"` matches `"deploys"`, `"deployed"` and `"deployment"`.
 
-Two honest limits in the built-in store, deliberate: matching is transparent word overlap — never semantic — and popularity and forgetting live outside the scorer. A retrieval that actually matched records an access stamp, and the consolidation pass (0.3.2: decay, merge, prune) folds those stamps into `access_count` and decays relevance by category — so being retrieved rewards an entry, but the *matching itself* stays word counting, small enough to verify by reading.
+That is word stemming for free, at the cost of also matching `"deployed"` inside unrelated words.
 
-Notice what the example exposes: the tag bonus and high relevance let a *less relevant* entry win. That's the honest character of word counting — it measures **overlap, not meaning**, and the weights are where you tune what "relevant" means. Matching is case-insensitive substring containment (a query word counts if it appears *anywhere* in the entry text). The `+0.1` baseline guarantees nothing scores exactly zero, so a top-k retrieval always has a full page of candidates to return, even on weak matches.
+The snapshot discipline in step 2 is the whole cheap-store trick: scoring a large snapshot costs your writers nothing, so your retrieve stays lock-friendly however slow the scoring grows.
 
-When overlap isn't enough, the store is a trait — a vector database with embedding similarity slots in behind the same three verbs, and the engine never knows the difference.
+Two limits in your built-in store are there on purpose. Matching is transparent word overlap and never semantic, and popularity and forgetting live outside your scorer.
 
-## 3. Balanced-brace scanning — "find the JSON in the prose"
+A retrieval of yours that actually matched records an access stamp, and the consolidation pass (0.3.2: decay, merge, prune) folds those stamps into `access_count`.
 
-Models asked for JSON sometimes answer with the JSON *embedded in chit-chat*: `Sure! {"answer": 42} hope that helps`. The lenient structured-output extractor ([structured output](/integration/structured-output/)) recovers it by scanning the text for a `{...}` block whose braces balance — tracking depth (a `{` inside a string literal doesn't count), taking the first block that opens and closes evenly. First try the strict paths (a tool-call argument, then whole-text JSON parse); only when those fail does the scan run. Cheap, order-sensitive, wrong only in prose that *contains* unbalanced-looking braces — which prose rarely does.
+It also decays relevance by category, so being retrieved rewards an entry. The matching itself stays word counting, small enough for you to verify by reading.
 
-## Why order matters — and when it must not
+Notice what the example exposes: the tag bonus and high relevance let a less relevant entry win. That is the honest character of word counting.
+
+It measures overlap, not meaning, and the weights are where you tune what "relevant" means.
+
+Matching is case-insensitive substring containment: your query word counts if it appears anywhere in the entry text.
+
+The `+0.1` baseline guarantees nothing scores exactly zero, so your top-k retrieval always has a full page of candidates to return, even on weak matches.
+
+When overlap is not enough for you, the store is a trait. A vector database with embedding similarity slots in behind the same three verbs, and your engine never knows the difference.
+
+## 3. Balanced-brace scanning
+
+Your models asked for JSON sometimes answer with the JSON embedded in chit-chat: `Sure! {"answer": 42} hope that helps`.
+
+Your lenient structured-output extractor ([structured output](/integration/structured-output/)) recovers it by scanning the text for a `{...}` block whose braces balance.
+
+It tracks depth, so a `{` inside a string literal does not count, and it takes the first block that opens and closes evenly.
+
+Try the strict paths first: a tool-call argument, then a whole-text JSON parse. Your scan runs only when those fail.
+
+It is cheap, order-sensitive, and wrong only in prose that contains unbalanced-looking braces, which prose rarely does.
+
+## Why order matters
 
 Line the four matchers up and a design decision falls out:
 
@@ -143,15 +186,22 @@ Line the four matchers up and a design decision falls out:
 | Jaccard (sets) | words | no (sets) | convergence | rewording must not hide repetition |
 | Brace balance | characters | **yes** — nesting is the signal | JSON extraction | structure is literal |
 
-**The rule the table encodes: choose your insensitivity deliberately.** When "same characters, same order-ish" means *same intent* (typos, JSON), use an order-aware matcher. When intent survives rewording (topics, repeated answers), throw order away — an order-sensitive matcher on reworded text would miss everything. Each loopctl matcher sits on the side of that line its question requires.
+The rule the table encodes: choose your insensitivity deliberately. When "same characters, same order-ish" means same intent, as with typos and JSON, use an order-aware matcher.
 
-All four share the family virtues: no model calls, no dependencies, sub-millisecond, and failure modes you can name in one sentence. For the questions where that's not enough, the trait boundaries (memory store, extractors) are where heavier machinery plugs in.
+When your intent survives rewording, as with topics and repeated answers, throw order away. An order-sensitive matcher on reworded text would miss everything.
 
----
+Each loopctl matcher sits on the side of that line its question requires.
+
+All four share the family virtues: no model calls, no dependencies, sub-millisecond, and failure modes you can name in one sentence.
+
+For the questions where that is not enough for you, the trait boundaries (memory store, extractors) are where heavier machinery plugs in.
 
 ## Related pages
 
-- [Memory](/extensions/memory/) — the store the word-overlap scorer serves.
-- [Middleware](/safety/middleware/) — where the suggestion layer sits.
-- [Windows, averages, and similarity](/principles/measuring-repetition/) — Jaccard's full story.
-- [Structured output](/integration/structured-output/) — the strict paths around the brace scanner.
+- [Memory](/extensions/memory/): the store your word-overlap scorer serves.
+
+- [Middleware](/safety/middleware/): where your suggestion layer sits.
+
+- [Windows, averages, and similarity](/principles/measuring-repetition/): Jaccard's full story.
+
+- [Structured output](/integration/structured-output/): the strict paths around your brace scanner.

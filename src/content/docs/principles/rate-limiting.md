@@ -1,30 +1,37 @@
 ---
-title: "Rate limiting — spending requests wisely"
+title: "Rate limiting"
 sidebar:
   order: 10
 ---
 
+Your model provider meters you: so many requests per minute, and a pointed error (HTTP **429**, "too many requests") when you exceed it.
 
-Model providers meter you: so many requests per minute, and a pointed error (HTTP **429**, "too many requests") when you exceed it. A client that ignores the meter gets throttled, then slowed further, then cut off. **Rate limiting** is the client-side discipline of spending requests at a rate the provider will accept — proactively, before the 429, and reactively, once the server has spoken. loopctl has both layers; this page explains the machinery of each.
+A client of yours that ignores the meter gets throttled, then slowed further, then cut off.
 
----
+**Rate limiting** is the discipline of spending requests at a rate your provider will accept.
 
-## The token bucket — a budget that refills
+Do it proactively, before the 429, and reactively, once the server has spoken.
 
-The classic rate-limiting algorithm, and the one loopctl uses (`src/stream/rate_limit.rs`), models a **bucket of tokens**:
+loopctl gives you both layers, and this page explains the machinery of each.
 
-- The bucket holds up to **C** tokens (its *capacity*).
-- Every request **takes one token**. No token, no request.
-- Tokens **refill continuously** at rate **r** per second, up to the brim — never beyond.
+## The token bucket
 
-Two knobs, two behaviors:
+The classic rate-limiting algorithm, and the one your loopctl uses (`src/stream/rate_limit.rs`), models a **bucket of tokens**:
+
+- Your bucket holds up to **C** tokens, its capacity.
+
+- Every one of your requests **takes one token**. No token, no request.
+
+- Your tokens **refill continuously** at rate **r** per second, up to the brim, never beyond.
+
+Two knobs, two behaviors for you:
 
 ```text
 capacity C  →  BURST: how much you can do back-to-back right now
 refill r    →  SUSTAINED: how much you can do forever
 ```
 
-Worked example — the default constructor's shape, 60 requests/minute: C = 60 tokens, r = 1 per second.
+Worked example for you, using the default constructor's shape of 60 requests per minute: C = 60 tokens, r = 1 per second.
 
 ```text
 t=0:00  bucket full (60) → fire 20 requests → 40 left
@@ -34,13 +41,21 @@ sustained rate: forever, 1 request per second;
                never more than 60 in any single burst from empty.
 ```
 
-The bucket *is* a savings account: it lets you save up capacity for a burst, then re-earns it at a fixed wage. Compare the naive alternative — "at most 1 request per second" — which forbids legitimate bursts and wastes capacity you've earned but not spent.
+Your bucket is a savings account. It lets you save up capacity for a burst, then re-earns it at a fixed wage.
 
-**The lazy-refill trick.** An obvious implementation runs a background task dripping tokens into the bucket. loopctl does it with *no timer at all*: each `take()` looks at the wall clock, computes how much time elapsed since the last refill, adds `elapsed × r` tokens (capped at C), and updates the bookmark. The math is identical; the moving parts are zero. (One refinement: when the bucket is *full*, the bookmark only advances to the moment it became full — tokens you couldn't have stored were never yours.)
+Compare the naive alternative, "at most 1 request per second", which forbids legitimate bursts and wastes capacity you have earned but not spent.
+
+**The lazy-refill trick.** An obvious implementation runs a background task dripping tokens into your bucket. loopctl does it with no timer at all.
+
+Each `take()` of yours looks at the wall clock, computes how much time elapsed since the last refill, adds `elapsed × r` tokens capped at C, and updates the bookmark.
+
+The math is identical, and your moving parts are zero. One refinement: when your bucket is full, the bookmark only advances to the moment it became full.
+
+Tokens you could not have stored were never yours.
 
 ## The bucket, computed
 
-`take()` in pseudocode — the entire algorithm, including the fill-point refinement:
+Your `take()` in pseudocode, the entire algorithm including the fill-point refinement:
 
 ```text
 take():
@@ -58,13 +73,19 @@ take():
         return Wait(time until the next whole token)
 ```
 
-Why the refinement matters: without it, a bucket that sat full for an hour would *bank* that hour of refills it never needed — and "refill rate r" would silently become "refill rate r, plus whatever accumulated while idle." Anchoring `last_refill` to the brim moment means idle time earns nothing, exactly as the contract ("capacity C burst, r sustained") promises.
+Why the refinement matters: without it, a bucket that sat full for an hour would bank that hour of refills it never needed.
 
-Loopctl's concrete numbers: `RateLimiter::new(rpm)` gives each provider base URL its own bucket with `capacity = rpm`, starting full; `rpm = 0` disables the limiter entirely (every `take` succeeds).
+"Refill rate r" would silently become "refill rate r, plus whatever accumulated while idle."
 
-## The proactive layer — waiting before you fire
+Anchoring `last_refill` to the brim moment means your idle time earns nothing, exactly as the contract of capacity C burst and r sustained promises.
 
-loopctl keeps **one bucket per provider base URL** (different providers = separate budgets) behind a `RateLimiter`, and the stream handler consults it before every attempt:
+loopctl's concrete numbers: `RateLimiter::new(rpm)` gives each of your provider base URLs its own bucket with `capacity = rpm`, starting full.
+
+`rpm = 0` disables your limiter entirely, so every `take` succeeds.
+
+## The proactive layer: waiting before you fire
+
+loopctl keeps one bucket per provider base URL, so your different providers get separate budgets, behind a `RateLimiter`. Your stream handler consults it before every attempt:
 
 ```mermaid
 flowchart TD
@@ -77,26 +98,47 @@ flowchart TD
     W -- "waited 30s (max)<br/>with nothing" --> SENDANY["send anyway —<br/>better to risk one 429<br/>than hang the agent"]
 ```
 
-That last arrow is a philosophy, not an accident: client-side limiting is *throttling yourself politely*, and it must never become *deadlocking yourself*. The wait is bounded (`rate_limit_max_wait`, default 30 s) and cancellation-aware, and past the bound the request goes out and takes its chances.
+That last arrow is a philosophy, not an accident for you. Client-side limiting is throttling yourself politely, and it must never become deadlocking yourself.
 
-## The reactive layer — listening when the server speaks
+Your wait is bounded by `rate_limit_max_wait`, default 30 s, and it is cancellation-aware. Past the bound your request goes out and takes its chances.
 
-Prevention is a guess; the server's answer is a measurement. When a 429 (or a 503/529 "overloaded" — same treatment) still arrives, the [stream handler](/core-data/stream-events/) switches to the reactive ladder:
+## The reactive layer: listening when the server speaks
 
-1. **Honor `Retry-After`.** The response usually carries a header saying exactly how long to wait. That hint wins over any formula — the server knows its own load. The wait is capped at 60 s so a hostile or broken hint can't freeze the agent.
-2. **Retry, with the hint as the delay** — up to `fallback_after_retries` (default 3) times.
-3. **Escalate.** Still limited after 3 tries → the failure becomes `RateLimitEscalation` and is reported to the [model circuit breaker](/safety/fallback/), which can reroute the whole turn to a backup model. Deliberately, this does **not** silently retry the same model unstreamed — a rate limit is charged against the model's quota no matter how the request travels.
-4. **Hard stop** after `max_retries` (default 5).
+Prevention is a guess. Your server's answer is a measurement. When a 429 still arrives, or a 503 or 529 overloaded, which get the same treatment, your [stream handler](/core-data/stream-events/) switches to the reactive ladder:
+
+1. **Honor `Retry-After`.** Your response usually carries a header saying exactly how long to wait. That hint wins over any formula, because the server knows its own load.
+
+2. Your wait is capped at 60 s so a hostile or broken hint cannot freeze your agent.
+
+3. **Retry with the hint as the delay**, up to `fallback_after_retries`, default 3, times.
+
+4. **Escalate.** Still limited after 3 tries, your failure becomes `RateLimitEscalation` and is reported to the [model circuit breaker](/safety/fallback/), which can reroute the whole turn to a backup model.
+
+5. Deliberately, this does not silently retry the same model unstreamed. A rate limit is charged against your model's quota no matter how the request travels.
+
+6. **Hard stop** after `max_retries`, default 5.
 
 ### The reactive ladder, counted precisely
 
-The numbered flow above hides three exact rules worth having on record:
+The numbered flow above hides three exact rules worth having on record for you.
 
-**Detection — what counts as "rate limited."** Three shapes, in order of trust: the structured `ApiError::RateLimit` variant (parsed from the response, carrying its `Retry-After`); an `Api` error whose text contains "rate limit" or "429"; an `Http` error with status 429 — or 503/529, classified as *Overloaded* rather than plain rate limiting (the server is drowning, not rationing — same treatment, different label for your dashboards).
+**Detection: what counts as "rate limited."** Three shapes, in order of trust. The structured `ApiError::RateLimit` variant, parsed from your response and carrying its `Retry-After`.
 
-**Delay — how the hint is honored.** `Retry-After` is parsed as delta-seconds (and as an HTTP-date when the `providers` feature is on), then `min(hint, 60 s)` — the cap is what keeps a hostile or broken hint from freezing the agent. No hint at all → the default 5 s. Every wait is additionally clamped to the turn's remaining total deadline.
+An `Api` error whose text contains "rate limit" or "429". An `Http` error with status 429, or 503/529 classified as Overloaded rather than plain rate limiting.
 
-**Escalation — the exact rungs.** Retries 1–3 honor the hint; the 4th rate-limit failure escalates (`RateLimitEscalation { attempts, retry_after }`, recorded on the model breaker as `FailureKind::RateLimit`); past the 5th, hard stop → the non-streaming fallback if enabled, else failure. Note what never happens: a same-model retry *disguised* as a fallback — a rate limit is charged against the model's quota however the bytes travel, so the only honest moves are wait, escalate, or switch models.
+Your server is drowning rather than rationing, so it gets the same treatment with a different label for your dashboards.
+
+**Delay: how the hint is honored.** `Retry-After` is parsed as delta-seconds, and as an HTTP-date when you build the `providers` feature on, then reduced to `min(hint, 60 s)`.
+
+The cap is what keeps a hostile or broken hint from freezing your agent. With no hint at all your default is 5 s.
+
+Every wait of yours is additionally clamped to the turn's remaining total deadline.
+
+**Escalation: the exact rungs.** Your retries 1 to 3 honor the hint. The 4th rate-limit failure escalates, as `RateLimitEscalation { attempts, retry_after }`, recorded on your model breaker as `FailureKind::RateLimit`.
+
+Past the 5th comes a hard stop, then the non-streaming fallback if you enable it, else failure.
+
+Note what never happens: a same-model retry disguised as a fallback. A rate limit is charged against your model's quota however the bytes travel, so your only honest moves are wait, escalate, or switch models.
 
 ## Why two layers
 
@@ -109,14 +151,16 @@ The layers answer different questions and fail differently:
 | Prevents | most 429s | damage from the ones that happen |
 | Failure mode if wrong | you under-use your quota | you back off as told |
 
-Keep both and each covers the other's blind spot. The same two-layer shape — prevent, then adapt — recurs across loopctl: timeouts *and* retries, health scores *and* circuit breakers, threshold compaction *and* the emergency line.
+Keep both and each covers the other's blind spot. The same two-layer shape, prevent then adapt, recurs across your loopctl: timeouts with retries, health scores with circuit breakers, threshold compaction with the emergency line.
 
-> One accounting note: rate-limit retries have a **separate budget** from transport retries (network blips, 5xx). A storm of 429s cannot consume the patience you need for genuine network failures — see [backoff and jitter](/principles/backoff-and-jitter/) for the other budget.
+One accounting note: your rate-limit retries have a **separate budget** from transport retries, which cover network blips and 5xx.
 
----
+A storm of 429s cannot consume the patience you need for genuine network failures. See [backoff and jitter](/principles/backoff-and-jitter/) for the other budget.
 
 ## Related pages
 
-- [Stream events](/core-data/stream-events/) — where both layers are wired.
-- [Backoff and jitter](/principles/backoff-and-jitter/) — the retry math the reactive ladder uses.
-- [Circuit breakers](/principles/circuit-breakers/) — where rate-limit escalation lands.
+- [Stream events](/core-data/stream-events/): where both your layers are wired.
+
+- [Backoff and jitter](/principles/backoff-and-jitter/): the retry math your reactive ladder uses.
+
+- [Circuit breakers](/principles/circuit-breakers/): where your rate-limit escalation lands.

@@ -1,11 +1,16 @@
 ---
-title: "The codebase map — every piece of loopctl, one line each"
+title: "The codebase map"
 sidebar:
   order: 4
 ---
 
+Your loopctl library lives in `src/`, and the map below is a directory of it. Use it when you want to know which module owns a behavior before you read the code.
 
-loopctl lives in `src/`. Below is the whole map: what each module is for, in one or two lines, with links to the deep-dive article. Feature names in brackets (like `[feature: streaming]`) mean the module only exists when you enable that Cargo feature. The companion crates (`derive`, `sqlite`, `hnsw`, `client`, and the side-workspace `vector`) live under `crates/` — 0.4.0 moved them there from the repo top level.
+Each entry keeps two things: the module's job, and the deep-dive article that covers it. You can read the modules in any order you like.
+
+A bracketed name such as `[feature: streaming]` means the module only exists when you enable that Cargo feature.
+
+The companion crates are `derive`, `sqlite`, `hnsw`, and `client`, plus the side-workspace `vector`, and they all live under `crates/`. Version 0.4.0 moved them there from the repo top level.
 
 ```text
 loopctl/
@@ -79,9 +84,7 @@ loopctl/
 └── tests/                  integration tests
 ```
 
----
-
-## The engine — where the loop lives
+## The engine
 
 | File | What it is |
 |---|---|
@@ -119,7 +122,7 @@ Deep dives: [state machine](/engine/state-machine/) · [driver loop](/engine/dri
 
 Deep dives: [API client](/core-data/api-client/) · [stream events](/core-data/stream-events/) · [providers](/providers/overview/) · [embeddings](/providers/embeddings/)
 
-## Tools and safety around them
+## Tools and safety
 
 | File | What it is |
 |---|---|
@@ -208,6 +211,6 @@ Deep dives: [messages](/core-data/messages/) · [errors](/core-data/errors/) · 
 | `examples/` | Eleven runnable examples, from hello-world to vector memory. |
 | `tests/` | Integration tests — good reading for "how is X supposed to behave?" — plus the `cassettes/` corpus and `golden/` request bytes. |
 | `Makefile` | `make ci`, `make test`, `make lint`, `make e2e` and friends. |
-| `TESTING.md` | The project's testing philosophy (written, but useful to users too). |
+| `TESTING.md` | The project's testing philosophy. Written for contributors, useful to read anyway. |
 
 Deep dives: [derive macro](/integration/derive-macro/) · [MCP](/integration/mcp/) · [testing](/integration/testing/) · [loopctl-client](/integration/loopctl-client/) · [file-by-file reference](/file-reference/)

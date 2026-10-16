@@ -1,13 +1,12 @@
 ---
-title: "Bedrock client — AWS, signed and framed"
+title: "Bedrock client"
 sidebar:
   order: 5
 ---
 
+`BedrockClient` speaks AWS Bedrock, which takes two things other providers do not need. You need signed requests, meaning SigV4, which is the AWS authentication scheme. And for streaming you need binary event-stream framing rather than SSE.
 
-`BedrockClient` speaks AWS Bedrock — which means two things other providers don't need: **signed requests** (SigV4, the AWS authentication scheme) and **binary event-stream framing** for streaming (not SSE). Source: `src/provider/bedrock.rs`. Feature: `bedrock` (pulls in `hmac`/`sha2` for signing).
-
----
+The source is `src/provider/bedrock.rs`, under the `bedrock` feature, which pulls in `hmac` and `sha2` for signing.
 
 ## Construction
 
@@ -27,9 +26,15 @@ let client = BedrockClient::builder()
     .build()?;
 ```
 
-Region format is validated (lowercase letters/digits/hyphens — a dotted region would silently redirect the host). Models with their own lower output caps (some Claude 3 tiers: 4096) reject budgets above the cap — set `max_tokens` per client accordingly.
+Your region format is validated to lowercase letters, digits, and hyphens, because a dotted region would silently redirect the host.
 
-**Credential rotation:** `set_credentials(key, secret, token)` swaps the triple atomically on a live client — for STS/IRSA refresh flows. Every request signs with one consistent snapshot; a torn pair (new key, old secret) can never be sent.
+Models with their own lower output caps reject budgets above that cap, so check before you set it. Some Claude 3 tiers cap at 4096, so set `max_tokens` per client accordingly.
+
+### Credential rotation
+
+`set_credentials(key, secret, token)` swaps your triple atomically on a live client, which is what STS/IRSA refresh flows need.
+
+Every request signs with one consistent snapshot, so a torn pair of new key and old secret can never be sent.
 
 ## Two wire paths, picked per model
 
@@ -40,22 +45,42 @@ everything else                    →  CONVERSE path: Bedrock's cross-model API
                                        (its own body shape and stream events)
 ```
 
-Auto-selected per request (so `set_model` across vendors switches the wire format too), or pinned with `.path(BedrockPath::Anthropic | BedrockPath::Converse)`. ARN-style and inference-profile ids (no `anthropic.` prefix) route to Converse — the only API that serves them.
+The path is auto-selected per request, so when you `set_model` across vendors the wire format switches too. You can also pin it with `.path(BedrockPath::Anthropic)` or `.path(BedrockPath::Converse)`.
+
+ARN-style ids and inference-profile ids carry no `anthropic.` prefix, so they route to Converse, which is the only API that serves them.
 
 ## SigV4 in one paragraph
 
-Every request is signed: a canonical request (method, URI, headers, hashed payload) is HMAC-chained (`AWS4<secret>` → date → region → `bedrock` → `aws4_request`) into an `Authorization` header, plus `X-Amz-Date` and the payload hash. Model ids are percent-encoded into the URL path, and the exact encoded path is what gets signed — matching the AWS SDKs. The signing implementation is pinned against AWS's own documented test vectors.
+Every request is signed. A canonical request holds your method, URI, headers, and hashed payload.
 
-## Streaming — binary event-stream, not SSE
+That request is HMAC-chained from `AWS4<secret>` through date, region, `bedrock`, and `aws4_request` into an `Authorization` header, alongside `X-Amz-Date` and the payload hash.
 
-Bedrock streams responses as AWS **event-stream frames**: binary headers + payload chunks, not text lines. The client contains a hand-written incremental decoder (frame length, typed headers like `:event-type`, payload, CRCs), robust to partial frames arriving in arbitrary TCP chunk splits:
+Your model id is percent-encoded into the URL path, and that exact encoded path is what gets signed, which matches the AWS SDKs. The signing implementation is pinned against AWS's own documented test vectors.
 
-- **Anthropic path** — each frame's payload is the same JSON event as the direct API; it feeds the shared Anthropic emitter.
-- **Converse path** — frames carry `messageStart` / `contentBlockDelta` (text, tool-input, or reasoning lanes) / `messageStop`, plus a final `metadata` frame that carries stop reason and usage together. The terminal pair is emitted exactly once, from `metadata`. Usage (0.4.0): Converse's `cacheReadInputTokens` fills `Usage::cached_input_tokens`, and the Anthropic-shape responses get the same input normalization as the direct client (raw + cache reads + cache-creation spend).
-- Exception frames carry their `:exception-type` into the error.
-- A stream cut before the terminal frame emits no terminal — truncation, as everywhere else.
+## Streaming: binary event-stream, not SSE
 
-The frame format itself, for when you're reading packet captures:
+Bedrock streams responses as AWS event-stream frames, meaning binary headers plus payload chunks rather than text lines.
+
+The client contains a hand-written incremental decoder that walks frame length, typed headers such as `:event-type`, payload, and CRCs, so it handles partial frames arriving in arbitrary TCP chunk splits.
+
+Four rules cover the frames:
+
+- On the **Anthropic path**, each frame's payload is the same JSON event as the direct API, and it feeds the shared Anthropic emitter.
+- On the **Converse path**, shipped 0.4.0, frames carry `messageStart`, then `contentBlockDelta`, then `messageStop`.
+
+  The `contentBlockDelta` lane covers text, tool-input, and reasoning.
+
+  A final `metadata` frame carries stop reason and usage together, and the terminal pair is emitted exactly once from it.
+- Exception frames carry their `:exception-type` into your error.
+- A stream cut before the terminal frame emits no terminal event, which is truncation, as everywhere else.
+
+### Cache accounting on both paths
+
+Converse's `cacheReadInputTokens` fills `Usage::cached_input_tokens`. The Anthropic-shape responses get the same input normalization as the direct client, meaning raw plus cache reads plus cache-creation spend.
+
+### The frame format
+
+This is what the decoder walks when you are reading packet captures:
 
 ```mermaid
 flowchart TB
@@ -69,21 +94,23 @@ flowchart TB
     end
 ```
 
-A frame's declared length must land in `16 bytes … 16 MiB`; anything else marks the buffer as unsynchronized and it resets — the decoder never allocates based on a hostile length. Header values that overrun their declared frame are skipped individually, not fatally.
+A frame's declared length must land in `16 bytes … 16 MiB`. Anything else marks the buffer as unsynchronized and it resets, so the decoder never allocates based on a hostile length. Header values that overrun their declared frame are skipped individually rather than fatally.
 
 ## Converse mapping notes
 
-- Messages use `user`/`assistant` roles only; tool calls are `toolUse` blocks, results are `toolResult` blocks with a `status: "success" | "error"` field — so **`is_error` does travel on this wire**.
-- Tools go in `toolConfig.tools[].toolSpec`; system prompt in `system: [{text}]`; output budget in `inferenceConfig.maxTokens`.
-- Empty-content messages (which Bedrock rejects) are dropped for you.
+- Messages use `user` and `assistant` roles only. Tool calls are `toolUse` blocks and results are `toolResult` blocks with a `status` field of `success` or `error`, so `is_error` does travel on this wire.
+- Tools go in `toolConfig.tools[].toolSpec`, your system prompt goes in `system` as a list of text objects, and your output budget goes in `inferenceConfig.maxTokens`.
+- Empty-content messages are dropped for you, because Bedrock rejects them.
 
 ## Limits of this client
 
-- **No `RequestOptions` support** — per-request model overrides, response formats, and tool constraints are not implemented on the Bedrock path (the base trait's "reject loudly" defaults apply).
-- **HTTP errors are not auto-classified** into rate-limit/auth forms the way the other clients do (they surface as plain `ApiError` with status and body).
+Three gaps are worth knowing before you pick this path:
+
+- There is no `RequestOptions` support. Per-request model overrides, response formats, and tool constraints are not implemented here, so the base trait's reject-loudly defaults apply.
+- HTTP errors are not auto-classified into rate-limit and auth forms the way the other clients do. They surface as plain `ApiError` carrying status and body.
 - Images are dropped, as with the other shipped converters.
 
 ## Related pages
 
-- [Anthropic](/providers/anthropic/) — whose body builders and emitter the Anthropic path shares.
-- [Overview](/providers/overview/)
+- [Anthropic](/providers/anthropic/) covers the body builders and emitter that the Anthropic path shares.
+- [Overview](/providers/overview/) is the provider map.

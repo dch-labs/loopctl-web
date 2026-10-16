@@ -1,19 +1,22 @@
 ---
-title: "Waves — running tool calls in parallel without stepping on each other"
+title: "Parallel tool calls"
 sidebar:
   order: 11
 ---
 
+When your model replies with several tool calls in one turn, running them in parallel can turn five seconds of wall clock into one.
 
-When a model replies with several tool calls in one turn, running them **in parallel** can turn five seconds of wall-clock into one. But two of those calls might write the same file — running them together corrupts it. And whatever happens, the results must come back **in the order the model asked for them**, because providers require every tool call to be answered, in place.
+But two of those calls might write the same file, and running them together corrupts it. Whatever happens, your results must come back in the order the model asked for them, because providers require every tool call to be answered in place.
 
-loopctl's parallel dispatcher solves this with a two-phase design: a pure **planning** phase that groups calls into **waves** (every call in a wave is safe to run at the same time), and an **execution** phase that runs each wave concurrently under a cap. The planning algorithm is deliberately simple — greedy first-fit — and this page explains both the grouping and why simple is the right choice. Source: `src/engine/bare/dispatch.rs`.
+loopctl's parallel dispatcher has two phases. A pure **planning** phase groups your calls into **waves**, where every call in a wave is safe to run at the same time.
 
----
+Your **execution** phase then runs each wave concurrently under a cap. The planning algorithm is deliberately simple: greedy first-fit.
 
-## Who declares what is safe — the two flags
+This page covers the grouping, and why simple is the right choice for you. Source: `src/engine/bare/dispatch.rs`.
 
-The engine cannot *guess* which calls conflict; only the tool author knows. So each tool declares, per input (they can vary call to call):
+## The two safety flags
+
+Your engine cannot guess which calls conflict. Only the tool author knows, and that author is you. So each of your tools declares two things per input, because both can vary from call to call:
 
 ```rust
 // on your Tool implementation:
@@ -21,14 +24,21 @@ fn is_safe_for_concurrent_execution(&self, input: &Value) -> bool { /* default: 
 fn resource_key(&self, input: &Value) -> Option<String> { /* default: None */ }
 ```
 
-- **`is_safe_for_concurrent_execution`** — "running me at the same time as *anything* else is fine." Reads, searches, pure computations: `true`. Anything with uncontrolled side effects: `false` (the conservative default).
-- **`resource_key`** — the *shared thing* this call touches: a file path, a database name, a service endpoint. Two calls with the **same key** must not overlap; two calls with different (or no) keys can.
+- **`is_safe_for_concurrent_execution`**: "running me at the same time as anything else is fine." Your reads, searches and pure computations return `true`.
 
-A `Read` might return `Some("file:a.rs")` — so two reads of *different* files run together, while two calls on `a.rs` serialize. The key is only consulted when the call is already marked concurrency-safe.
+- Anything of yours with uncontrolled side effects returns `false`, which is the conservative default.
 
-## The planning algorithm — greedy first-fit wave packing
+- **`resource_key`**: the shared thing this call of yours touches, such as a file path, a database name, or a service endpoint. Two of your calls with the same key must not overlap.
 
-Planning is **pure**: it looks at the calls and tool declarations, and produces waves. No IO, no execution. The rule set is four lines:
+- Two calls with different keys, or with no key, can run together.
+
+Your `Read` might return `Some("file:a.rs")`. Two reads of different files then run together, while two calls on `a.rs` serialize.
+
+Your dispatcher consults the key only once the call is marked concurrency-safe.
+
+## The planning algorithm
+
+Your planning pass is pure. It reads the calls and your tool declarations and produces waves. No IO, no execution. Four rules:
 
 ```text
 for each call, in the model's order:
@@ -39,7 +49,15 @@ for each call, in the model's order:
   4. no such wave                 → start a new wave
 ```
 
-In code terms: `ToolDependencyGraph::from_calls(calls, &registry)` first builds one node per call — `{ idx, parallelizable, resource_key }` — by asking each *registered* tool for its two declarations with the call's input (an unregistered tool is conservatively non-parallelizable; you can't ask it). Then `plan()` walks the nodes in order, keeping two bookkeeping lists: `wave_keys` (the set of resource keys each wave already holds) and `wave_open` (whether each wave may still accept members — a singleton wave is born closed):
+In code terms, `ToolDependencyGraph::from_calls(calls, &registry)` builds one node per call: `{ idx, parallelizable, resource_key }`.
+
+It asks each of your registered tools for its two declarations, passing the call's input. A tool you never registered is conservatively treated as non-parallelizable, because you cannot ask it.
+
+Your `plan()` call then walks the nodes in model order and keeps two bookkeeping lists. `wave_keys` holds the resource keys each wave already took.
+
+`wave_open` says whether a wave may still accept members.
+
+A singleton wave is born closed:
 
 ```text
 plan(nodes):
@@ -54,7 +72,7 @@ plan(nodes):
             new wave [node.idx], born OPEN
 ```
 
-Worked example — six calls arrive from the model:
+Worked example. Six calls arrive from the model:
 
 ```text
 calls, in order:   Read(a)   Read(b)   Edit(c)   Grep(*)   Read(a)   Stat(*)
@@ -70,7 +88,7 @@ the planner walks them once, left to right:
   Stat(*)  → keyless: earliest open wave = wave 1 (still open!) → joins
 ```
 
-Result — one four-call wave, one forced singleton, one follow-up wave, run in that order:
+Your result is one four-call wave, one forced singleton, and one follow-up wave, run in that order:
 
 ```mermaid
 flowchart LR
@@ -89,9 +107,11 @@ flowchart LR
     W1 --> W2 --> W3
 ```
 
-Note what the packing achieved for `Read(a)`: waves 1 and 3 both touch `a`, but they never *overlap* — the key rule forced the second read into a later wave. And note the small surprise: `Edit(c)` was call #3 but executes *before* the wave-3 read — waves run in creation order, and the closed singleton keeps its place in line.
+Look at what the packing did to your `Read(a)`. Waves 1 and 3 both touch `a`, but they never overlap: the key rule forced your second read into a later wave.
 
-The same example as the planner sees it — every decision, in order, with the rule that made it:
+There is one small surprise for you. `Edit(c)` was call 3, yet it runs before the wave-3 read, because waves run in creation order.
+
+The closed singleton keeps its place in line. The same example as your planner sees it, with every decision and the rule that made it:
 
 | # | Call | parallelizable? | key | Decision | Rule applied |
 |---|---|---|---|---|---|
@@ -102,13 +122,21 @@ The same example as the planner sees it — every decision, in order, with the r
 | 5 | `Read(a)` | yes | `a` | wave 1 rejected (holds `a`), wave 2 closed → **new wave 3** | no open wave without `a` |
 | 6 | `Stat(*)` | yes | — | join wave 1 | keyless fits the earliest open wave, wherever it is |
 
-Row 6 teaches the detail worth remembering: **open waves never close.** A wave born open keeps accepting for the whole planning pass — only singletons are born closed — so a late keyless call still lands in wave 1 even after waves 2 and 3 exist. Deterministic, slightly non-obvious, and exactly what "first-fit" means: fill the earliest bin that fits, always.
+Row 6 carries the detail worth remembering: open waves never close. A wave born open keeps accepting members for the whole planning pass, because only singletons are born closed.
 
-**Why greedy, not optimal?** Finding the minimal number of waves is a bin-packing problem — expensive to solve exactly, for a payoff (a few saved milliseconds of scheduling) that is dwarfed by the tool calls themselves. Greedy first-fit runs in essentially linear time, is deterministic (same calls → same plan), and gets most of the parallelism available. The general trade: **scheduling is cheap; only execution is expensive — never spend the first to save the second.**
+A late keyless call of yours therefore still lands in wave 1, even after waves 2 and 3 exist. That is deterministic, slightly non-obvious, and exactly what first-fit means: always fill the earliest bin that fits.
 
-## Execution — concurrency with a cap, order with slots
+**Why greedy, not optimal?** The minimal number of waves is a bin-packing problem. Solving it exactly is expensive, and your payoff is a few saved milliseconds of scheduling.
 
-Each wave runs to completion before the next starts; within a wave, calls run concurrently, bounded by a **semaphore** with `max_concurrency` permits (default 8, clamped down to the batch size — never more slots than calls):
+That saving is dwarfed by the tool calls themselves. Greedy first-fit runs in essentially linear time, is deterministic (same calls, same plan), and captures most of the parallelism available to you.
+
+The general trade you should carry away: scheduling is cheap and execution is expensive, so never spend the first to save the second.
+
+## Execution
+
+Each of your waves runs to completion before the next starts. Within a wave, calls run concurrently, bounded by a semaphore holding your `max_concurrency` permits.
+
+The default is 8, clamped down to your batch size, so you never get more slots than calls:
 
 ```mermaid
 sequenceDiagram
@@ -129,43 +157,72 @@ sequenceDiagram
     Note over E: all permits returned — wave 2 begins
 ```
 
-**Order preservation** — the subtle requirement. Tools finish in arbitrary order (`Read(b)` above finished first). But the model's conversation needs results *in request order*. The fix is positional slots: the results array is pre-sized to the call count, and each call — whichever task it runs in — writes its result at **its own original index**. Completion order is irrelevant; slot order is everything. (A defensively-unfilled slot becomes a soft error, not a hole.)
+**Order preservation** is the subtle requirement for you. Your tools finish in arbitrary order, and `Read(b)` above finished first. Yet your model's conversation needs results in request order.
 
-**Failure semantics** — deliberate hardness in one place:
+The fix is positional slots: your results array is pre-sized to the call count, and each call writes its result at its own original index, whichever task it runs in.
 
-- A **soft error** (`is_error: true`) is a normal result — it takes its slot and the wave moves on.
-- A **hard error** (cancellation, a loop-detection stop) aborts the whole batch: sibling results already resolved in that wave are **discarded**, and the error ends the run. No half-batches — the model would see a conversation missing results, and providers reject those. (Same principle as the two-buffer scratchpad: all of a unit, or none of it.)
+Completion order is irrelevant, slot order is everything. A slot still unfilled at the end becomes a soft error for you, never a hole.
 
-**Cancellation** is checked at every wave boundary, and each call races the cancel signal individually — see [cooperative cancellation](/principles/cooperative-cancellation/).
+**Failure semantics** are deliberately hard in one place:
+
+- A soft error (`is_error: true`) is a normal result for you. It takes its slot and your wave moves on.
+
+- A hard error, such as cancellation or a loop-detection stop, aborts your whole batch. Sibling results already resolved in that wave are discarded, and the error ends your run.
+
+- There are no half-batches: your model would see a conversation missing results, and providers reject those.
+
+- This is the same rule as the two-buffer scratchpad, all of a unit or none of it.
+
+Your cancellation is checked at every wave boundary, and each call races the cancel signal on its own. See [cooperative cancellation](/principles/cooperative-cancellation/).
 
 ### The execution rules, precisely
 
-- **The semaphore is clamped**: `max_concurrency.clamp(1, tool_calls.len())` — never more permits than calls, never zero. `max_concurrency: 1` degenerates parallel mode into sequential *on the same code path* — a debugging switch, not a different mode.
-- **Permits are acquired inside each task**, not up front: a wave of 5 under a 3-permit semaphore starts 3 calls and admits the rest as permits free. A dropped/cancelled permit acquisition surfaces as `Err(Cancelled)` — it can't silently shrink the wave.
-- **Result slots are `Option`s**, pre-sized to the call count; a task writes `results[original_index]`. The final mapping treats any still-`None` slot (defensively unreachable) as a soft `"dispatch produced no result"` — a hole can never reach the model.
-- **Within a wave, `join_all`**: the wave ends when all its calls end. A hard error propagates out of the join and the *already-resolved* sibling slots of that wave are dropped with it — the test that pins this is literally named `parallel_hard_error_discards_sibling_results`.
-- **Fewer than 2 calls skips planning entirely** — the sequential path serves them (nothing to overlap).
+- Your semaphore is clamped: `max_concurrency.clamp(1, tool_calls.len())`. Never more permits than calls, never zero.
 
-## When parallel isn't
+- `max_concurrency: 1` turns your parallel mode into sequential on the same code path, which is a debugging switch, not a different mode.
 
-Three honest fallbacks: a batch of fewer than 2 calls runs through the sequential path (nothing to overlap); `max_concurrency: 1` makes parallel mode *behave* like sequential on the same code path (a debugging tool); and the default mode is sequential entirely — parallel is opt-in per run, because only the tool author's declarations make it safe.
+- Permits are acquired inside each task, not up front. Your wave of 5 under a 3-permit semaphore starts 3 calls and admits the rest as permits free.
 
-Observers see the same event stream either mode (PREs batch, POSTs arrive by completion — pair by `tool_call_id`, not arrival order), and both modes use the *same* per-call pipeline, so every safety layer from [tool dispatch](/engine/tool-dispatch/) fires identically.
+- A dropped or cancelled permit acquisition surfaces to you as `Err(Cancelled)`; it cannot silently shrink your wave.
 
----
+- Your result slots are `Option`s pre-sized to the call count, and a task writes `results[original_index]`.
 
-## The pattern, compressed
+- The final mapping treats a slot that is still `None` as a soft `"dispatch produced no result"`. That case is defensively unreachable, so a hole can never reach your model.
 
-1. **Declarations, not guesses** — safety comes from tools declaring it, per call.
-2. **Plan purely, then execute** — the wave plan is a function of the calls; testable without running anything.
-3. **Greedy beats optimal at this scale** — scheduling must never cost more than it saves.
-4. **Concurrency inside, ordering outside** — free completion order, fixed result order.
-5. **All-or-nothing failure** — a batch with a hole is worse than no batch.
+- Within a wave, `join_all` ends the wave when all its calls end. A hard error propagates out of the join, and the already-resolved sibling slots of that wave are dropped with it.
 
----
+- The test that pins this for you is named `parallel_hard_error_discards_sibling_results`.
+
+- Fewer than 2 calls skips planning entirely. The sequential path serves them because there is nothing to overlap.
+
+## When parallel does not apply
+
+You have three fallbacks, and none of them is a lie. A batch of fewer than 2 calls runs through the sequential path, because there is nothing to overlap.
+
+`max_concurrency: 1` makes your parallel mode behave like sequential on the same code path, which is a debugging tool you will want.
+
+And the default mode is sequential all the way down. Parallel is opt-in per run, because only your declarations as the tool author make it safe.
+
+Your observers see the same event stream in both modes. PREs arrive batched and POSTs arrive by completion, so pair them by `tool_call_id` rather than by arrival order.
+
+Both modes use the same per-call pipeline, so every safety layer from [tool dispatch](/engine/tool-dispatch/) fires identically for you.
+
+## The pattern
+
+1. **Declarations, not guesses.** Your safety comes from your tools declaring it, per call.
+
+2. **Plan purely, then execute.** The wave plan is a function of the calls, so you can test it without running anything.
+
+3. **Greedy beats optimal at this scale.** Your scheduling must never cost more than it saves.
+
+4. **Concurrency inside, ordering outside.** Your completion order is free, your result order is fixed.
+
+5. **All-or-nothing failure.** A batch with a hole is worse for you than no batch.
 
 ## Related pages
 
-- [Tool dispatch](/engine/tool-dispatch/) — where waves sit in the per-call pipeline.
-- [Tools](/core-data/tools/) — declaring `is_safe_for_concurrent_execution` and `resource_key`.
-- [Caching](/principles/caching-and-invalidation/) — the epoch guard exists precisely because waves make reads and writes overlap.
+- [Tool dispatch](/engine/tool-dispatch/): where waves sit in the per-call pipeline.
+- [Tools](/core-data/tools/): declaring `is_safe_for_concurrent_execution` and
+  `resource_key`.
+- [Caching](/principles/caching-and-invalidation/): the epoch guard exists because waves
+  let reads and writes overlap.

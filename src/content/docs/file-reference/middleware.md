@@ -1,22 +1,27 @@
 ---
-title: "`src/middleware.rs` — the pipeline core"
+title: "src/middleware.rs"
 ---
 
+This file holds your middleware trait, the dispatch context and result carriers, and the pipeline builder. The layers themselves live in `middleware/*.rs`.
 
-The middleware trait, the dispatch context/result carriers, and the pipeline builder. The layers themselves live in `middleware/*.rs`.
+## Key items
 
-**Key items**
+`ToolMiddleware` asks for `name()` plus `dispatch(ctx, next)` as a boxed async method, so you can pre-process, call `next`, post-process, or short-circuit.
 
-- `ToolMiddleware` — `name()` + `dispatch(ctx, next)` (boxed async); pre-process, call `next`, post-process — or short-circuit.
-- `ToolDispatchContext { tool_name, input, call_id, turn_number, cancel, permission, tool_context }` — everything a layer may read or rewrite.
-- `ToolPipeline` — cursor-based chain; **registration order = execution order**, first registered outermost; `invoke(ctx)`, `dispatch_all` (all-or-nothing on cancel), `middleware_names()`.
-- `ToolPipelineBuilder` — `with_middleware`, `with_middleware_arc`, `with_core(registry)`, `build()`; `PipelineError { Empty, MissingCore }`.
-- Re-exports every shipped layer and `ToolDispatchResult` (defined in `tool.rs`).
+`ToolDispatchContext { tool_name, input, call_id, turn_number, cancel, permission, tool_context }` carries everything a layer may read or rewrite.
 
-**Behavior notes**
+`ToolPipeline` is a cursor-based chain where registration order equals execution order, so the first layer you register sits outermost. It offers `invoke(ctx)`, `dispatch_all` which is all-or-nothing on cancel, and `middleware_names()`.
 
-- The core (`ToolCallMiddleware`, in `tool_call.rs`) is always innermost — the registry lookup and the actual tool call.
-- The engine path: `agent.set_pipeline(builder)` injects the loop's registry as the core — don't call `with_core` yourself there.
-- Ordering guidance: permission outermost (deny before work), redaction before verifiers, the shield inside renamers and outside memoize.
+`ToolPipelineBuilder` gives you `with_middleware`, `with_middleware_arc`, `with_core(registry)`, and `build()`, failing with `PipelineError { Empty, MissingCore }`.
+
+The module re-exports every shipped layer plus `ToolDispatchResult`, which is defined in `tool.rs`.
+
+## Behavior notes
+
+Your core, `ToolCallMiddleware` in `tool_call.rs`, is always innermost. That is where the registry lookup and the actual tool call happen.
+
+On the engine path, `agent.set_pipeline(builder)` injects the loop's registry as the core, so do not call `with_core` yourself there.
+
+Order guidance: keep permission outermost so deny happens before work, place redaction before verifiers, and put the shield inside renamers and outside memoize.
 
 Deep dive: [Middleware](/safety/middleware/).

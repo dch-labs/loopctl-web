@@ -50,10 +50,10 @@ Ported output is committed, so the site builds standalone.
 
 ## Deployment
 
-GitHub Actions builds and deploys on every push to `main`
+GitHub Actions builds and deploys on every push to `master`
 (`.github/workflows/deploy.yml`). One-time setup in GitHub:
 
-1. Push this repository to `dch-labs/loopctl-site`.
+1. Push this repository to `dch-labs/loopctl-web`.
 2. Repo Settings → Pages → Source: **GitHub Actions**.
 3. For https://loopctl.rs: add the custom domain in Settings → Pages (the
    `public/CNAME` file is already in the build) and create the DNS records

@@ -1,15 +1,14 @@
 ---
-title: "Anatomy of a run — from your text to the final answer"
+title: "Anatomy of a run"
 sidebar:
   order: 3
 ---
 
+This page walks through one complete run of a loopctl agent. You ask something, the
+model requests one tool, the tool runs, the model answers. Every layer, in order.
 
-This page walks through **one complete run** of a loopctl agent: the user asks something, the model requests one tool, the tool runs, the model gives the final answer. Every layer, in order, in plain words.
-
-The example matches `examples/echo-tool-cli.rs` from the loopctl repository. The model is a scripted fake (`MockApiClient`), so the behavior is 100% predictable.
-
----
+The example matches `examples/echo-tool-cli.rs` in the loopctl repository. The model is a
+scripted fake, `MockApiClient`, so the behavior is 100% predictable.
 
 ## The setup
 
@@ -46,9 +45,9 @@ let result = agent.run("Please echo something.", &RunConfig::default()).await?;
 // result.output == "I echoed your message. Done!"
 ```
 
----
+## The run, step by step
 
-## The journey, step by step
+Two turns. The first asks for a tool, the second gives the answer.
 
 ```mermaid
 sequenceDiagram
@@ -92,49 +91,75 @@ sequenceDiagram
     Driver-->>You: Ok(Run) — answer, turn count, token counts
 ```
 
-Now the same walk in words, with the details that matter:
+The same walk in words, with the details that matter.
 
-**1. You call `run(input, run_config)`.**
-The driver creates a fresh `Run` record (the audit-log entry for this run) and calls `brain.accept_input(input)`. The input becomes a *user message* on the scratchpad (`pending`). The scratchpad is cleared first — a new run starts fresh; only the notebook (`history`) carries over.
+1. **You call `run(input, run_config)`.** The driver creates a fresh `Run` record, which
+   is the audit-log entry for this run, and calls `brain.accept_input(input)`. The input
+   becomes a user message on the scratchpad (`pending`). The scratchpad is cleared first:
+   a new run starts fresh, and only `history` carries over.
 
-**2. The driver asks the brain what to do.**
-`brain.next_step(policy)` — with `policy` carrying your limits (max turns, context window). The brain checks, in this order:
-- Turn limit reached? → `Done(MaxTurnsExceeded)`.
-- Context near the ceiling (95% of the window)? → `Compact(Emergency)`.
-- Context past your threshold (default 80%)? → `Compact(ThresholdExceeded)`.
-- Otherwise → `CallLLM`.
+2. **The driver asks the brain what to do.** It calls `brain.next_step(policy)`, where
+   `policy` carries your limits such as max turns and the context window. The brain checks
+   in this order:
 
-**3. The driver asks the model.**
-It gathers the conversation (`history` + `pending`), your system prompt (if set), and the list of tool schemas. If you configured extra ingredients — memory entries, contributor messages — they are added for **this turn only** and never saved into the conversation. The request goes out through the model client.
+    - Turn limit reached? Then `Done(MaxTurnsExceeded)`.
+    - Context at 95% of the window? Then `Compact(Emergency)`.
+    - Context past your threshold, default 80%? Then `Compact(ThresholdExceeded)`.
+    - Otherwise `CallLLM`.
 
-**4. The reply comes back.**
-The driver folds the reply into the brain with `model_response(...)`. The brain looks at the reply:
-- Contains tool calls? → the brain files them and enters `AwaitingTools`.
-- Pure text? → the run is done: `Terminal(Completed)` with the text as the final answer.
+3. **The driver asks the model.** It gathers the conversation (`history` plus `pending`),
+   your system prompt if you set one, and the list of tool schemas. Extra ingredients you
+   configured, such as memory entries and contributor messages, are added for this turn only.
 
-**5. Tool calls run.**
-`next_step` now returns `CallTools`. For each requested call, the driver walks the full safety pipeline: notify observers → ask pre-hooks (if installed) → loop-detection check → health gate (if installed) → **run the tool** (panics are caught and turned into error text) → record the outcome for detection/health/memory. Results — including error text — become tool-result messages fed back with `tool_results(...)`. The brain returns to `Start`.
+They are never saved into the conversation. The request goes out through the model
+   client.
 
-> **Hint — why errors are fed back instead of crashing the run:** if a tool fails, the model *reading the error* is often the best recovery. It can fix its arguments, pick another tool, or give up gracefully. Only hard problems (cancellation, a detected infinite loop, retries exhausted) end the run.
+4. **The reply comes back.** The driver folds it into the brain with `model_response(...)`.
+   The brain looks at the reply. If it contains tool calls, the brain files them and enters
+   `AwaitingTools`. If it is pure text, the run is done: `Terminal(Completed)` with that
+   text as the final answer.
 
-**6. Repeat until `Done`.**
-The loop continues. On turn 1 the model sees the whole conversation so far — including the tool result — and produces the final text. No tool calls → `Terminal(Completed)`.
+5. **Tool calls run.** `next_step` now returns `CallTools`. For each requested call the
+   driver walks the whole safety pipeline:
 
-**7. `finalize()` — the single exit door.**
-Every run exit — success, error, max turns, cancellation — passes through the same `finalize()`:
-- On success: the scratchpad is glued into the notebook (`commit_pending`), and memory (if installed) is consolidated.
-- On cancel/ordinary failure: the **coherent prefix is salvaged** (`salvage_pending`, 0.4.0) — completed turns commit, only the in-flight exchange drops.
-- On the `ContextExceeded` family: the scratchpad is thrown away whole (`discard_pending`) — an unshrinkable over-window history must not wedge future runs.
-- Either way: the run's end time and stop reason are recorded, observers get `on_run_end`, and the cancel signal is re-armed for the next run.
+    - Notify observers.
+    - Ask pre-hooks, if you installed any.
+    - Loop-detection check.
+    - Health gate, if you installed one.
+    - Run the tool. Panics are caught and turned into error text.
+    - Record the outcome for detection, health, and memory.
 
-**8. You get a `Run`.**
-`Run` carries the answer (`output`), every turn's input/output/tool calls, token counts (`input_tokens`, `output_tokens`), and timing. It lives forever in `agent.session().runs` — the audit trail that compaction never touches.
+   Results, including error text, become tool-result messages fed back with
+   `tool_results(...)`. The brain returns to `Start`.
 
----
+   If a tool fails, the model reading the error is often the best recovery. It can fix its
+   arguments, pick another tool, or give up gracefully. Only hard problems end the run:
+   cancellation, a detected infinite loop, retries exhausted.
 
-## What the model actually sees, turn by turn
+6. **The loop continues until `Done`.** On turn 1 the model sees the whole conversation so
+   far, including the tool result, and produces the final text. No tool calls, so
+   `Terminal(Completed)`.
 
-A detail worth internalizing: the model **never** sees your Rust objects. Each request is a plain list of messages. Turn 1's request for our example looks conceptually like this:
+7. **`finalize()` is the single exit door.** Every run exit passes through it: success,
+   error, max turns, cancellation.
+
+    - On success: the scratchpad is glued into `history` by `commit_pending`, and memory is
+      consolidated if you installed it.
+    - On cancel or ordinary failure: `salvage_pending` keeps the coherent prefix. Completed
+      turns commit, only the in-flight exchange drops. Since 0.4.0.
+    - On the `ContextExceeded` family: `discard_pending` throws the scratchpad away whole.
+      An unshrinkable over-window history would wedge every later run.
+    - Either way: the run's end time and stop reason are recorded, observers get
+      `on_run_end`, and the cancel signal is re-armed for the next run.
+
+8. **You get a `Run`.** It carries the answer in `output`, every turn's input, output and
+   tool calls, the token counts (`input_tokens`, `output_tokens`) and timing. It stays in
+   `agent.session().runs` forever. That audit trail is something compaction never touches.
+
+## What the model sees
+
+The model never sees your Rust objects. Each request is a plain list of messages. Turn 1 of
+our example looks conceptually like this:
 
 ```text
 [
@@ -144,28 +169,26 @@ A detail worth internalizing: the model **never** sees your Rust objects. Each r
 ]
 ```
 
-The user-role tool result is not a mistake — all major providers expect tool results to come back as user-side messages. loopctl handles this convention for you.
+The user-role tool result is not a mistake. Every major provider
+expects tool results to come back as user-side messages. loopctl handles the convention for
+you.
 
----
+## How a run ends
 
-## How long can a run get?
-
-Until one of five things ends it:
+A run goes on until one of five things ends it.
 
 | Ending | Who decided | Error you see |
 |---|---|---|
-| Final answer | The model (reply with no tool calls) | none — `Ok(Run)` |
-| Turn limit | You (`RunConfig::max_turns`, default 200) | `LoopError::MaxTurnsExceeded` |
-| Cancellation | You (cancel signal) | `LoopError::Cancelled` — a clean stop, not a failure |
-| Context overflow | The brain (compaction could not shrink enough) | `LoopError::ContextExceeded` |
-| Hard failure | The engine (network dead, loop detected, recovery exhausted...) | the matching `LoopError` variant |
+| Final answer | The model: a reply with no tool calls | None. `Ok(Run)` |
+| Turn limit | You: `RunConfig::max_turns`, default 200 | `LoopError::MaxTurnsExceeded` |
+| Cancellation | You: the cancel signal | `LoopError::Cancelled`. A clean stop, not a failure. |
+| Context overflow | The brain: compaction could not shrink enough | `LoopError::ContextExceeded` |
+| Hard failure | The engine: network dead, loop detected, recovery exhausted | The matching `LoopError` variant |
 
-See [Termination — every way a run can end](/engine/termination/) for the complete table with code paths.
+[Termination](/engine/termination/) has the complete table with code paths.
 
----
+## Next
 
-## Where to go next
-
-- [The driver loop](/engine/driver-loop/) — everything steps 3–6 do, in full detail.
-- [Tool dispatch](/engine/tool-dispatch/) — the complete safety pipeline around every tool call.
-- [Building a tool](/core-data/tools/) — write your own.
+- [The driver loop](/engine/driver-loop/): everything steps 3 to 6 do, in full detail.
+- [Tool dispatch](/engine/tool-dispatch/): the whole safety pipeline around one tool call.
+- [Building a tool](/core-data/tools/): write your own.

@@ -1,9 +1,11 @@
 ---
 import '@fontsource-variable/fraunces/opsz.css';
-import '@fontsource-variable/fraunces/opsz-italic.css';
-import '@fontsource-variable/newsreader/opsz.css';
-import '@fontsource-variable/newsreader/opsz-italic.css';
-import '@fontsource-variable/jetbrains-mono';
+// The build emits one CSS bundle for the whole site, so this @font-face
+// declaration is shared with the landing page, which sets its text with
+// --font-display/--font-body. The knowledge base overrides those tokens with
+// plain stacks in docs.css, so it declares but never uses the face and the
+// browser does not fetch it there. Fraunces stays because the wordmark is set
+// in it; the other faces went with the reading settings they existed for.
 
 const { head } = Astro.locals.starlightRoute;
 ---
@@ -11,35 +13,34 @@ const { head } = Astro.locals.starlightRoute;
 {head.map(({ tag: Tag, attrs, content }) => <Tag {...attrs} set:html={content} />)}
 <script is:inline>
   (() => {
+    // Marks this as a knowledge base page. The build emits a single CSS
+    // bundle shared with the landing page, so docs.css scopes its rules to
+    // this attribute. Set first, before any storage read: a corrupt stored
+    // value must not be able to leave a page unstyled.
+    document.documentElement.dataset.kb = '';
     try {
-      const s = JSON.parse(localStorage.getItem('loopctl-reading') || '{}');
-      const r = document.documentElement;
-      if (s.body) r.dataset.readBody = s.body;
-      if (s.code) r.dataset.readCode = s.code;
-      if (s.scale) r.style.setProperty('--read-scale', s.scale);
-      if (s.leading) r.style.setProperty('--read-leading', s.leading);
-      if (s.measure) r.style.setProperty('--read-measure', s.measure);
-    } catch {}
-    try {
+      // The collapsed index is stored per tab, never across visits; see
+      // src/scripts/sidebar-toggle.ts for why. Residue from the older
+      // localStorage build is cleared so a returning visitor gets the index.
       localStorage.removeItem('loopctl-sidebars');
-      const sb = JSON.parse(sessionStorage.getItem('loopctl-sidebars') || '{}');
       const r = document.documentElement;
-      if (sb.left) r.dataset.hideLeft = '1';
-      if (sb.right) r.dataset.hideRight = '1';
+      if (sessionStorage.getItem('loopctl-sidebars') === '1') r.dataset.hideLeft = '1';
     } catch {}
   })();
 </script>
 <script>
   import { initMermaid } from '../scripts/mermaid';
-  import { initReadingPanel } from '../scripts/reading';
   import { initSidebarToggle } from '../scripts/sidebar-toggle';
   import { initThemeToggle } from '../scripts/theme-toggle';
+  import { initWheelPassthrough } from '../scripts/wheel-passthrough';
 
   function boot() {
+    // Astro swaps <html> on navigation, which drops the marker.
+    document.documentElement.dataset.kb = '';
     initMermaid();
-    initReadingPanel();
     initSidebarToggle();
     initThemeToggle();
+    initWheelPassthrough();
   }
   boot();
   document.addEventListener('astro:after-swap', boot);

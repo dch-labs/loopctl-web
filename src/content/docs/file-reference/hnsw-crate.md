@@ -1,17 +1,23 @@
 ---
-title: "`crates/hnsw/` — the `loopctl-hnsw` companion crate"
+title: "crates/hnsw"
 ---
 
+This companion crate gives you approximate-nearest-neighbour search for [`VectorMemoryStore`](/extensions/memory/). It is an HNSW, a Hierarchical Navigable Small World, implementation of `VectorIndex`.
 
-Approximate-nearest-neighbour search for [`VectorMemoryStore`](/extensions/memory/): an HNSW (Hierarchical Navigable Small World) `VectorIndex` implementation — the scale tier between the linear reference index and the external stores. Publishes after loopctl, like the other companions.
+It is the scale tier sitting between the linear reference index and the external stores, and it publishes after loopctl like the other companions.
 
-**Key items**
+## Key items
 
-- The HNSW `VectorIndex` — `add`/`search`/`remove`/`len` over the same object-safe trait the linear index implements; graph construction and search in `graph.rs`, the index mapping in `map.rs`.
+The index gives you `add`, `search`, `remove`, and `len` over the same object-safe trait the linear index implements.
 
-**Behavior notes**
+Graph construction and search live in `graph.rs`, and the index mapping lives in `map.rs`.
 
-- The correctness contracts are the linear index's: cosine-scored top-*k* sorted descending with the id tiebreak, idempotent `remove`, dimension-mismatch as `LoopError::Memory` — the linear index stays the oracle faster indexes must match.
-- New in 0.4.0 (the crate did not exist at `v0.3.2`); reaching release resolved four contract edges (removal model, ordering, metrics, upsert failure handling) so search upholds the crate's own documented behavior.
+## Behavior notes
 
-Deep dive: [Memory — the semantic tier](/extensions/memory/#the-semantic-tier--shipped-040)
+The correctness contracts are the linear index's: cosine-scored top-k sorted descending with the id tiebreak, idempotent `remove`, and a dimension mismatch surfacing as `LoopError::Memory`.
+
+The linear index stays the oracle that your faster indexes must match.
+
+This crate is new in 0.4.0 and did not exist at `v0.3.2`. Reaching release resolved four contract edges: the removal model, ordering, metrics, and upsert failure handling, so search now upholds the crate's own documented behavior.
+
+For the deep dive, see the semantic tiers section of [Memory](/extensions/memory/#the-semantic-tiers).

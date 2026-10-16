@@ -1,21 +1,27 @@
 ---
-title: "`src/mcp/server.rs` — the MCP server side [feature: mcp]"
+title: "src/mcp/server.rs"
 ---
 
+This file serves your `ToolRegistry` over MCP under the `mcp` feature, so your tools become usable by any MCP client. It exposes rmcp types deliberately, because you are embedding a real server.
 
-Serve a `ToolRegistry` over MCP — your tools become usable by any MCP client. Exposes rmcp types deliberately (you're embedding a real server).
+## Key items
 
-**Key items**
+`McpServerAdapter::new(registry, context, server_name, server_version)` is `Clone` and takes snapshot semantics, so rebuild it when your tool set changes.
 
-- `McpServerAdapter::new(registry, context, server_name, server_version)` — `Clone`; snapshot semantics (rebuild for a different tool set).
-- `serve_stdio(self)` — the canonical interactive transport; the returned `RunningService` has completed the handshake; `.waiting()` blocks until stdin closes; cancel via its token. Other transports: `adapter.serve(transport)` via rmcp's `ServiceExt`.
+`serve_stdio(self)` is your canonical interactive transport. The returned `RunningService` has already completed the handshake, `.waiting()` blocks until stdin closes, and you cancel through its token.
 
-**Behavior notes**
+Other transports go through `adapter.serve(transport)` using rmcp's `ServiceExt`.
 
-- Advertises the tools capability only (no resources/prompts/sampling/logging; no `listChanged`).
-- `list_tools` maps every schema through the validation layer (see [convert.rs](/file-reference/mcp-convert/)) — invalid-schema tools are omitted with a warning, external `$ref`s are refused (never fetched).
-- `call_tool`: unknown name → MCP `METHOD_NOT_FOUND` naming what *is* registered; everything the tool reports (soft error, hard failure, cancellation) is a tool-level `is_error` result.
-- Cancellation drops in-flight tool futures — served tools must be cancellation-safe.
-- rmcp ≥ 3.4: the adapter follows rmcp's `ServerInfo` → `ServerConfig` rename — behavior is unchanged, but a downstream build naming the deprecated alias now fails under `-D warnings`.
+## Behavior notes
+
+Your server advertises the tools capability only: no resources, prompts, sampling, or logging, and no `listChanged`.
+
+`list_tools` maps every schema through the validation layer, see [convert.rs](/file-reference/mcp-convert/). Invalid-schema tools are omitted with a warning, and external `$ref`s are refused, never fetched.
+
+In `call_tool`, an unknown name returns MCP `METHOD_NOT_FOUND` naming what is registered. Everything else your tool reports, soft error, hard failure, or cancellation, arrives as a tool-level `is_error` result.
+
+Cancellation drops in-flight tool futures, so your served tools must be cancellation-safe.
+
+On rmcp ≥ 3.4 the adapter follows rmcp's `ServerInfo` to `ServerConfig` rename. Behavior is unchanged, but a downstream build naming the deprecated alias now fails under `-D warnings`.
 
 Deep dive: [MCP](/integration/mcp/).

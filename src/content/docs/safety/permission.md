@@ -1,13 +1,12 @@
 ---
-title: "Permissions — allow, deny, ask, modify — and the record of why"
+title: "Permissions"
 sidebar:
   order: 8
 ---
 
+Should this tool call be allowed to run? loopctl answers that with one small enum, `PermissionCheck`, consumed by `PermissionMiddleware`.
 
-Should this tool call be allowed to run? loopctl's permission model is one small enum, `PermissionCheck` (in `src/tool/permission.rs`), consumed by `PermissionMiddleware`. There is deliberately no built-in policy engine — *you* write the policy as a function; the framework provides the decision vocabulary, the enforcement point, and (since 0.4.0) the **audit record**: every decision lands as serializable `GateDecision` data.
-
----
+There is no built-in policy engine, deliberately. You write the policy as a function, and the framework gives you the decision vocabulary, the enforcement point, and the audit record that says why. Source: `src/tool/permission.rs`.
 
 ## The decision type
 
@@ -20,49 +19,89 @@ pub enum PermissionCheck {
 }
 ```
 
-Constructors and checks: `PermissionCheck::allow()`, `.deny("...")`, `.ask("...")`, `.modify(json)`, `is_allow()` / `is_deny()` / `is_ask()` / `is_modify()`.
+Constructors: `PermissionCheck::allow()`, `.deny("...")`, `.ask("...")`, and `.modify(json)`. Checks: `is_allow()`, `is_deny()`, `is_ask()`, and `is_modify()`.
 
-What each produces in the [middleware](/safety/middleware/) (the enforcement point):
+### What each decision does
+
+The [middleware](/safety/middleware/) is the enforcement point, and each variant has a distinct outcome there:
 
 | Decision | Outcome |
 |---|---|
-| `Allow` | next layer runs |
-| `Deny { reason }` | **short-circuit** — soft error `"Permission <reason> for tool 'x'"`, zero duration; nothing inside executes |
-| `Ask { prompt }` | your async resolver answers; `true` → proceed, `false` → soft error "denied by user" (logged at `warn`, like every other denial — 0.3.2). **No resolver configured → denied** (safe default for headless agents). A cancel while the answer is pending aborts the wait (`cancelled while awaiting approval`) — an unresponsive resolver cannot hold a cancelled run open, and a cancellation that already fired when the answer lands wins deterministically: a cancelled run never executes the tool |
-| `Modify { input }` | `ctx.input` is replaced, then the call proceeds |
+| `Allow` | The next layer runs. |
+| `Deny { reason }` | Short-circuit, with a soft error and zero duration, so nothing inside executes. |
+| `Ask { prompt }` | Your resolver answers, and the run continues only if that answer says yes. |
+| `Modify { input }` | `ctx.input` is replaced, then the call proceeds. |
 
-> **Gotcha:** `Modify`'s replacement is **not re-validated** against the tool's schema. If your policy rewrites arguments, keep them valid yourself.
+A denial reads "Permission <reason> for tool 'x'", which is the text your model sees.
 
-**Writing good reasons matters** — the reason text is what the model reads *and* what the audit record carries. `"shell execution is disabled in this session"` lets the model pick another path; `"denied"` teaches it nothing. For `Ask` prompts, name the effect: `"Allow write to /etc/config.yaml?"`.
+### Ask waits for your answer
 
----
+Your async resolver decides an `Ask`. A true answer lets the call through, and a false one returns a soft error reading "denied by user", logged at `warn` like every other denial.
 
-## Gate decisions as data (0.4.0)
+No resolver configured means denied. That is the safe default for a headless agent.
 
-Asks, plan mode, audit, and gate replay all need the decision itself as a serializable record. Every decision the permission middleware makes now mints one `GateDecision`:
+A cancel while the answer is pending aborts the wait and denies with "cancelled while awaiting approval", so an unresponsive resolver cannot hold a cancelled run open. If the cancel already fired when your answer lands, the cancel wins deterministically, and a cancelled run never executes the tool.
+
+### The one thing Modify does not do
+
+Gotcha: `Modify`'s replacement is not re-validated against the tool's schema. If your policy rewrites arguments, keep them valid yourself.
+
+### Reasons the model can act on
+
+The reason text is what your model reads, and the same string rides the audit record. `"shell execution is disabled in this session"` lets the model pick another path, while `"denied"` teaches it nothing. For an `Ask` prompt, name the effect instead: `"Allow write to /etc/config.yaml?"`.
+
+## The audit record
+
+Asks, plan mode, audit, and gate replay all need the decision itself as data, a serializable record you can store.
+
+That arrived in 0.4.0, and every decision your permission middleware makes mints one `GateDecision`:
 
 ```text
 { tool, args_digest, verdict, rule_id, rule_source, matched_pattern, reason, ts }
 ```
 
-- **`args_digest`** — 16 hex characters, FNV-1a-64 over the input's *canonical* JSON (every object's keys sorted, recursively, whichever `serde_json` map backend your graph resolves to). Key order never moves it; any argument change produces a different digest; the call's arguments themselves are never stored. For a rewritten call, the digest is of the **original** input — it identifies the call the model made.
-- **`verdict`** — all nine paths: `Allow`, `AllowModified`, `Deny`, `Ask` (the pre-resolution answer), `AskAllowed`, `AskDenied`, `AskUnresolved` (headless: no resolver), `AskExpired` (the ask deadline), `Cancelled` (the cancel-raced prompt — distinct from a refusal).
-- **`rule_id` + `rule_source`** — provenance: `"middleware"` for an unnamed check, the id a `with_named_check(rule_id, f)` rule carries verbatim, `"context"` for a per-call claim, `"ask"`/`AskResolver` when the user's answer decided, `Engine` for engine-policy outcomes (the [ask channel's](/safety/approvals/) expiry/cancel/headless records).
-- **`ts`** — stamped by the engine from its clock seam at emission (a record read straight off a dispatch result before emission carries `0`).
+### args_digest
 
-The record rides the dispatch result out to the engine, which emits it through the `on_gate_decision` observer (`tool_pre → gate → tool_post` order, paired by `call_id` with the `tool.call`/`tool.result` ledger lines). **Exactly one record per gated dispatch**: an ask that resolves emits the resolution, not the step; a dispatch no gate consulted emits none. Compositions stay honest — a memoize cache hit clears the gate, and stacked permission layers attach records through a precedence lattice (deny-family over `AllowModified` over pass-through) so the record that *decided* the outcome survives.
+This is 16 hex characters, FNV-1a-64 over the input's canonical JSON, which means every object's keys sorted recursively, whichever `serde_json` map backend your graph resolves to. Key order never moves it, and any argument change produces a different digest. The call's arguments themselves are never stored.
+
+For a rewritten call the digest covers the original input, because it identifies the call your model made.
+
+### verdict
+
+Nine verdicts cover every path:
+
+- `Allow`, `AllowModified`, and `Deny`.
+- `Ask` is the pre-resolution answer, and your user's reply decides `AskAllowed` or `AskDenied`.
+- `AskUnresolved` marks a headless run with no resolver, and `AskExpired` marks the ask deadline.
+- `Cancelled` marks a prompt your cancel raced, and that is distinct from a refusal.
+
+### rule_id and rule_source
+
+These carry provenance. An unnamed check reports `"middleware"`, and a rule you set with `with_named_check(rule_id, f)` carries your id verbatim. A per-call claim reports `"context"`.
+
+An answer from your user reports `"ask"` with `AskResolver` as the source. Engine policy reports `Engine`, which is how the [ask channel's](/safety/approvals/) expiry, cancel, and headless records get labelled.
+
+### ts
+
+The engine stamps this from its clock seam at emission. A record you read straight off a dispatch result before emission carries `0`.
+
+### One record per gated dispatch
+
+The record rides the dispatch result out to the engine, which emits it through the `on_gate_decision` observer. Ordering is `tool_pre → gate → tool_post`, and `call_id` pairs it with the `tool.call` and `tool.result` ledger lines.
+
+Exactly one record lands per gated dispatch. An ask that resolves emits the resolution rather than the step, and a dispatch no gate consulted emits none.
+
+Compositions stay honest. A memoize cache hit clears the gate, and stacked permission layers attach records through a precedence lattice: deny-family over `AllowModified` over pass-through. The record that decided the outcome is the one that survives.
 
 ### Evaluate without executing
 
-`PermissionMiddleware::evaluate(tool_name, input)` resolves a synthetic dispatch through the middleware's **real** rule stack — so a `plan`-style dry-run uses the engine's policy, not a parallel one. An `Ask` evaluates to `Ask` with the prompt in `reason` (a dry-run never consults the resolver).
-
----
+`PermissionMiddleware::evaluate(tool_name, input)` resolves a synthetic dispatch through the middleware's real rule stack, so a `plan`-style dry-run uses the engine's policy rather than a parallel one. An `Ask` evaluates to `Ask` with the prompt in `reason`, because a dry run never consults your resolver.
 
 ## Where decisions come from
 
-Three sources, in practice:
+Three sources cover practice.
 
-**1. A policy function** (the common case):
+**A policy function** is the common case:
 
 ```rust
 let middleware = PermissionMiddleware::from_context().with_check(|ctx| {
@@ -80,42 +119,45 @@ let middleware = PermissionMiddleware::from_context().with_check(|ctx| {
 });
 ```
 
-**2. The context itself** — `from_context()` (no check function) honors whatever `ctx.permission` carries. The engine seeds `Allow` for every dispatch; a middleware earlier in the chain can tighten it.
+**The context itself** works when you call `from_context()` with no check function. That honors whatever `ctx.permission` carries. The engine seeds `Allow` for every dispatch, and a middleware earlier in the chain can tighten it.
 
-**3. Ready-made extremes** — `deny_all()` (a sandbox: nothing runs, everything gets "blocked by policy") and `allow_all()` (pass-through, useful for testing a pipeline with the permission slot occupied).
+**Ready-made extremes** cover the two ends:
 
-The `Ask` resolver is async (`AskResolverFn`), so a real integration can call a UI, a webhook, an approval service. While it resolves, dispatch waits — the timeout middleware (if outside the permission layer) still bounds the whole thing, and since 0.3.2 the dispatch's cancel signal does too: a cancelled pipeline stops awaiting and denies with `cancelled while awaiting approval` instead of waiting out an unresponsive resolver.
+- `deny_all()` is a sandbox. Nothing runs, and everything gets "blocked by policy".
+- `allow_all()` is pass-through. Use it when you test a pipeline and need the permission slot occupied.
 
----
+### Your resolver can be remote
 
-## The related knobs on tools themselves
+An `Ask` resolver is an async `AskResolverFn`, so a real integration can call a UI, a webhook, or an approval service. Dispatch waits while it resolves.
 
-Two `Tool` trait methods feed permission thinking:
+Two things bound that wait. The timeout middleware bounds the whole call if it sits outside your permission layer, and since 0.3.2 the dispatch's cancel signal does too. A cancelled pipeline stops awaiting and denies with "cancelled while awaiting approval" instead of waiting out an unresponsive resolver.
 
-- **`is_read_only()`** — declares the tool changes nothing. A policy can auto-approve read-only tools and only gate the rest: the classic "reads flow freely, writes ask."
-- **`ToolContext::is_non_interactive`** — the "no human is present" flag. Tools and gates should fail with `ToolError::Permission` rather than trying to prompt in non-interactive contexts.
+## The knobs on tools themselves
 
-`FnTool` users: `.read_only()` sets the flag.
+Two `Tool` trait methods feed your policy:
 
----
+- `is_read_only()` declares that the tool changes nothing. Your policy can then auto-approve read-only tools and gate only the rest, which is the classic split where reads flow freely and writes ask.
+- `ToolContext::is_non_interactive` is the flag for "no human is present". In those contexts, tools and gates should fail with `ToolError::Permission` rather than try to prompt.
+
+If you build tools with `FnTool`, call `.read_only()` to set that flag.
 
 ## How this relates to hooks
 
-There are two blocking mechanisms in loopctl and the difference is placement:
+loopctl has two blocking mechanisms, and the difference is placement:
 
-| | `PermissionMiddleware` | pre-tool-use [hooks](/extensions/hooks/) |
+| | `PermissionMiddleware` | Pre-tool-use [hooks](/extensions/hooks/) |
 |---|---|---|
-| Lives in | the tool pipeline | the hook executor, outside the pipeline |
-| Decides with | a function over `ToolDispatchContext` | `HookAction` (Allow/Block/Ask) over `PreToolUseContext` |
-| Extra powers | `Modify` (input rewriting) | shares one executor with run/compact events; first-block-wins across all hooks |
-| Right for | per-call policy, input-aware rules, renames | session-wide rules ("never the `rm` tool"), audit-driven gates |
+| Lives in | The tool pipeline. | The hook executor, outside the pipeline. |
+| Decides with | A function over `ToolDispatchContext`. | A `HookAction` of `Allow`, `Block`, or `Ask` over `PreToolUseContext`. |
+| Extra powers | `Modify`, which rewrites input. | One executor shared with run and compact events, and first-block-wins across all hooks. |
+| Right for | Per-call policy, input-aware rules, renames. | Session-wide rules like never using the `rm` tool, and audit-driven gates. |
 
-They compose: hooks run first (engine-level), then the pipeline's permission layer. If both allow, the tool runs. And since 0.4.0 there is a third piece: a hook's `Ask` can **park the run** through the [ask channel](/safety/approvals/) instead of resolving synchronously, and approvals can persist as grants there so re-asking is automatic only when something changed.
+They compose. Hooks run first at engine level, then your pipeline's permission layer, and the tool runs only if both allow.
 
----
+A hook's `Ask` is the third piece in this picture. It can park the run through the [ask channel](/safety/approvals/) instead of resolving synchronously, and approvals can persist there as grants, so re-asking happens only when something changed.
 
 ## Related pages
 
-- [Middleware](/safety/middleware/) — the enforcement mechanics.
-- [Hooks](/extensions/hooks/) — the other gate.
-- [The shield](/safety/tool-shield/) — risk scoring as an alternative to explicit rules.
+- [Middleware](/safety/middleware/) covers the enforcement mechanics.
+- [Hooks](/extensions/hooks/) is the other gate.
+- [The shield](/safety/tool-shield/) scores risk instead of following explicit rules.

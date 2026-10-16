@@ -1,17 +1,14 @@
 ---
-title: "Messages — the conversation data model"
+title: "Messages"
 sidebar:
   order: 1
 ---
 
-
-Everything the model ever sees is a `Message`. This page covers the whole data model: messages, their parts, roles, images, and tool content. Source: `src/message.rs`.
-
----
+Everything the model sees is a `Message`. You build them when you hand a conversation to the engine. You read them when you want to know what a run actually sent. Source: `src/message.rs`.
 
 ## The shape
 
-A conversation is a `Vec<Message>`. A message is a **role** (who spoke) plus a list of **parts** (what was said). A part can be text, an image, a tool call, or a tool result — several kinds can share one message.
+A conversation is a `Vec<Message>`. Each message carries a role and a list of parts. The role says who spoke. The parts say what came out, and there can be several of them: text, an image, a tool call, or a tool result.
 
 ```rust
 pub struct Message {
@@ -20,19 +17,27 @@ pub struct Message {
 }
 ```
 
-Why parts and not a plain string? Because one model reply can contain **text and tool calls mixed** ("Let me check that... [calls tool]"), and one user reply can contain **several tool results at once**.
+Read the two fields as one rule: a message is a sender plus a bundle.
+
+Why a bundle and not one string? Because one model reply mixes text with tool calls ("Let me check that", then a call), and one user turn can carry several tool results at once. A string holds neither shape.
 
 ### Roles
+
+Three values cover every sender:
 
 ```rust
 pub enum Role { User, Assistant, System }
 ```
 
-- **`User`** — a human message. Also — by provider convention — the role used for **tool results**. Yes, really: all major providers expect tool results delivered as user-side messages. loopctl does this for you.
-- **`Assistant`** — the model's reply (text, tool calls, or both).
-- **`System`** — framework-injected context, not part of the chat itself. Providers handle it differently (OpenAI puts it inline as a system message; Anthropic and Gemini require it as a separate top-level field) — loopctl's providers fold system messages automatically, so you rarely build them by hand.
+The naming surprises people, so read the third line carefully.
+
+- `User` is a human message. It is also the role that carries tool results, because every major provider expects them as user-side messages. loopctl puts them there for you.
+- `Assistant` is the model's reply. It holds text, tool calls, or both.
+- `System` is context the framework injects. It is not part of the chat itself. Providers want it in different places: OpenAI takes it inline, Anthropic and Gemini want a separate top-level field. The provider layer folds your system messages correctly, so you rarely build one by hand.
 
 ### Parts
+
+All the variety lives in this enum, and you will build most of these variants by hand sooner or later:
 
 ```rust
 pub enum MessagePart {
@@ -45,7 +50,7 @@ pub enum MessagePart {
 }
 ```
 
-The pairing rule, which every provider enforces:
+Every provider enforces one pairing rule between the last two variants:
 
 ```text
 Assistant:  [ToolCall  id="call_1" name="read_file" input={...}]   ← the model asks
@@ -53,22 +58,30 @@ User:       [ToolResult call_id="call_1" name="read_file" output="file contents.
                                                         ↑ your program answers, same id
 ```
 
-- `id` is assigned by the **provider** and must be unique within a turn.
+Five rules govern that pair:
+
+- The provider assigns `id`. It must be unique within a turn.
 - `ToolResult.call_id` must match the `ToolCall.id` it answers.
-- `ToolResult.name` matters for providers that match by name (Gemini does); loopctl fills it for you.
-- `is_error: Some(true)` marks a failed tool run; `None` or `Some(false)` means success.
-- `retention` tags how compaction may treat the result (see [retention classes](#retention-classes--what-compaction-may-clear) below); `None` is the untagged default.
+- `ToolResult.name` matters for providers that match by name, and Gemini does. loopctl fills it for you.
+- `is_error: Some(true)` marks a failed tool run. `None` and `Some(false)` both mean success.
+- `retention` tags how compaction may treat the result. `None` is the untagged default. See [retention classes](#retention-classes) below.
 
-### Thinking parts — reasoning, signatures, redaction
+### Thinking parts
 
-`Thinking` is the model's private scratch reasoning, streamed separately from the answer text. Two optional fields exist for providers that *sign* their reasoning (Anthropic does):
+`Thinking` is the model's private scratch reasoning. It streams separately from the answer text. Some providers sign their reasoning, and Anthropic does. Two optional fields exist for them:
 
-- **`signature`** — the provider's signature over a visible reasoning block. Some providers refuse to continue a conversation whose prior thinking lacks a valid signature, so loopctl latches it from the delta and replays it verbatim on later requests.
-- **`redacted`** — the opaque payload of a reasoning block the provider withheld (you see nothing; it still demands the placeholder back on continuations). `text` is empty in that case.
+- **`signature`** is the provider's signature over a visible reasoning block. Some providers refuse to continue a conversation whose prior thinking lacks a valid signature, so loopctl latches it from the delta. It replays the signature verbatim on later requests.
+- **`redacted`** is the opaque payload of a reasoning block the provider withheld. You see nothing, and the provider still demands the placeholder back on continuations. `text` is empty in that case.
 
-**The retention policy (since 0.4.0): thinking rides the conversation verbatim.** Prior turns' thinking blocks stay in the message list until a compaction pass ages them out — the engine no longer strips them at turn boundaries. Why: every strip rewrote the request prefix, so provider-side prompt caches never hit and every call re-prefilled the whole conversation. Keeping history byte-stable keeps the cache hitting; the cost is window space for the reasoning's lifetime, which tightens the compaction cadence on reasoning-heavy models. The newest assistant message's thinking always rode its own tool loop — the interleaved-thinking replay contract providers require — and still does.
+Since 0.4.0, thinking rides the conversation verbatim. Prior turns keep their thinking blocks in the message list until a compaction pass ages them out, and the engine no longer strips them at turn boundaries.
 
-### Handy constructors and readers
+The reason is caching. Every strip rewrote the request prefix, so provider-side prompt caches never hit and you re-prefilled the whole conversation on every call. Keeping history byte-stable keeps the cache hitting.
+
+You pay for that in window space over the reasoning's lifetime, which tightens the compaction cadence on reasoning-heavy models. The newest assistant message always rode its own tool loop with its thinking, because the interleaved-thinking replay contract demands it, and it still does.
+
+### Helper methods
+
+These constructors and readers cover the everyday cases:
 
 ```rust
 Message::user("hello")                      // User role + one text part
@@ -82,11 +95,11 @@ MessagePart::tool_result("call_1", "echo", "echo: hi", false)
 part.as_text()                              // Some(&str) only for Text parts
 ```
 
----
+Reach for `Message::new` whenever a helper does not fit the role or the parts you want.
 
 ## Images
 
-Images are base64-encoded (a text encoding of binary bytes — what you get from most image libraries):
+An image part carries base64 bytes, which is the text encoding most image libraries hand you:
 
 ```rust
 let source = ImageSource::new_base64("image/png", base64_data);
@@ -94,12 +107,11 @@ let part = MessagePart::Image { source };
 let msg = Message::new(Role::User, vec![part]);
 ```
 
-> **Gotcha 1:** image parts are only valid in `Role::User` messages. Providers reject them in assistant messages.
-> **Gotcha 2:** loopctl's own provider clients currently **drop** image parts when building requests (each converter notes "not supported in this path"). The data model carries images end-to-end, but the built-in clients do not send them yet. If you need vision, plan on a custom `ApiClient`.
+Gotcha: two limits bite here. Image parts are only valid in `Role::User` messages, and providers reject them in assistant messages.
 
----
+Worse, loopctl's own provider clients currently drop image parts when building requests, and each converter notes "not supported in this path". The data model carries images end-to-end, but the built-in clients do not send them yet. If you need vision, plan on a custom `ApiClient`.
 
-## Tool output content — `ToolContent`
+## Tool output content
 
 A tool's output is either plain text or several parts:
 
@@ -115,27 +127,25 @@ pub enum ToolContentPart {
 }
 ```
 
-Details worth knowing:
+Three details are worth knowing before you return one:
 
-- `ToolContent::from_string("x")` and `.into()` from `String`/`&str` build the text form.
-- `Display` (what `to_string()` gives you) prints text parts joined with newlines and **silently skips images**. If you log `to_string()` of a screenshot tool's output, you'll see nothing of the screenshot.
-- A multipart result carrying images is the standard way for a tool to hand a picture to the model (subject to the provider limitation above).
-
----
+- `ToolContent::from_string("x")` builds the text form, and so does `.into()` from `String` or `&str`.
+- `Display` is what `to_string()` gives you. It joins text parts with newlines and skips images silently, so when you log a screenshot tool's output you see nothing of the screenshot.
+- A multipart result carrying images is the standard way for a tool to hand a picture to the model. The provider limit above still applies.
 
 ## Serialization
 
-Every type here serializes and deserializes with `serde` (JSON). Internally, `MessagePart` is tagged with `"type"`, so the JSON looks like:
+Every type here serializes and deserializes with `serde` over JSON. Internally `MessagePart` is tagged with `"type"`, so the JSON looks like this:
 
 ```json
 { "role": "user", "parts": [ { "type": "text", "text": "hello" } ] }
 ```
 
-This is what makes the "save the machine, resume later" trick possible — the conversation inside the brain is pure serializable data.
+That is what makes "save the machine, resume later" possible. The conversation inside the brain is plain serializable data.
 
-> **Gotcha:** `ToolResult.name` has a serde default of `""` so older saved conversations (before the field existed) still load. Don't rely on `name` being non-empty when reading foreign data.
+### The four wire shapes
 
-### The exact wire shapes, all four parts
+These are the exact JSON objects on the wire, one per part type:
 
 ```json
 { "type": "text",        "text": "hello" }
@@ -145,31 +155,35 @@ This is what makes the "save the machine, resume later" trick possible — the c
 { "type": "tool_result", "call_id": "call_1", "name": "read_file", "output": "…", "is_error": true }
 ```
 
-`signature`/`redacted` serialize only when present (`skip_serializing_if`), and `retention` follows the same rule — old saved conversations load unchanged.
+Compare them against a saved session file when a provider complains about a payload.
 
-`ToolContent` is **untagged**: `Text` serializes as a plain JSON string, `Multipart` as an array of `{"type":"text"|"image", …}` objects — no wrapper either way. An empty `parts` list is legal (and means silence).
+`signature` and `redacted` serialize only when present, through `skip_serializing_if`. `retention` follows the same rule, so old saved conversations load unchanged.
 
-Reader semantics carry one subtlety worth pinning: `text_content()` concatenates text parts with **no separator** — consecutive text parts are one logical stream (`"a"` + `"b"` → `"ab"`). `Display` (what logging and `to_string()` produce) is different on purpose: it joins with **newlines** and renders non-text parts as brackets — `[Tool: read_file with input: {…}]`, `[Tool Result: …]`, `[Image: image/png]` — so log output and `text_content()` of the same message can legitimately differ.
+One more default protects old data. `ToolResult.name` has a serde default of `""`, so conversations saved before the field existed still load. Do not rely on `name` being non-empty when you read foreign data.
 
-One deliberate omission: there is **no `Message::system()` constructor**. System-role messages are framework-built (`Message::new(Role::System, …)` — that's what contributors emit); your code expresses standing guidance through the session's system prompt, where every provider routes it correctly.
+`ToolContent` is untagged. `Text` serializes as a plain JSON string, and `Multipart` serializes as an array of `{"type":"text"|"image", …}` objects. Neither gets a wrapper. An empty `parts` list is legal, and it means silence.
 
----
+Reader semantics carry one subtlety worth pinning. `text_content()` concatenates text parts with no separator, so consecutive text parts are one logical stream: `"a"` plus `"b"` gives `"ab"`.
 
-## Retention classes — what compaction may clear
+`Display` differs on purpose. It joins with newlines and renders non-text parts as brackets, so `[Tool: read_file with input: {…}]`, `[Tool Result: …]` and `[Image: image/png]` all appear in logs. Log output and `text_content()` of the same message can legitimately differ.
 
-A tool result can carry a `Retention` tag (set with `MessagePart::tool_result(...).with_retention(...)` or by your tool through `ToolOutput` — see [tools](/core-data/tools/)):
+One constructor is missing on purpose: there is no `Message::system()`. System-role messages are framework-built through `Message::new(Role::System, …)`, which is what contributors emit. Your code expresses standing guidance through the session's system prompt, where every provider routes it correctly.
+
+## Retention classes
+
+A tool result can carry a `Retention` tag. Set it with `MessagePart::tool_result(...).with_retention(...)`, or let your tool set it through `ToolOutput`. See [tools](/core-data/tools/) for that second path. When you tag a result, you decide what compaction may throw away.
 
 | Class | Meaning | What compaction and pruning do with it |
 |---|---|---|
-| *(untagged)* | Default | First to go: old untagged results are exactly what the [prune](/engine/context-accounting/) pass clears. |
-| `Requery` | Re-derivable — the model can fetch it again (a file read, a search hit) | Cleared after the untagged pool is exhausted; the omission marker names the tool call so a summary cannot restate content it never saw. |
-| `Durable` | Non-re-derivable — losing it loses information | Exempt from pruning; compaction summarizes rather than deletes where the tag is honored. |
+| `None` | Default. The result carries no tag. | First to go. Old untagged results are exactly what the [prune](/engine/context-accounting/) pass clears. |
+| `Requery` | Re-derivable. The model can fetch the content again, like a file read or a search hit. | Cleared after the untagged pool runs out. The omission marker names the tool call, so a summary cannot restate content it never saw. |
+| `Durable` | Not re-derivable. Losing it loses information. | Exempt from pruning. Compaction summarizes these rather than deleting them where the tag is honored. |
 
 The tag travels with the part through serialization, so a checkpointed conversation keeps its retention decisions.
 
----
+## A mini conversation
 
-## Put it together — a mini conversation
+Four messages show the whole model working together:
 
 ```rust
 let conversation = vec![
@@ -184,12 +198,12 @@ let conversation = vec![
 ];
 ```
 
-That's the entire model — five shapes (`Message`, `Role`, `MessagePart`, `ToolContent`, `ImageSource`) that every other subsystem builds on.
+Notice that the tool result arrives as a `User` message carrying the `call_1` id you passed in. That is the pairing rule from earlier, in real code.
 
----
+That is the entire model: five shapes (`Message`, `Role`, `MessagePart`, `ToolContent`, `ImageSource`) that every other subsystem builds on.
 
 ## Related pages
 
-- [Tools](/core-data/tools/) — where `ToolCall` requests come from and how results are produced.
-- [The big idea](/start-here/the-big-idea/) — where these messages live (history vs pending).
+- [Tools](/core-data/tools/) covers where `ToolCall` requests come from and how results are produced.
+- [The big idea](/start-here/the-big-idea/) covers where these messages live: history versus pending.
 - [File reference: message.rs](/file-reference/message/)

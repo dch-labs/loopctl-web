@@ -1,21 +1,37 @@
 ---
-title: "`src/tool/builtin/shell.rs` + `shell/` — the shell tool family [feature: shell_tools]"
+title: "src/tool/builtin/shell.rs"
 ---
 
+This file and its `shell/` directory give you command execution over a pluggable `ShellBackend`. You sit behind the `shell_tools` feature.
 
-Command execution over a pluggable `ShellBackend`: the `Shell` tool (model-facing name `Shell`, not `bash` — gate policies stay OS-portable) and the `Jobs` tool over a host-created shared `JobStore`. `UnixShellBackend` (`#[cfg(unix)]`, in `shell/unix.rs`) ports the original mechanics; `shell/jobs.rs` holds the jobs machinery.
+There are two tools. The `Shell` tool keeps the model-facing name `Shell` rather than `bash`, so your gate policies stay OS-portable. The `Jobs` tool works over a host-created shared `JobStore`.
 
-**Key items**
+`UnixShellBackend` lives in `shell/unix.rs` behind `#[cfg(unix)]` and ports the original mechanics, and `shell/jobs.rs` holds the jobs machinery.
 
-- The schema is neutral and grammar-server-safe: `command` required alone (no `anyOf`), `timeout_s` (default 120, clamp 600, zero rejected), `background`.
-- `UnixShellBackend` — `bash -c` in its own process group with `kill_on_drop`; an RAII `ChildGuard` whose drop SIGKILLs the whole group on timeout (sub-shells and grandchildren die with the deadline; a reaped child disarms the guard so a detached helper survives); both streams read concurrently under a one-million-byte per-stream cap with drain-past-cap; `[exit {code}, {duration_ms}ms]` metadata, nonzero exits as error-text.
-- Background jobs: `background: true` records a running entry in the shared `JobStore` (hosts hand one `Arc` to both tools — isolated slates, no process global) and detaches a bounded completion task — the one sanctioned `tokio::spawn`. `Jobs` lists, polls (`operation` ∈ `jobs`/`job_status`/`cleanup_jobs`), and clears; terminal jobs evict past twenty.
-- Dynamic concurrency: the read-only-prefix allowlist (`cargo check` yes, `cargo checkout` no) with compound/redirection disqualifiers, the mutating-substring denylist, and expansion disqualifiers (any `$` or `{` — the shell expands `${IFS}`, `$'…'`, `{a,b}` into words the checked text never shows) drive `is_safe_for_concurrent_execution`.
+## Key items
 
-**Behavior notes**
+The schema is neutral and grammar-server-safe. `command` is required alone, with no `anyOf`, and you also get `timeout_s`, which defaults to 120, clamps at 600, and rejects zero, plus `background`.
 
-- A `ShellBackend::available` probe is consulted before a background spawn is acknowledged — a backend-less platform refuses synchronously with the same `Execution` text and records no job.
-- Platforms without a backend answer an honest refusal while the schema stays present for gate rules; the `#[cfg(not(unix))]` placeholder is compile-checked by the CI windows cross-gate.
-- Ships off by default — no preset registers it; explicit registration only.
+`UnixShellBackend` runs `bash -c` in its own process group with `kill_on_drop`.
 
-Deep dive: [Tools](/core-data/tools/) — the builtin families table.
+An RAII `ChildGuard` SIGKILLs the whole group on drop at a timeout, so your sub-shells and grandchildren die with the deadline. A reaped child disarms the guard, so a detached helper survives.
+
+Both streams are read concurrently under a one-million-byte per-stream cap with drain-past-cap, and you get `[exit {code}, {duration_ms}ms]` metadata, where nonzero exits arrive as error-text.
+
+For background jobs, `background: true` records a running entry in the shared `JobStore` and detaches a bounded completion task, which is the one sanctioned `tokio::spawn`. Your host hands one `Arc` to both tools, so you get isolated slates rather than a process global.
+
+The `Jobs` tool lists, polls, and clears, where `operation` is `jobs`, `job_status`, or `cleanup_jobs`. Terminal jobs evict past twenty.
+
+Concurrency is decided dynamically by `is_safe_for_concurrent_execution`. A read-only-prefix allowlist approves `cargo check` and refuses `cargo checkout`, and compound or redirection forms are disqualified.
+
+A denylist of mutating substrings follows, and expansion disqualifiers reject any `$` or `{`, because your shell expands `${IFS}`, `$'…'`, and `{a,b}` into words the checked text never shows.
+
+## Behavior notes
+
+A `ShellBackend::available` probe is consulted before a background spawn is acknowledged. On a backend-less platform you are refused synchronously with the same `Execution` text, and no job is recorded.
+
+A platform without a backend answers you with an honest refusal while the schema stays present for your gate rules. The `#[cfg(not(unix))]` placeholder is compile-checked by the CI windows cross-gate.
+
+This family ships off by default. No preset registers it, so registration is explicit only.
+
+For the deep dive, see the builtin families table in [Tools](/core-data/tools/).

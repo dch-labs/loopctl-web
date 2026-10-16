@@ -1,24 +1,41 @@
 ---
-title: "`src/engine/core/machine.rs` — the `LoopMachine`"
+title: "src/engine/core/machine.rs"
 ---
 
+This file holds `LoopMachine`, the brain: pure, serializable state that decides every step and never does IO. It runs about 1,600 lines with docs and tests.
 
-The brain: pure, serializable state; decides every step; never does IO. (~1,600 lines with docs/tests.)
+## Key items
 
-**Key items**
+The fields are `state`, `history`, `pending`, `pending_tools`, `turns_taken`, `context_tokens`, `cancelled`, and `last_compaction_tokens`.
 
-- Fields: `state`, `history`, `pending`, `pending_tools`, `turns_taken`, `context_tokens`, `cancelled`, `last_compaction_tokens`, `deferred_compaction` (0.4.0 — the latch for a threshold pass that declined while the payload fit).
-- Steps & feeds: `next_step(policy)`; `model_response` (classifies tool calls against `available_tools`, pre-answering unknown ones), `tool_results` (the only `pending_tools` consumer), `compaction_result` (wholesale replace + pending clear), `compaction_noop` (buffers untouched), `adopt_pruned` (0.4.0 — adopts a pruned conversation, splitting at the old history length, no state transition), `set_context_tokens`, `inject`, `cancel`, `fail`, `accept_input`.
-- Maintenance: `commit_pending`, **`salvage_pending`** (0.4.0 — the longest coherent prefix commits, the unanswered tail drops), `discard_pending`.
-- Reads: `history`, `full_history`, `state`, `turns_taken`, **`context_tokens`** (0.4.0 read accessor), `is_terminal`, `is_cancelled`.
-- `MachinePolicy { max_turns, context_window, compact_threshold, auto_compact }` — passed fresh each step, never stored.
-- `Serialize + Deserialize` — checkpoint/resume round-trips pinned by tests (identical decisions after restore).
+There is also `deferred_compaction`, new in 0.4.0. You use it as the latch for a threshold pass that declined while your payload fit.
 
-**Behavior notes**
+Steps and feeds are where you drive the machine. You get `next_step(policy)`, `inject`, `cancel`, `accept_input`, and `fail`.
 
-- Decision order per step: terminal → cancelled → (model-side) turn limit → emergency ≥95% → threshold >N% → CallLLM.
-- `next_step` is pure and repeatable; terminal is forever; `fail()` guarantees an errored machine carries its failure into serialization.
-- The no-progress guard (`tokens_after >= tokens_before` → `Failed(CompactionStalled)`, typed since 0.4.0) runs in both compaction feeds, before any buffer mutation — with the carve-out that a threshold-triggered stall whose payload still fits the window defers (`deferred_compaction`) and serves instead; the emergency line ignores the latch.
-- Checkpoint/resume is pinned at the run boundary — resuming a machine serialized mid-phase is documented as unsupported, not "close enough".
+`model_response` classifies tool calls against `available_tools`, pre-answering unknown ones. `tool_results` is the only `pending_tools` consumer.
 
-Deep dive: [The state machine](/engine/state-machine/).
+`compaction_result` does a wholesale replace plus a pending clear for you, and `compaction_noop` leaves your buffers untouched.
+
+`adopt_pruned` arrived in 0.4.0 and adopts a pruned conversation for you. It splits at the old history length and performs no state transition.
+
+Maintenance gives you `commit_pending`, `salvage_pending`, and `discard_pending`. `salvage_pending` came in 0.4.0, where the longest coherent prefix commits and the unanswered tail drops.
+
+Reads give you `history`, `full_history`, `state`, and `turns_taken`. You also get `is_terminal`, `is_cancelled`, and `context_tokens`, a new read accessor in 0.4.0.
+
+`MachinePolicy { max_turns, context_window, compact_threshold, auto_compact }` is passed to your machine fresh each step and never stored.
+
+The machine is `Serialize + Deserialize`, and checkpoint and resume round-trips are pinned by tests, so you get identical decisions after restore.
+
+## Behavior notes
+
+Decision order per step runs terminal, then cancelled, then the model-side turn limit, then emergency at 95% or more, then threshold above N%, then CallLLM.
+
+`next_step` is pure and repeatable, and terminal is forever. `fail()` guarantees an errored machine carries its failure into serialization.
+
+The no-progress guard runs in both your compaction feeds, before any buffer mutation, and it is typed as `Failed(CompactionStalled)` since 0.4.0.
+
+There is one carve-out: a threshold-triggered stall whose payload still fits the window defers through `deferred_compaction` and serves instead, while the emergency line ignores the latch.
+
+Checkpoint and resume are pinned at your run boundary. If you resume a machine serialized mid-phase, that is documented as unsupported, not as close enough.
+
+For the deep dive, see [The state machine](/engine/state-machine/).

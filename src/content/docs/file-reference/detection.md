@@ -1,19 +1,23 @@
 ---
-title: "`src/detection.rs` — the detection module root"
+title: "src/detection.rs"
 ---
 
+This file is a thin module root. It re-exports everything from your three implementation files and carries the module documentation, so you import detection types from `detection` rather than from a submodule.
 
-A thin root: re-exports everything from the three implementation files and holds the module documentation.
+## Key items
 
-**Key items (re-exports)**
+From `loop_detector` you get `LoopDetector`, `LoopDetectorConfig`, `LoopStatus`, `Operation`, `ToolSignature`, `NoOpToolSignature`, `hash_result`, and `global_detector`.
 
-- From `loop_detector`: `LoopDetector`, `LoopDetectorConfig`, `LoopStatus`, `Operation`, `ToolSignature`, `NoOpToolSignature`, `hash_result`, `global_detector`.
-- From `convergence`: `ConvergenceDetector`, `ConvergenceConfig`, `ConvergenceStatus`, `ConvergenceAction`, `ConvergenceConfigError`.
-- From `manager`: `DetectionManager`, `DetectionConfig`, `DetectionStats`, `DetectedPattern`.
+From `convergence` you get `ConvergenceDetector`, `ConvergenceConfig`, `ConvergenceStatus`, `ConvergenceAction`, and `ConvergenceConfigError`.
 
-**Behavior notes**
+From `manager` you get `DetectionManager`, `DetectionConfig`, `DetectionStats`, and `DetectedPattern`.
 
-- Two detectors, one facade: loop detection (repeated operations) and convergence detection (repeated answers) — independent enable flags, one `reset()`.
-- The engine checks loop first ("a tool-calling loop is a stronger signal").
+## Behavior notes
+
+You get two detectors behind one facade: loop detection watches repeated operations, and convergence detection watches repeated answers.
+
+Each carries its own enable flag, and one `reset()` clears both when you restart a run.
+
+Your engine checks loop detection first, because a tool-calling loop is a stronger signal than a repeating answer.
 
 Deep dives: [loop detection](/safety/loop-detection/) · [convergence](/safety/convergence/) · [manager](/file-reference/detection-manager/).

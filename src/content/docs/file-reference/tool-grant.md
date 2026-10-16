@@ -1,22 +1,37 @@
 ---
-title: "`src/tool/grant.rs` — the grant store [feature: file_grants]"
+title: "src/tool/grant.rs"
 ---
 
+This file is your persisted half of interactive approval, under the `file_grants` feature. A `Grant` is an approval rule that outlives the run where you earned it, such as allowing `Read` on exactly these arguments.
 
-The persisted half of interactive approval: a `Grant` is an approval rule that outlives the run that earned it — "allow `Read` on exactly these arguments" — with a narrowness ladder and a rug-pull defense. Core types compile everywhere; `FileGrantStore` rides the feature (zero dependencies).
+It comes with a narrowness ladder and a rug-pull defense. Your core types compile everywhere, and `FileGrantStore` rides the feature with zero dependencies.
 
-**Key items**
+## Key items
 
-- `Grant::new(tool, verdict, scope)` + `with_pinned_descriptor(digest)` / `with_created_at_ms` / `with_note` — the record. Identity is the content-stable 16-hex digest of `{tool, verdict, scope}`: re-granting a rule upserts its own entry.
-- `GrantScope` — `ThisTool { tool }` (every call to the tool) or `ThisCall { args }` (exactly the canonically-equal argument sets; key order never decides). `Grant::covers(tool, args)` is the mechanical matcher; deny-over-allow precedence stays consumer policy.
-- `GrantVerdict` — allows and denies persist identically.
-- `GrantStore` — the sync, object-safe seam: `save` (upsert, returns the grant), `revoke` (removes and returns it — the audit record), `clear`, `load` (a missing ledger is empty).
-- `FileGrantStore::new(root, project)` — one project per directory (`<root>/projects/<16-hex project-path digest>/grants.json`, the layout a CLI documents as `~/.local/state/<app>/grants/`).
+`Grant::new(tool, verdict, scope)` builds your record. You refine it with `with_pinned_descriptor(digest)`, `with_created_at_ms`, and `with_note`.
 
-**Behavior notes**
+Your grant's identity is the content-stable 16-hex digest of `{tool, verdict, scope}`, so re-granting a rule upserts its own entry.
 
-- Files are created owner-only `0600` and replaced atomically on every write (the staged file's mode is reset on open — a crashed write never leaves a wide file behind).
-- Single-writer contract: one process per project; concurrent processes are unsupported (last replace silently wins).
-- The rug-pull defense: pair a grant with the tool's `descriptor_digest()` and a later mismatch — the tool's schema changed — is the re-ask signal.
+`GrantScope` is either `ThisTool { tool }`, covering every call you make to the tool, or `ThisCall { args }`, covering exactly the canonically-equal argument sets.
 
-Deep dive: [Approvals](/safety/approvals/#the-grant-store--persisted-approvals)
+Key order never decides which set matches yours.
+
+`Grant::covers(tool, args)` is the mechanical matcher for you, and deny-over-allow precedence stays your consumer policy.
+
+`GrantVerdict` lets allows and denies persist identically.
+
+`GrantStore` is your sync, object-safe seam. It gives you `save`, which upserts and returns the grant, and `revoke`, which removes and returns it as your audit record.
+
+You also get `clear` and `load`, where a missing ledger reads as empty.
+
+`FileGrantStore::new(root, project)` gives one project per directory at `<root>/projects/<16-hex project-path digest>/grants.json`. That is the layout a CLI documents as `~/.local/state/<app>/grants/`.
+
+## Behavior notes
+
+Your files are created owner-only `0600` and replaced atomically on every write. The staged file's mode is reset on open, so a crashed write never leaves a wide file behind.
+
+The store has a single-writer contract: one process per project. If you run concurrent processes, that is unsupported, and the last replace silently wins.
+
+For the rug-pull defense, pair a grant with the tool's `descriptor_digest()`. A later mismatch means the tool's schema changed, which is your re-ask signal.
+
+For the deep dive, see [the grant store](/safety/approvals/#the-grant-store).

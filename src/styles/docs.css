@@ -1,0 +1,1259 @@
+/* Knowledge base: monospace, flat, no product chrome.
+ *
+ * Built to measured values from tinygrad.org, which renders *everything* in
+ * monospace ("Lucida Console", monospace), body 18px/400, h1 36px/700, links
+ * the same colour as body text and underlined, and no borders, radii, shadows
+ * or icons anywhere. Translated here as: one mono family for the whole page,
+ * real weight-and-size hierarchy instead of decorative type, ink-coloured
+ * underlined links, hairlines only where they carry meaning.
+ *
+ * Light palette is near-white rather than cream (see the palette block);
+ * dark stays dim. Typography is the other half of the change.
+ *
+ * Scoping: `cssCodeSplit: false` puts every stylesheet in one bundle that the
+ * landing page also loads, so rules are either inherently docs-only
+ * (`.sl-markdown-content`, `nav.sidebar`) or carry `[data-kb]`, set on <html>
+ * by src/overrides/Head.astro, a Starlight-only component. */
+
+/* Near-white reading surface. The same primitives are now the site default at
+ * :root in custom.css (0,1,0), so `html[data-kb]` (0,1,1) restates them for
+ * docs while the dark theme's `:root[data-theme='dark']` (0,2,0) still outranks
+ * this block — [data-theme=dark] keeps its own palette and only light changes.
+ * The landing page reads the same primitives at :root, so both page types sit
+ * on the same paper. */
+html[data-kb] {
+  --paper-bg: #fbfaf8; /* page: white, off it enough to read as paper */
+  --paper-bg-2: #ffffff; /* raised: hover, selected, floating */
+  --paper-bg-3: #f1efe9; /* sunken: table heads, inset wells */
+  --paper-bg-code: #f7f6f2; /* code blocks: a hair under the page */
+  --paper-ink: #1a1814;
+  --paper-ink-2: #46413a;
+  --paper-ink-3: #7f7869;
+  --paper-rule: #dedad2;
+  --paper-rule-soft: #ebe8e1;
+}
+
+/* Prose and chrome take the mono stack, matching the index and the headings. */
+html[data-kb] {
+  --font-body: var(--font-display);
+  --sl-font: var(--font-body);
+}
+
+html[data-kb] {
+  --font-display: 'Lucida Console', 'DejaVu Sans Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+html[data-kb] {
+  --font-mono-ui: 'Lucida Console', 'DejaVu Sans Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --sl-font-mono: var(--font-mono-ui);
+}
+
+html[data-kb] {
+  /* Reading column: 69rem, scaled by the reading drawer's measure control. */
+  --sl-content-width: 69rem;
+  /* 173 entries want room: 24rem (384px) on a window 1280px or wider, and below
+     that the share caps out so prose keeps the width it has. */
+  --sl-sidebar-width: min(24rem, 30vw);
+  scroll-behavior: auto;
+  --sl-nav-pad-x: 1.25rem;
+}
+
+html[data-kb] body {
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: 1.65;
+  font-weight: 400;
+  font-feature-settings: normal;
+  letter-spacing: 0;
+}
+
+/* No paper grain. */
+html[data-kb] body::before {
+  content: none;
+}
+
+/* Nothing animates. */
+html[data-kb] *,
+html[data-kb] *::before,
+html[data-kb] *::after {
+  transition: none !important;
+  animation-duration: 0s !important;
+  animation-iteration-count: 1 !important;
+}
+
+/* ---- one column, properly centred ------------------------------------ */
+
+/* Starlight reserves a right rail; leaving it hidden without reclaiming the
+   track strands the text column against the sidebar. */
+html[data-kb] .right-sidebar-container {
+  display: none !important;
+}
+
+html[data-kb] .main-frame {
+  padding-inline-end: 0 !important;
+}
+
+/* The flex row is `.lg:sl-flex`; its child is `.main-pane`, which has no grow.
+   With the rail hidden it shrink-wraps to its content, so `main` inside it can
+   only fill 768px and the text column strands against the sidebar. Row layout
+   only — under the lg breakpoint the same row is a column, where grow would
+   stretch height instead of width. */
+@media (min-width: 50rem) {
+  html[data-kb] .main-frame .main-pane {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+
+html[data-kb] .content-panel .sl-container {
+  max-width: min(var(--sl-content-width), calc(100% - 3rem));
+  margin-inline: auto;
+}
+
+@media (width < 72em) {
+  html[data-kb] .right-sidebar-container {
+    display: none !important;
+  }
+}
+
+/* ---- header: a line of text ------------------------------------------- */
+
+html[data-kb] header.header {
+  border-bottom: none;
+  padding-block: 0.75rem;
+  gap: 1.25rem;
+}
+
+/* The docs header used to carry Starlight's plain text title while the landing
+   masthead carried the wordmark. src/overrides/SiteTitle.astro now emits the
+   landing's markup, and these are its values — mirrored from the `.brand` block
+   in src/pages/index.astro (26px display-bold, -0.025em, accent dot in
+   italic). Duplicated on purpose: the landing's copy is component-scoped and
+   cannot cross over. Both sides read the same tokens, so each page resolves the
+   brand in its own palette. */
+html[data-kb] header.header .site-title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+
+html[data-kb] header.header .brand-name {
+  /* Not var(--font-display): that resolves to the mono stack here, which made
+   * the KB header wordmark differ from the landing page's. --font-brand is the
+   * shared exception, declared once in custom.css. */
+  font-family: var(--font-brand);
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+html[data-kb] header.header .brand-dot {
+  color: var(--accent);
+  font-style: italic;
+}
+
+/* Search is a plain labelled box, not a pill. */
+html[data-kb] header.header [data-open-modal] {
+  border: none;
+  border-bottom: 1px solid var(--ink-3);
+  border-radius: 0;
+  background: none;
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-variant: normal;
+  letter-spacing: 0;
+  padding: 0.1rem 0.25rem 0.2rem;
+  opacity: 1;
+}
+
+html[data-kb] header.header [data-open-modal]:hover {
+  border-bottom-color: var(--ink);
+  color: var(--ink);
+}
+
+html[data-kb] header.header .social-icons {
+  display: none;
+}
+
+html[data-kb] starlight-theme-select {
+  display: none !important;
+}
+
+html[data-kb] .theme-icon-btn {
+  background: none;
+  border: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+}
+
+html[data-kb] .theme-icon-btn:hover {
+  color: var(--ink);
+}
+
+/* ---- sidebar: a list of links ----------------------------------------- */
+
+html[data-kb] nav.sidebar,
+html[data-kb] .sidebar-content {
+  background: none;
+  border-right: none;
+}
+
+html[data-kb] .sidebar-content ul.top-level {
+  gap: 1.5rem;
+}
+
+html[data-kb] .sidebar-content summary span.large {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-variant: normal;
+  letter-spacing: 0;
+  color: var(--ink);
+}
+
+html[data-kb] .sidebar-content .group-label::after {
+  content: none;
+}
+
+html[data-kb] .sidebar-content details summary {
+  padding-block: 0.2rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
+html[data-kb] .sidebar-content details summary .large {
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
+/* Replace the chevron icon with a plain text marker so a collapsed group
+   still reads as collapsible. */
+html[data-kb] .sidebar-content details summary svg {
+  display: none;
+}
+
+html[data-kb] .sidebar-content details summary::after {
+  content: '+';
+  color: var(--ink-3);
+  margin-left: 0.4rem;
+}
+
+html[data-kb] .sidebar-content details[open] summary::after {
+  content: '\2212';
+}
+
+/* Selection is deliberately not restated here: the shared sheet's solid ink
+   selection (::selection in custom.css) is the site's answer in both themes and
+   both page types. A translucent override here made KB selections read grey
+   next to the landing page's black. */
+/* The index in the same mono face the headings use. */
+html[data-kb] #starlight__sidebar,
+html[data-kb] #starlight__sidebar a,
+html[data-kb] #starlight__sidebar summary {
+  font-family: var(--font-display);
+}
+
+html[data-kb] .sidebar-content ul a {
+  font-size: 0.9rem;
+  /* Starlight asks for 600, which clumps at this size. 450 leaves 700 free to
+     mean "you are here"; faces with no 450 instance land on their regular. */
+  font-weight: 450;
+  border-radius: 0;
+  padding: 0.1rem 0;
+  color: var(--ink-2);
+  text-decoration: none;
+}
+
+html[data-kb] .sidebar-content ul a:hover {
+  color: var(--ink);
+  background: none;
+  text-decoration: underline;
+}
+
+/* Starlight marks the current entry `aria-current="page"`, not "true" — match
+   any value, or Starlight's own rule wins and paints the accent fill behind
+   the label. Selected is carried by weight alone, like every other emphasis
+   here. */
+html[data-kb] .sidebar-content ul a[aria-current] {
+  color: var(--ink);
+  font-weight: 700;
+  background: none;
+  box-shadow: none;
+  text-decoration: none;
+}
+
+/* ---- page title -------------------------------------------------------- */
+
+html[data-kb] main {
+  padding-top: 1rem;
+}
+
+html[data-kb] main h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.9rem;
+  line-height: 1.25;
+  letter-spacing: 0;
+  font-variation-settings: normal;
+  font-style: normal;
+  color: var(--ink);
+  padding-bottom: 0;
+  border-bottom: none;
+  margin-bottom: 0.5rem;
+}
+
+html[data-kb] main h1 em {
+  font-style: normal;
+  color: var(--ink);
+}
+
+/* ---- prose ------------------------------------------------------------- */
+
+html[data-kb] .sl-markdown-content {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: 1.65;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--ink);
+}
+
+/* No drop cap. */
+html[data-kb] .sl-markdown-content > p:first-child::first-letter {
+  all: unset;
+  display: inline;
+}
+
+/* Real hierarchy: h2 is 1.3x body, h3 1.12x — mono weight carries it. */
+html[data-kb] .sl-markdown-content .sl-heading-wrapper.level-h1 {
+  font-size: 1.9rem;
+}
+
+html[data-kb] .sl-markdown-content .sl-heading-wrapper.level-h2 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.3rem;
+  line-height: 1.3;
+  letter-spacing: 0;
+  font-variation-settings: normal;
+  color: var(--ink);
+  margin-top: 2.5rem;
+  padding-top: 0;
+  border-top: none;
+}
+
+html[data-kb] .sl-markdown-content .sl-heading-wrapper.level-h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.12rem;
+  letter-spacing: 0;
+  color: var(--ink);
+  margin-top: 2rem;
+}
+
+html[data-kb] .sl-markdown-content .sl-heading-wrapper.level-h4 {
+  font-size: 1rem;
+}
+
+html[data-kb] .sl-markdown-content h4,
+html[data-kb] .sl-markdown-content h5 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+html[data-kb] .sl-markdown-content h6 {
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-variant: normal;
+  letter-spacing: 0;
+  color: var(--ink);
+  margin-top: 1.5rem;
+}
+
+html[data-kb] .sl-markdown-content .sl-heading-wrapper {
+  scroll-margin-top: 4rem;
+}
+
+html[data-kb] .sl-markdown-content p {
+  margin: 1rem 0;
+}
+
+/* Links: same colour as text, underlined — the tinygrad signature. */
+html[data-kb] .sl-markdown-content a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: currentColor;
+  text-underline-offset: 2px;
+}
+
+html[data-kb] .sl-markdown-content a:hover {
+  /* Hover stays ink: rust on hover is the one place a colour banner could still
+   * cross a sentence. The cue is weight of underline instead. */
+  color: var(--ink);
+  text-decoration-thickness: 2px;
+  text-decoration-color: currentColor;
+}
+
+html[data-kb] .sl-markdown-content strong {
+  font-weight: 700;
+}
+
+html[data-kb] .sl-markdown-content ol,
+html[data-kb] .sl-markdown-content ul {
+  padding-left: 1.5rem;
+}
+
+html[data-kb] .sl-markdown-content li::marker {
+  color: var(--ink-3);
+}
+
+html[data-kb] .sl-markdown-content li {
+  margin-block: 0.3rem;
+}
+
+/* Identifiers in running prose need a mark that survives both themes. The old
+   one used --bg-3, which is the palette's *sunken* tone: #f1efe9 on the #fbfaf8
+   page (contrast 1.10 — a smudge) in light, and #141009 on the #181410 page in
+   dark (1.03, and *darker* than the page it sits on, so it read as a hole).
+   Measured alternatives: an ink film via color-mix flips with --ink and is the
+   only thing here that stays legible in dark; the hairline is this page's own
+   vocabulary, and 3px keeps a chip from looking like a cut corner. Padding is
+   deliberately modest vertically — an inline box's padding cannot grow the line
+   box, so pushing it further only makes chips collide with the line above. */
+html[data-kb] .sl-markdown-content :not(pre) > code {
+  font-family: var(--font-mono-ui);
+  font-size: 0.94em;
+  line-height: 1.5;
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 0.08em 0.34em;
+}
+
+/* A cream film over a dark page reads weaker per unit than ink over paper, so
+   dark needs a thicker coat to land at the same weight. Measured: 6% was
+   visible but faint against #181410; 10% matches what 6% looks like in light. */
+html[data-kb][data-theme='dark'] .sl-markdown-content :not(pre) > code {
+  background: color-mix(in oklab, var(--ink) 10%, transparent);
+}
+
+html[data-kb] .sl-markdown-content :not(pre) > code a {
+  color: inherit;
+}
+
+/* Emphasis in a mono face is carried by weight, not slant: the knowledge base
+ * has no italics anywhere, the same way the landing page dropped them. */
+html[data-kb] .sl-markdown-content em {
+  font-style: normal;
+  font-weight: 700;
+}
+
+/* Keycap chips — the Ctrl/⌘ + K hint in the search field, and any <kbd> in
+   prose. Two things matter here. Starlight wraps the pair in an outer <kbd>, so
+   only a <kbd> that has no <kbd> inside it is a keycap; box the wrapper as well
+   and you get a frame around two frames. And every colour is an alias (--rule,
+   --ink-2), never a --paper-* primitive: the primitives are the light palette
+   and do not flip under [data-theme=dark], which is what left a cream block
+   burnt into the dark header. A 4px radius is the one softness on the page —
+   keycaps read as rounded, and it is scoped to them. */
+html[data-kb] kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono-ui);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  padding: 0.15em 0.45em;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--ink) 4%, transparent);
+  color: var(--ink-2);
+  box-shadow: none;
+}
+
+/* The wrapper: a row of keys, not a key. Only the box properties are unset
+   here — display belongs to Starlight. It puts `sl-hidden md:sl-flex` on this
+   element so the hint drops out of the header below the md breakpoint, and an
+   unlayered `display` here would win over that and push two keycaps into a
+   390px header. So the flex row and its gap are stated only where they apply. */
+html[data-kb] kbd:has(kbd) {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+@media (min-width: 50rem) {
+  html[data-kb] kbd:has(kbd) {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+}
+
+/* And below it the hint is gone entirely. Starlight asks for that itself with
+   `sl-hidden md:sl-flex`, but its component-scoped `kbd { display: flex }` wins
+   over its own utility, so at 390px the two keycaps stayed in the header and
+   squeezed the "Search" label into "Searc…". */
+@media (width < 50rem) {
+  html[data-kb] header.header kbd:has(kbd) {
+    display: none;
+  }
+}
+
+html[data-kb] [data-open-modal]:hover kbd {
+  border-color: var(--ink-3);
+  color: var(--ink);
+}
+
+html[data-kb] .sl-markdown-content blockquote {
+  font-family: inherit;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 1rem;
+  line-height: 1.6;
+  letter-spacing: 0;
+  color: var(--ink-2);
+  background: transparent;
+  border: none;
+  border-left: 2px solid var(--rule);
+  border-radius: 0;
+  padding: 0 0 0 1rem;
+  margin: 1.5rem 0;
+}
+
+html[data-kb] .sl-markdown-content blockquote p {
+  margin: 0;
+}
+
+html[data-kb] .sl-markdown-content hr {
+  border: none;
+  border-top: 1px solid var(--rule);
+  margin: 2rem 0;
+}
+
+html[data-kb] .sl-markdown-content hr::after {
+  content: none;
+}
+
+html[data-kb] .sl-markdown-content table {
+  display: block;
+  overflow-x: auto;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+  margin: 1.5rem 0;
+}
+
+html[data-kb] .sl-markdown-content th,
+html[data-kb] .sl-markdown-content td {
+  border: 1px solid var(--rule-soft);
+  padding: 0.35rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+  font-size: 0.95rem;
+  font-weight: 400;
+  font-variant: normal;
+  letter-spacing: 0;
+  color: var(--ink);
+}
+
+html[data-kb] .sl-markdown-content th {
+  font-weight: 700;
+}
+
+html[data-kb] .sl-markdown-content tbody tr:hover {
+  background: none;
+}
+
+html[data-kb] .sl-markdown-content input[type='checkbox'] {
+  accent-color: var(--ink);
+}
+
+/* ---- code blocks ------------------------------------------------------- */
+
+html[data-kb] .expressive-code {
+  font-family: var(--font-mono-ui);
+  border-radius: 0;
+}
+
+html[data-kb] .expressive-code pre {
+  border-radius: 0;
+  border: 1px solid var(--rule-soft);
+  margin: 1.5rem 0;
+  overflow-x: auto;
+  font-size: 0.95em;
+}
+
+/* Expressive Code draws a framed block's edge as a drop shadow on ::before.
+   Here a frame is a hairline like every other rule on the page; a highlighted
+   frame gets the stronger hairline instead of a glow. !important because the
+   plugin's own rules set box-shadow through --ec-brd-*. */
+html[data-kb] .expressive-code .frame {
+  border-radius: 0;
+  /* Expressive Code also puts a soft drop shadow on the figure itself, separate
+   * from the ::before edge handled above. It only started showing once the
+   * plugin's stylesheet began loading again; a framed block here is a hairline
+   * box on paper, so the shadow goes. */
+  box-shadow: none;
+}
+
+html[data-kb] .expressive-code .frame::before {
+  box-shadow: inset 0 0 0 1px var(--rule) !important;
+  border-radius: 0;
+}
+
+html[data-kb] .expressive-code .frame.isHighlighted::before {
+  /* --ink-3 is this sheet's stronger hairline; there is no --rule-strong token,
+     and a var() that resolves to nothing makes the whole declaration invalid at
+     computed-value time, which would leave a highlighted frame with no edge. */
+  box-shadow: inset 0 0 0 1px var(--ink-3) !important;
+}
+
+html[data-kb] .expressive-code .copy button {
+  border-radius: 0;
+  border: 1px solid var(--rule-soft);
+  background: var(--bg-2);
+  color: var(--ink-2);
+  box-shadow: none;
+  width: 1.7rem;
+  height: 1.7rem;
+  font-size: 0.75rem;
+  opacity: 1;
+}
+
+html[data-kb] .expressive-code .copy button:hover {
+  border-color: var(--ink-3);
+  color: var(--ink);
+}
+
+html[data-kb] .expressive-code figcaption {
+  font-family: inherit;
+  font-style: normal;
+  font-size: 0.85rem;
+  color: var(--ink-3);
+}
+
+/* ---- on-page contents --------------------------------------------------- */
+
+html[data-kb] starlight-toc a {
+  color: var(--ink-2);
+  border-left: none;
+  padding-left: 0;
+  text-decoration: underline;
+}
+
+html[data-kb] starlight-toc a:hover {
+  color: var(--ink);
+}
+
+html[data-kb] starlight-toc li[aria-current] > a {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+html[data-kb] mobile-starlight-toc summary {
+  background: none;
+  color: var(--ink-2);
+  border: none;
+  border-bottom: 1px solid var(--ink-3);
+  border-radius: 0;
+  font-family: inherit;
+  font-variant: normal;
+  letter-spacing: 0;
+  font-size: 0.9rem;
+}
+
+html[data-kb] mobile-starlight-toc summary span {
+  color: var(--ink-2);
+}
+
+html[data-kb] mobile-starlight-toc summary .toggle {
+  background: none;
+  border: none;
+  border-radius: 0;
+}
+
+html[data-kb] mobile-starlight-toc summary .toggle svg {
+  color: var(--ink-2);
+}
+
+/* ---- prev / next -------------------------------------------------------- */
+
+/* Two entries, not two links glued to a rule. Starlight ships an inline 24px
+   arrow beside 15px text with no padding whatsoever, which reads as one tight
+   underline against the divider. Here each entry is a padded block: a quiet
+   label line, the title in display weight under it, direction carried by a text
+   arrow instead of the icon, film on hover. The negative margin lets the hover
+   film breathe past the text column while the text itself stays on the column
+   edge; the container keeps 3rem of slack, so it cannot overflow. */
+html[data-kb] .pagination-links {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem 2rem;
+  border-top: 1px solid var(--rule);
+  margin-top: 3rem;
+  padding-top: 0.75rem;
+}
+
+html[data-kb] .pagination-links a svg {
+  display: none;
+}
+
+html[data-kb] .pagination-links a {
+  display: block;
+  padding: 0.7rem 0.9rem;
+  margin-inline: -0.9rem;
+  border: none;
+  border-radius: 0;
+  background: none;
+  /* Starlight gives the pager a four-layer drop shadow; the KB has none. */
+  box-shadow: none;
+  color: var(--ink-2);
+  text-decoration: none;
+}
+
+html[data-kb] .pagination-links a:hover {
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+}
+
+html[data-kb] .pagination-links a > span:first-of-type {
+  display: block;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-variant: normal;
+  letter-spacing: 0;
+  color: var(--ink-3);
+}
+
+/* Starlight's markup is `span > "Next" + br + span.link-title`, so the title is
+   nested in the label, not a sibling. That matters twice: the <br> would add an
+   empty line above a title that is already display:block, and a marker on the
+   label's ::after would land after the title rather than after the word. Both
+   arrows therefore go on ::before. */
+html[data-kb] .pagination-links a > span > br {
+  display: none;
+}
+
+/* A page at either end of the tree renders one entry, and a grid hands an orphan
+   to the first column, which would park "Next" on the left where "Back" belongs.
+   Pin each entry to its own column so forward stays right and back stays left
+   whichever one is missing. */
+html[data-kb] .pagination-links a[rel='prev'] {
+  grid-column: 1;
+}
+
+html[data-kb] .pagination-links a[rel='next'] {
+  grid-column: 2;
+  text-align: end;
+}
+
+html[data-kb] .pagination-links a[rel='prev'] > span:first-of-type::before {
+  content: '\2190\00a0\00a0';
+}
+
+html[data-kb] .pagination-links a[rel='next'] > span:first-of-type::before {
+  content: '\2192\00a0\00a0';
+}
+
+html[data-kb] .pagination-links a .link-title {
+  display: block;
+  margin-top: 0.2rem;
+  font-family: var(--font-display);
+  font-style: normal;
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1.35;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+html[data-kb] .pagination-links a:hover .link-title {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+/* Stacked, the pair needs a seam and both entries read left-to-right. */
+@media (width < 50rem) {
+  html[data-kb] .pagination-links {
+    grid-template-columns: 1fr;
+    gap: 0;
+    padding-top: 0.5rem;
+  }
+
+  html[data-kb] .pagination-links a {
+    margin-inline: 0;
+  }
+
+  /* Stacked there is no second track, so the pins come off and the pair flows. */
+  html[data-kb] .pagination-links a[rel='prev'],
+  html[data-kb] .pagination-links a[rel='next'] {
+    grid-column: auto;
+  }
+
+  html[data-kb] .pagination-links a[rel='next'] {
+    text-align: start;
+    border-top: 1px solid var(--rule-soft);
+  }
+}
+
+/* ---- search dialog ------------------------------------------------------ */
+
+/* The dialog floats, so it takes the raised surface: Starlight paints it with
+   --sl-color-gray-6, which in this palette is the sunken tone, and the panel
+   then reads as a hole cut in the page rather than something on top of it. */
+html[data-kb] site-search dialog {
+  background: var(--bg-2);
+  border: 1px solid var(--rule);
+  border-radius: 0;
+}
+
+html[data-kb] .search-container .dialog-frame {
+  padding: 1.25rem;
+}
+
+html[data-kb] #starlight__search {
+  --pagefind-ui-text: var(--ink);
+  --pagefind-ui-heading: var(--ink);
+  --pagefind-ui-primary: var(--ink);
+  --pagefind-ui-background: var(--paper);
+  --pagefind-ui-border: var(--rule);
+  /* A tag chip sits on the raised dialog surface; --bg-3 there is #f1efe9 on
+     #ffffff in light and #141009 on #211c15 in dark — a smudge and a hole. The
+     same ink film the inline code uses reads as a chip in both. */
+  --pagefind-ui-tag: color-mix(in oklab, var(--ink) 6%, transparent);
+  --pagefind-ui-border-radius: 0;
+}
+
+/* Starlight repaints the box border with --sl-color-accent while it is focused
+   (`#starlight__search input:focus`, specificity 1,1,1) — same for the cancel
+   button's outline. Both are restated on the element here so the sheet's rule,
+   not Starlight's order, decides. */
+html[data-kb] #starlight__search .pagefind-ui__search-input,
+html[data-kb] #starlight__search .pagefind-ui__search-input:focus {
+  --pagefind-ui-border: var(--rule);
+  color: var(--ink);
+  font-weight: 400;
+}
+
+html[data-kb] #starlight__search .pagefind-ui__search-clear:focus {
+  outline: 1px solid var(--ink);
+}
+
+/* The shared sheet's focus ring is 2px and carries the accent; a page drawn with
+   hairlines wants a hairline ring in ink. */
+html[data-kb] :focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* Results: Pagefind stacks hits with no separators, which reads as one wall of
+   text once there are five. Titles carry the weight, excerpts recede. */
+html[data-kb] #starlight__search .pagefind-ui__result {
+  border-top: 1px solid var(--rule-soft);
+  padding: 0.7rem 0;
+  margin: 0;
+}
+
+html[data-kb] #starlight__search .pagefind-ui__result:first-of-type {
+  border-top: none;
+  padding-top: 0.35rem;
+}
+
+html[data-kb] #starlight__search .pagefind-ui__result-link {
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 1rem;
+  text-decoration: none;
+}
+
+html[data-kb] #starlight__search .pagefind-ui__result-link:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+html[data-kb] #starlight__search .pagefind-ui__result-excerpt {
+  color: var(--ink-2);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin-top: 0.2rem;
+}
+
+/* Pagefind ships `mark { all: revert }`, so without this the browser's own
+   yellow highlight paints inside search results. The sheet's rule outranks it,
+   but the strength matters: at 14% the plate was barely distinguishable from
+   the excerpt behind it (the complaint about highlights being "barely visible"
+   in dark), and at 26% it reads as a mark without turning into a banner. */
+html[data-kb] #starlight__search mark {
+  background: color-mix(in oklab, var(--ink) 26%, transparent);
+  color: var(--ink);
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+/* Chrome paints autofilled values with its own blue text on a white plate,
+   which on this palette looks like a stray link. No site CSS asks for it — it
+   is the browser default — so it has to be undone here rather than overridden. */
+html[data-kb] #starlight__search input:-webkit-autofill,
+html[data-kb] #starlight__search input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--ink);
+  -webkit-box-shadow: 0 0 0 1000px var(--bg-2) inset;
+  caret-color: var(--ink);
+}
+
+/* ---- index collapse control ------------------------------------------ */
+
+/* A hairline square fixed to the index's own edge, so it reads as belonging to
+   that column rather than to the page furniture. While the index is open it
+   sits in a lane reserved at the column's right edge; when the index closes it
+   stays exactly where it was, now alone in the narrow rail left behind.
+
+   Both positions come out of Starlight's own tokens, which is why nothing is
+   measured: the pane is `position: fixed` at that width and `.main-frame`
+   indents by `--sl-sidebar-width`, so re-declaring that width as the rail width
+   moves the text column and the control together. `--kb-rail-width` is therefore
+   two things at once — what survives of the index when hidden, and the lane the
+   control owns when it is not. The pane takes it as trailing padding so index
+   links wrap short of the control instead of running under it. Below 50rem the
+   control is gone: the same element is the mobile drawer, and the hamburger
+   owns that. */
+html[data-kb] {
+  --kb-rail-width: 3rem;
+}
+
+@media (width >= 50em) {
+  html[data-kb][data-hide-left] {
+    --sl-sidebar-width: var(--kb-rail-width);
+  }
+
+  html[data-kb][data-hide-left] #starlight__sidebar {
+    display: none !important;
+  }
+}
+
+html[data-kb] #starlight__sidebar {
+  padding-inline-end: var(--kb-rail-width);
+}
+
+html[data-kb] .sidebar-toggle-btn {
+  position: fixed;
+  z-index: 40;
+  top: calc(var(--sl-nav-height) + 0.85rem);
+  left: calc(var(--sl-sidebar-width) - var(--kb-rail-width) + 0.55rem);
+  display: none;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  border: 1px solid var(--ink-3);
+  border-radius: 0;
+  background: none;
+  color: var(--ink-2);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+/* After the base rule on purpose: `display: grid` and `display: none` have the
+   same specificity here, so order decides, and this one has to come second. */
+@media (width >= 50em) {
+  html[data-kb] .sidebar-toggle-btn {
+    display: grid;
+  }
+}
+
+html[data-kb] .sidebar-toggle-btn:hover,
+html[data-kb] .sidebar-toggle-btn:focus-visible {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+/* The mobile drawer spans the viewport, so it owes nothing to the rail. */
+@media (width < 50rem) {
+  html[data-kb] #starlight__sidebar {
+    padding-inline-end: 0;
+  }
+}
+
+/* ---- mobile menu button ------------------------------------------------- */
+
+html[data-kb] starlight-menu-button button {
+  border: 1px solid var(--ink-3);
+  border-radius: 0;
+  background: none;
+  color: var(--ink-2);
+  box-shadow: none;
+}
+
+html[data-kb] starlight-menu-button button:hover,
+html[data-kb] starlight-menu-button[aria-expanded='true'] button {
+  border-color: var(--ink);
+  background: none;
+  color: var(--ink);
+  box-shadow: none;
+}
+
+/* ---- mermaid ------------------------------------------------------------ */
+
+html[data-kb] .mermaid-figure {
+  position: relative;
+  margin: 1.75rem 0;
+  padding: 0.75rem;
+  background: none;
+  border: 1px solid var(--rule-soft);
+}
+
+/* `pan-y`, not `none`. With `none` the diagram was an island: a swipe aimed
+   down it did nothing at all, because the browser had been told to hand every
+   gesture to the page's own handlers and there was no wheel handler left to
+   take them. Vertical goes back to the page, horizontal dragging stays here. */
+html[data-kb] .mermaid-figure .mermaid-view {
+  position: relative;
+  overflow: hidden;
+  max-height: 85vh;
+  touch-action: pan-y;
+  cursor: grab;
+}
+
+html[data-kb] .mermaid-figure .mermaid-view.panning {
+  cursor: grabbing;
+  user-select: none;
+}
+
+html[data-kb] .mermaid-figure svg {
+  display: block;
+}
+
+html[data-kb] .mermaid-figure:fullscreen {
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  background: var(--bg-2);
+}
+
+html[data-kb] .mermaid-figure:fullscreen .mermaid-view {
+  flex: 1;
+  max-height: none;
+}
+
+html[data-kb] .mermaid-figure .mermaid-zoom {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono-ui);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+html[data-kb] .mermaid-zoom button,
+html[data-kb] .mermaid-fullscreen-btn {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  margin: 0;
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+html[data-kb] .mermaid-zoom button:hover:not(:disabled),
+html[data-kb] .mermaid-fullscreen-btn:hover {
+  color: var(--ink);
+  border-color: var(--ink-3);
+}
+
+html[data-kb] .mermaid-zoom button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+html[data-kb] .mermaid-zoom .mermaid-zoom-value {
+  min-width: 4ch;
+  text-align: center;
+}
+
+html[data-kb] .mermaid-fullscreen-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 5;
+}
+
+html[data-kb] .mermaid-fullscreen-btn[aria-pressed='true'] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+
+html[data-kb] .mermaid-figure:fullscreen .mermaid-zoom {
+  bottom: 16px;
+  right: 16px;
+}
+
+html[data-kb] .mermaid-figure:fullscreen .mermaid-fullscreen-btn {
+  top: 16px;
+  right: 16px;
+}
+
+/* Diagram labels in the KB's own face. mermaid.ts passes --font-display to
+ * Mermaid's config, but Mermaid also injects per-diagram-type rules for some
+ * labels (sequence actors, edge labels, gantt text), so pin the whole subtree. */
+html[data-kb] .mermaid-figure svg,
+html[data-kb] .mermaid-figure svg text,
+html[data-kb] .mermaid-figure svg tspan,
+html[data-kb] .mermaid-figure svg foreignObject div,
+html[data-kb] .mermaid-figure svg foreignObject span,
+html[data-kb] .mermaid-figure svg foreignObject p {
+  font-family: var(--font-display);
+}
+
+html[data-kb] .mermaid-figure svg .edgeLabel foreignObject > div,
+html[data-kb] .mermaid-figure svg .edgeLabel div {
+  padding: 4px 8px 2px;
+  border-radius: 0;
+  background-color: var(--paper) !important;
+  box-shadow: inset 0 0 0 1px var(--ink-3);
+}
+
+html[data-kb][data-theme='dark'] .mermaid-figure svg .edgeLabel foreignObject > div,
+html[data-kb][data-theme='dark'] .mermaid-figure svg .edgeLabel div {
+  background-color: var(--bg-3) !important;
+}
+
+html[data-kb] .mermaid-figure svg .edgeLabel span,
+html[data-kb] .mermaid-figure svg .edgeLabel p {
+  background-color: transparent !important;
+}
+
+html[data-kb][data-theme='dark'] .mermaid-figure svg [data-look='neo'] {
+  filter: none !important;
+}
+
+html[data-kb] .mermaid-figure svg .node rect,
+html[data-kb] .mermaid-figure svg .node path,
+html[data-kb] .mermaid-figure svg .node polygon,
+html[data-kb] .mermaid-figure svg .node circle {
+  stroke-width: 1px;
+}
+
+/* ---- layout mechanics --------------------------------------------------- */
+
+/* Collapsing the index lives in "index collapse control" above, where the
+   width narrows to the rail instead of the indent being zeroed — which is what
+   keeps the control from ever landing on top of the prose. */
+html[data-kb] .main-frame {
+  position: relative;
+}
+
+@media (width >= 50em) and (width < 72em) {
+  html[data-kb] mobile-starlight-toc,
+  html[data-kb] #starlight__mobile-toc {
+    display: none !important;
+  }
+}
+
+/* Mobile: keep the search reachable, keep the shape plain. */
+@media (max-width: calc(50rem - 0.01rem)) {
+  html[data-kb] {
+    --sl-nav-pad-x: 0.75rem !important;
+  }
+
+  html[data-kb] header .header {
+    display: grid;
+    grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    align-items: center;
+    align-content: center;
+  }
+
+  html[data-kb] header .title-wrapper {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  html[data-kb] header .header > div.print\:hidden:not(.right-group) {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+    align-self: center;
+  }
+
+  html[data-kb] #theme-icon-toggle {
+    grid-column: 3;
+    grid-row: 1;
+    align-self: center;
+  }
+
+  html[data-kb] site-search button[data-open-modal] {
+    border: none;
+    border-bottom: 1px solid var(--ink-3);
+    border-radius: 0;
+    padding: 0.1rem 0.25rem 0.2rem;
+    background-color: transparent;
+    color: var(--ink-2);
+    font-size: 0.9rem;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  html[data-kb] site-search button[data-open-modal]:hover {
+    border-bottom-color: var(--ink);
+    color: var(--ink);
+  }
+
+  html[data-kb] site-search button[data-open-modal] > span.sl-hidden {
+    display: block;
+  }
+
+  html[data-kb] site-search dialog {
+    margin: 4rem auto auto;
+    border-radius: 0;
+    width: 90%;
+    max-width: 42rem;
+    height: max-content;
+    min-height: 15rem;
+    max-height: calc(100% - 8rem);
+  }
+
+  html[data-kb] site-search .dialog-frame {
+    padding: 1.25rem;
+  }
+
+  html[data-kb] site-search button[data-close-modal] {
+    display: none;
+  }
+
+  html[data-kb] #starlight__search {
+    --sl-search-cancel-space: 0px;
+  }
+}

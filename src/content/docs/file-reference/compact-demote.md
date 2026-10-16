@@ -1,21 +1,25 @@
 ---
-title: "`src/compact/demote.rs` — the demotion sink"
+title: "src/compact/demote.rs"
 ---
 
+This file decides where compaction's evicted messages go instead of the void. `CompactionOutcome.evicted` is handed to a `DemotionSink` after the history rewrite, so evicted content stays recallable. It is always compiled.
 
-Where compaction's evicted messages go instead of the void: `CompactionOutcome.evicted` is handed to a `DemotionSink` after the history rewrite, so evicted content stays recallable. Always compiled.
+## Key items
 
-**Key items**
+`DemotionSink` is your object-safe trait: it receives the evicted messages with their context as a `DemotionContext`.
 
-- `DemotionSink` — the object-safe trait: receive the evicted messages with their context (`DemotionContext`).
-- `MemoryDemotionSink::new(store, max_chars)` — the shipped implementation: renders each evicted exchange into a `Trajectory`-category memory entry in any `LoopMemory` store.
-- `render_evicted(messages, max_chars)` — the renderer (role lines, tool one-liners, per-part truncation) — the same transcript renderer the QA summarizer feeds its prompts. Public: reuse it for your own sink.
-- `NoopDemotionSink` — the default (evicted content is dropped).
+`MemoryDemotionSink::new(store, max_chars)` is the shipped implementation. It renders each evicted exchange into a `Trajectory`-category memory entry in any `LoopMemory` store you hand it.
 
-**Behavior notes**
+`render_evicted(messages, max_chars)` is the renderer behind that: role lines, tool one-liners, and per-part truncation. It is the same transcript renderer the QA summarizer feeds its prompts, and it is public so you can reuse it in your own sink.
 
-- The handoff rides the compaction pass's cancel race — a cancel during a hanging sink ends the run typed `Cancelled`, never wedged.
-- The prune pass (see [context accounting](/engine/context-accounting/)) hands its cleared tool outputs to the same sink under `CompactReason::Prune`.
-- Combined with `SearchMemoriesTool`, this closes the loop: what compaction evicts, the model can recall on demand.
+`NoopDemotionSink` is your default, where evicted content is dropped.
 
-Deep dive: [Compaction — demotion](/engine/compaction/#demotion--evicted-is-not-destroyed)
+## Behavior notes
+
+The handoff rides the compaction pass's cancel race, so a cancel during a hanging sink ends your run typed `Cancelled`, never wedged.
+
+Your prune pass, see [context accounting](/engine/context-accounting/), hands its cleared tool outputs to the same sink under `CompactReason::Prune`.
+
+Combine this with `SearchMemoriesTool` and you close the loop: what compaction evicts, your model can recall on demand.
+
+Deep dive: [Compaction demotion](/engine/compaction/#demotion-evicted-is-not-destroyed)

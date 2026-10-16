@@ -10,7 +10,7 @@ const sections = [
   { num: 'vi.', name: 'Providers', count: 8, href: '/providers/overview/', note: 'five families, one trait' },
   { num: 'vii.', name: 'Integration', count: 7, href: '/integration/structured-output/', note: 'MCP, derive, presets' },
   { num: 'viii.', name: 'File reference', count: 107, href: '/file-reference/', note: 'one page per source file' },
-  { num: 'ix.', name: 'Cookbook', count: 2, href: '/cookbook/recipes/', note: '14 recipes, every gotcha' },
+  { num: 'ix.', name: 'Cookbook', count: 2, href: '/cookbook/recipes/', note: '18 recipes, every gotcha' },
   { num: 'x.', name: 'Principles', count: 12, href: '/principles/sans-io/', note: 'the ideas underneath' },
 ];
 
@@ -64,15 +64,6 @@ const ideas = [
         } catch {
           document.documentElement.dataset.theme = 'light';
         }
-        try {
-          const s = JSON.parse(localStorage.getItem('loopctl-reading') || '{}');
-          const r = document.documentElement;
-          if (s.body) r.dataset.readBody = s.body;
-          if (s.code) r.dataset.readCode = s.code;
-          if (s.scale) r.style.setProperty('--read-scale', s.scale);
-          if (s.leading) r.style.setProperty('--read-leading', s.leading);
-          if (s.measure) r.style.setProperty('--read-measure', s.measure);
-        } catch {}
       })();
     </script>
   </head>
@@ -82,7 +73,6 @@ const ideas = [
         <div class="masthead-row">
           <div class="brand">
             <a class="brand-name" href="/">loopctl<span class="brand-dot">.</span></a>
-            <span class="brand-tag">the agent loop, under control</span>
           </div>
           <div class="masthead-right">
             <nav class="primary-nav">
@@ -120,10 +110,6 @@ const ideas = [
     </header>
 
     <section class="hero">
-      <div class="hero-deco">
-        sans-IO engine<br />
-        zero default features
-      </div>
       <div class="wrap">
         <div class="hero-grid">
           <div class="hero-main">
@@ -513,8 +499,6 @@ const ideas = [
         <div class="colophon-grid">
           <div class="col-block">
             <h4>Use it</h4>
-            <p>
-            </p>
             <ul>
               <li><a href="/start-here/what-is-loopctl/">Build your first agent</a></li>
               <li><a href="https://github.com/dch-labs/loopctl/issues">Issues &amp; feature requests</a></li>
@@ -527,7 +511,7 @@ const ideas = [
               <li><a href="/guide/">The knowledge base</a></li>
               <li><a href="/start-here/what-is-loopctl/">What is loopctl?</a></li>
               <li><a href="/start-here/the-big-idea/">The big idea</a></li>
-              <li><a href="/cookbook/recipes/">Fourteen recipes</a></li>
+              <li><a href="/cookbook/recipes/">Eighteen recipes</a></li>
               <li><a href="/cookbook/gotchas/">Every gotcha</a></li>
             </ul>
           </div>
@@ -549,17 +533,14 @@ const ideas = [
           </div>
         </div>
         <div class="colophon-foot">
-          <span>loopctl · v0.4.0 · the agent loop, under control</span>
-          <span class="colophon-mark">— Dream · Create · Harness —</span>
+          <span>loopctl · v0.4.0</span>
+          <p class="colophon-pipeline">— Dream · Create · Harness —</p>
           <span>© 2026 dch-labs</span>
         </div>
       </div>
     </footer>
 
     <script>
-      import { initReadingPanel } from '../scripts/reading';
-      initReadingPanel();
-
       const root = document.documentElement;
       const toggle = document.getElementById('theme-toggle');
 
@@ -649,7 +630,9 @@ const ideas = [
   }
 
   .brand-name {
-    font-family: var(--font-display);
+    /* Exempt from the site-wide mono identity: the wordmark keeps the display
+     * serif it was drawn in. The KB header reads the same token. */
+    font-family: var(--font-brand);
     font-weight: 700;
     font-size: 26px;
     letter-spacing: -0.025em;
@@ -659,14 +642,6 @@ const ideas = [
   .brand-dot {
     color: var(--accent);
     font-style: italic;
-  }
-
-  .brand-tag {
-    font-style: italic;
-    font-size: 13px;
-    color: var(--ink-3);
-    border-left: 1px solid var(--rule);
-    padding-left: 12px;
   }
 
   .masthead-right {
@@ -695,7 +670,7 @@ const ideas = [
   }
 
   .primary-nav a:hover {
-    color: var(--accent);
+    color: var(--ink);
     text-decoration: underline;
     text-underline-offset: 4px;
   }
@@ -714,7 +689,7 @@ const ideas = [
   }
 
   .theme-toggle:hover {
-    color: var(--accent);
+    color: var(--ink);
   }
 
   .github-link {
@@ -734,15 +709,15 @@ const ideas = [
     gap: 10px;
     font-size: 11px;
     color: var(--ink-3);
-    font-variant: small-caps;
-    letter-spacing: 0.06em;
+    font-variant: normal;
+    letter-spacing: 0;
     padding-bottom: 12px;
     align-items: center;
     flex-wrap: wrap;
   }
 
   .masthead-meta a:hover {
-    color: var(--accent);
+    color: var(--ink);
   }
 
   .masthead-meta .spacer {
@@ -750,7 +725,7 @@ const ideas = [
   }
 
   .ornament {
-    color: var(--accent);
+    color: var(--ink);
   }
 
   .progress-line {
@@ -758,7 +733,7 @@ const ideas = [
     bottom: -1px;
     left: 0;
     height: 2px;
-    background: var(--accent);
+    background: var(--ink);
     width: 0%;
     transition: width 0.1s linear;
   }
@@ -775,17 +750,6 @@ const ideas = [
     gap: 72px;
   }
 
-  .hero-deco {
-    position: absolute;
-    right: 36px;
-    top: 36px;
-    font-family: var(--font-mono-ui);
-    font-size: 10px;
-    color: var(--ink-3);
-    text-align: right;
-    line-height: 1.5;
-  }
-
   .hero-eyebrow {
     display: flex;
     justify-content: space-between;
@@ -798,9 +762,9 @@ const ideas = [
 
   .hero-label {
     font-size: 11px;
-    font-variant: small-caps;
-    letter-spacing: 0.12em;
-    color: var(--accent);
+    font-variant: normal;
+    letter-spacing: 0;
+    color: var(--ink);
     font-weight: 500;
   }
 
@@ -813,25 +777,23 @@ const ideas = [
   .hero-title {
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: clamp(46px, 7.4vw, 92px);
-    line-height: 0.94;
+    font-size: clamp(34px, 5.4vw, 62px);
+    line-height: 1.08;
     letter-spacing: -0.028em;
     margin-bottom: 32px;
-    font-variation-settings: 'opsz' 144;
     color: var(--ink);
   }
 
   .hero-title em {
-    font-style: italic;
+    font-style: normal;
     font-weight: 400;
-    color: var(--accent);
-    font-variation-settings: 'opsz' 144;
+    color: var(--ink);
   }
 
   .hero-deck {
-    font-size: calc(19px * var(--read-scale));
-    line-height: calc(1.55 * var(--read-leading));
-    max-width: calc(580px * var(--read-measure));
+    font-size: 19px;
+    line-height: 1.55;
+    max-width: 580px;
     margin-bottom: 40px;
     color: var(--ink-2);
   }
@@ -854,8 +816,8 @@ const ideas = [
 
   .meta-label {
     font-size: 10px;
-    font-variant: small-caps;
-    letter-spacing: 0.1em;
+    font-variant: normal;
+    letter-spacing: 0;
     color: var(--ink-3);
   }
 
@@ -870,7 +832,7 @@ const ideas = [
   .meta-sub {
     font-size: 12px;
     color: var(--ink-3);
-    font-style: italic;
+    font-style: normal;
   }
 
   .hero-actions {
@@ -897,7 +859,7 @@ const ideas = [
   }
 
   .btn-primary:hover {
-    background: var(--accent);
+    background: var(--ink);
     color: var(--paper-bg);
   }
 
@@ -918,8 +880,8 @@ const ideas = [
   }
 
   .btn-ghost:hover {
-    color: var(--accent);
-    border-color: var(--accent);
+    color: var(--ink);
+    border-color: var(--ink);
   }
 
   .hero-aside {
@@ -927,24 +889,37 @@ const ideas = [
     padding-left: 36px;
   }
 
+  /* Set like the page's own titles — the display face at display weight, in ink
+   * — rather than as a 11px grey form label. Sized to the panel, not to the
+   * hero: 20px is a clear step above the 14px entries under it and still fits
+   * the ~410px column on one line, with wrap so the note beside it can fall to
+   * a second line instead of colliding. */
   .aside-head {
-    font-size: 11px;
-    font-variant: small-caps;
-    letter-spacing: 0.12em;
-    color: var(--ink-3);
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 700;
+    font-variant: normal;
+    letter-spacing: -0.02em;
+    color: var(--ink);
     padding-bottom: 14px;
     border-bottom: 1px solid var(--rule);
     margin-bottom: 4px;
     display: flex;
+    flex-wrap: wrap;
+    gap: 0 12px;
     justify-content: space-between;
     align-items: baseline;
   }
 
+  /* The note stays a note: it sits inside the title row, so it has to opt out of
+   * the weight and colour the title now carries. */
   .aside-head em {
-    font-style: italic;
+    font-style: normal;
     font-size: 12px;
+    font-weight: 400;
     font-variant: normal;
     letter-spacing: 0;
+    color: var(--ink-3);
   }
 
   .aside-list li {
@@ -966,15 +941,15 @@ const ideas = [
   }
 
   .aside-list li a:hover .aside-name {
-    color: var(--accent);
+    color: var(--ink);
     text-decoration: underline;
-    text-decoration-color: var(--accent);
+    text-decoration-color: var(--ink);
     text-underline-offset: 3px;
   }
 
   .aside-num {
     font-family: var(--font-display);
-    font-style: italic;
+    font-style: normal;
     color: var(--ink-3);
     font-size: 14px;
   }
@@ -986,7 +961,7 @@ const ideas = [
 
   .aside-name em {
     color: var(--ink-3);
-    font-style: italic;
+    font-style: normal;
     font-size: 12.5px;
   }
 
@@ -1000,13 +975,13 @@ const ideas = [
     margin-top: 18px;
     font-size: 12.5px;
     color: var(--ink-3);
-    font-style: italic;
+    font-style: normal;
     text-align: right;
   }
 
   .aside-foot a {
-    color: var(--accent);
-    border-bottom: 1px solid var(--accent);
+    color: var(--ink);
+    border-bottom: 1px solid var(--ink);
   }
 
   .section-head {
@@ -1021,9 +996,9 @@ const ideas = [
 
   .section-eyebrow {
     font-size: 11px;
-    font-variant: small-caps;
-    letter-spacing: 0.12em;
-    color: var(--accent);
+    font-variant: normal;
+    letter-spacing: 0;
+    color: var(--ink);
     font-weight: 500;
     margin-bottom: 14px;
   }
@@ -1035,22 +1010,21 @@ const ideas = [
     line-height: 1.08;
     letter-spacing: -0.018em;
     max-width: 760px;
-    font-variation-settings: 'opsz' 72;
     color: var(--ink);
   }
 
   .section-title em {
-    font-style: italic;
+    font-style: normal;
     font-weight: 400;
-    color: var(--accent);
+    color: var(--ink);
   }
 
   .section-deck {
-    font-size: calc(16px * var(--read-scale));
+    font-size: 16px;
     color: var(--ink-2);
-    max-width: calc(600px * var(--read-measure));
+    max-width: 600px;
     margin-top: 14px;
-    line-height: calc(1.55 * var(--read-leading));
+    line-height: 1.55;
   }
 
   .section-deck code {
@@ -1058,7 +1032,7 @@ const ideas = [
     font-size: 0.85em;
     background: var(--bg-3);
     padding: 1px 5px;
-    color: var(--accent);
+    color: var(--ink);
   }
 
   .agent {
@@ -1074,8 +1048,8 @@ const ideas = [
   }
 
   .agent-prose {
-    font-size: calc(16.5px * var(--read-scale));
-    line-height: calc(1.62 * var(--read-leading));
+    font-size: 16.5px;
+    line-height: 1.62;
     color: var(--ink-2);
   }
 
@@ -1088,12 +1062,12 @@ const ideas = [
     font-size: 0.84em;
     background: var(--bg-3);
     padding: 1px 5px;
-    color: var(--accent);
+    color: var(--ink);
   }
 
   .text-link {
-    color: var(--accent);
-    border-bottom: 1px solid var(--accent);
+    color: var(--ink);
+    border-bottom: 1px solid var(--ink);
     padding-bottom: 2px;
     font-size: 15px;
     transition: opacity 0.2s;
@@ -1109,12 +1083,12 @@ const ideas = [
     line-height: 1.62;
     background: var(--bg-code);
     border: 1px solid var(--rule-soft);
-    border-left: 2px solid var(--accent);
+    border-left: 2px solid var(--ink);
     padding: 18px 22px;
     overflow-x: auto;
     white-space: pre;
     color: var(--ink);
-    box-shadow: 6px 6px 0 var(--bg-3);
+    box-shadow: none;
   }
 
   .code-line {
@@ -1122,7 +1096,7 @@ const ideas = [
   }
 
   .code-block .kw {
-    color: var(--accent);
+    color: var(--ink);
     font-weight: 500;
   }
 
@@ -1132,7 +1106,7 @@ const ideas = [
 
   .code-block .com {
     color: var(--ink-3);
-    font-style: italic;
+    font-style: normal;
   }
 
   .code-block .fn {
@@ -1174,7 +1148,6 @@ const ideas = [
     font-weight: 600;
     fill: var(--ink);
     text-anchor: middle;
-    font-variation-settings: 'opsz' 48;
   }
 
   .idea-svg .cluster-sub {
@@ -1182,7 +1155,7 @@ const ideas = [
     font-size: 10.5px;
     fill: var(--ink-3);
     text-anchor: middle;
-    letter-spacing: 0.04em;
+    letter-spacing: 0;
   }
 
   .idea-svg .mini rect {
@@ -1202,7 +1175,7 @@ const ideas = [
 
   .idea-svg .cluster-foot {
     font-family: var(--font-body);
-    font-style: italic;
+    font-style: normal;
     font-size: 12px;
     fill: var(--ink-3);
     text-anchor: middle;
@@ -1216,7 +1189,7 @@ const ideas = [
 
   .idea-svg #cluster-brain:hover ~ .flow-protocol .flow-chip:first-of-type,
   .idea-svg #cluster-hands:hover ~ .flow-protocol .flow-chip:last-of-type {
-    stroke: var(--accent);
+    stroke: var(--ink);
   }
 
   .idea-svg .flow-path {
@@ -1234,7 +1207,7 @@ const ideas = [
   .idea-svg .flow-label,
   .idea-svg .flow-steps {
     font-family: var(--font-body);
-    font-style: italic;
+    font-style: normal;
     font-size: 13px;
     fill: var(--ink-2);
     text-anchor: middle;
@@ -1243,10 +1216,10 @@ const ideas = [
 
   .idea-svg .flow-steps {
     font-style: normal;
-    font-variant: small-caps;
-    letter-spacing: 0.08em;
+    font-variant: normal;
+    letter-spacing: 0;
     font-size: 12.5px;
-    fill: var(--accent);
+    fill: var(--ink);
   }
 
   .idea-svg .flow-steps.sub {
@@ -1254,7 +1227,7 @@ const ideas = [
     font-variant: normal;
     letter-spacing: 0;
     font-size: 11.5px;
-    font-style: italic;
+    font-style: normal;
   }
 
   .idea-svg .diag-title {
@@ -1264,18 +1237,17 @@ const ideas = [
     letter-spacing: -0.02em;
     fill: var(--ink);
     text-anchor: middle;
-    font-variation-settings: 'opsz' 72;
   }
 
   .idea-svg .diag-title-em {
-    font-style: italic;
+    font-style: normal;
     font-weight: 500;
-    fill: var(--accent);
+    fill: var(--ink);
   }
 
   .idea-svg .diag-subtitle {
     font-family: var(--font-body);
-    font-style: italic;
+    font-style: normal;
     font-size: 12.5px;
     fill: var(--ink-3);
     text-anchor: middle;
@@ -1287,13 +1259,13 @@ const ideas = [
 
   .idea-svg g.diag:hover .cluster-box,
   .idea-svg g.diag:hover .rail-box {
-    stroke: var(--accent);
+    stroke: var(--ink);
     fill: var(--bg-2);
   }
 
   .idea-svg g.diag:hover .cluster-title,
   .idea-svg g.diag:hover .rail-header {
-    fill: var(--accent);
+    fill: var(--ink);
   }
 
   .idea-svg .rail-box {
@@ -1305,9 +1277,9 @@ const ideas = [
   .idea-svg .rail-header {
     font-family: var(--font-body);
     font-size: 12.5px;
-    font-variant: small-caps;
-    letter-spacing: 0.14em;
-    fill: var(--accent);
+    font-variant: normal;
+    letter-spacing: 0;
+    fill: var(--ink);
     text-anchor: middle;
   }
 
@@ -1324,15 +1296,15 @@ const ideas = [
   .idea-svg .g-chip-name {
     font-family: var(--font-body);
     font-size: 12px;
-    font-variant: small-caps;
-    letter-spacing: 0.1em;
+    font-variant: normal;
+    letter-spacing: 0;
     fill: var(--ink);
     text-anchor: middle;
   }
 
   .idea-svg .g-chip-sub {
     font-family: var(--font-body);
-    font-style: italic;
+    font-style: normal;
     font-size: 11px;
     fill: var(--ink-3);
     text-anchor: middle;
@@ -1340,7 +1312,7 @@ const ideas = [
 
   .idea-svg .flow-annotation {
     font-family: var(--font-body);
-    font-style: italic;
+    font-style: normal;
     font-size: 12px;
     fill: var(--ink-3);
   }
@@ -1353,7 +1325,7 @@ const ideas = [
   .idea-svg #cluster-brain:hover ~ .flow-protocol .flow-path:not(.return),
   .idea-svg #cluster-hands:hover ~ .flow-protocol .flow-path.return,
   .idea-svg #cluster-hands:hover ~ .flow-io .flow-path {
-    stroke: var(--accent);
+    stroke: var(--ink);
     stroke-width: 2;
   }
 
@@ -1364,18 +1336,18 @@ const ideas = [
   .idea-svg #cluster-brain:hover ~ .flow-protocol .flow-label:first-of-type,
   .idea-svg #cluster-hands:hover ~ .flow-protocol .flow-label:last-of-type,
   .idea-svg #cluster-hands:hover ~ .flow-io .flow-annotation {
-    fill: var(--accent);
+    fill: var(--ink);
   }
 
   .idea-svg #cluster-brain:hover .cluster-box,
   .idea-svg #cluster-hands:hover .cluster-box {
-    stroke: var(--accent);
+    stroke: var(--ink);
     fill: var(--bg-2);
   }
 
   .idea-svg #cluster-brain:hover .mini rect,
   .idea-svg #cluster-hands:hover .mini rect {
-    stroke: var(--accent);
+    stroke: var(--ink);
   }
 
   .payoff-list {
@@ -1397,9 +1369,9 @@ const ideas = [
 
   .payoff-num {
     font-family: var(--font-display);
-    font-style: italic;
+    font-style: normal;
     font-size: 24px;
-    color: var(--accent);
+    color: var(--ink);
     line-height: 1;
   }
 
@@ -1413,8 +1385,8 @@ const ideas = [
   }
 
   .payoff-list p {
-    font-size: calc(14.5px * var(--read-scale));
-    line-height: calc(1.58 * var(--read-leading));
+    font-size: 14.5px;
+    line-height: 1.58;
     color: var(--ink-2);
   }
 
@@ -1451,7 +1423,7 @@ const ideas = [
 
   .lib-num {
     font-family: var(--font-display);
-    font-style: italic;
+    font-style: normal;
     font-size: 20px;
     color: var(--ink-3);
     line-height: 1;
@@ -1473,20 +1445,20 @@ const ideas = [
   }
 
   .library-item:hover .lib-title {
-    color: var(--accent);
+    color: var(--ink);
     text-decoration: underline;
-    text-decoration-color: var(--accent);
+    text-decoration-color: var(--ink);
     text-underline-offset: 4px;
   }
 
   .lib-desc {
-    font-size: calc(14px * var(--read-scale));
-    line-height: calc(1.5 * var(--read-leading));
+    font-size: 14px;
+    line-height: 1.5;
     color: var(--ink-2);
   }
 
   .lib-arrow {
-    color: var(--accent);
+    color: var(--ink);
     opacity: 0;
     transform: translateX(-6px);
     transition: opacity 0.2s, transform 0.2s;
@@ -1504,7 +1476,7 @@ const ideas = [
   }
 
   .ideas-list {
-    max-width: calc(780px * var(--read-measure));
+    max-width: 780px;
     list-style: none;
     padding: 0;
     margin: 0;
@@ -1516,16 +1488,16 @@ const ideas = [
     gap: 12px;
     padding: 16px 0;
     border-bottom: 1px dotted var(--rule);
-    font-size: calc(16px * var(--read-scale));
-    line-height: calc(1.58 * var(--read-leading));
+    font-size: 16px;
+    line-height: 1.58;
     color: var(--ink-2);
   }
 
   .idea-num {
     font-family: var(--font-display);
-    font-style: italic;
+    font-style: normal;
     font-size: 20px;
-    color: var(--accent);
+    color: var(--ink);
   }
 
   .ideas-list strong {
@@ -1538,7 +1510,7 @@ const ideas = [
     font-size: 0.84em;
     background: var(--bg-3);
     padding: 1px 5px;
-    color: var(--accent);
+    color: var(--ink);
   }
 
   .providers-strip {
@@ -1548,8 +1520,8 @@ const ideas = [
 
   .providers-label {
     font-size: 11px;
-    font-variant: small-caps;
-    letter-spacing: 0.12em;
+    font-variant: normal;
+    letter-spacing: 0;
     color: var(--ink-3);
     margin-bottom: 12px;
   }
@@ -1573,7 +1545,7 @@ const ideas = [
 
   .providers-row em {
     font-family: var(--font-body);
-    font-style: italic;
+    font-style: normal;
     font-size: 15px;
     color: var(--ink-3);
   }
@@ -1581,7 +1553,7 @@ const ideas = [
   .providers-row code {
     font-family: var(--font-mono-ui);
     font-size: 0.8em;
-    color: var(--accent);
+    color: var(--ink);
   }
 
   .colophon {
@@ -1613,9 +1585,9 @@ const ideas = [
     font-family: var(--font-display);
     font-weight: 600;
     font-size: 11px;
-    font-variant: small-caps;
-    letter-spacing: 0.12em;
-    color: var(--accent);
+    font-variant: normal;
+    letter-spacing: 0;
+    color: var(--ink);
     margin-bottom: 12px;
   }
 
@@ -1626,7 +1598,7 @@ const ideas = [
   }
 
   .col-block p em {
-    font-style: italic;
+    font-style: normal;
     color: var(--ink);
   }
 
@@ -1646,31 +1618,79 @@ const ideas = [
   }
 
   .col-block ul li a:hover {
-    color: var(--accent);
+    color: var(--ink);
     text-decoration: underline;
     text-underline-offset: 3px;
   }
 
+  /* The closing line of the page: version on the left, licence on the right, the
+     three words the library is built around between them. A grid rather than
+     flex because the middle has to sit on the centre of the page, not on the
+     centre of whatever is left over: `1fr auto 1fr` makes the two credits equal
+     tracks, so the middle column is centred by construction, and `1fr` floors at
+     min-content, so a credit is never squeezed into half a line beside an
+     unbroken statement. Baseline alignment keeps all three on one line of text
+     instead of three boxes stacked in a row. */
   .colophon-foot {
     border-top: 1px solid var(--rule);
     padding-top: 18px;
     margin: 0 28px;
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: baseline;
+    column-gap: 12px;
     font-size: 11px;
     color: var(--ink-3);
-    font-variant: small-caps;
-    letter-spacing: 0.06em;
-    gap: 12px;
-    flex-wrap: wrap;
+    font-variant: normal;
+    letter-spacing: 0;
   }
 
-  .colophon-mark {
+  .colophon-foot > span:last-child {
+    text-align: right;
+  }
+
+  /* Where the three genuinely cannot share a line — credits and words want about
+     430px between them and the row is ~334px wide at 430px — the words take the
+     second row, centred, and the credits keep the first row between them. Placed
+     explicitly rather than left to wrap: an item asking for a full row does not
+     reliably get one. */
+  @media (max-width: 640px) {
+    .colophon-foot {
+      grid-template-columns: 1fr 1fr;
+      row-gap: 10px;
+    }
+
+    .colophon-foot > span:first-child {
+      grid-area: 1 / 1;
+    }
+
+    .colophon-foot > span:last-child {
+      grid-area: 1 / 2;
+    }
+
+    .colophon-pipeline {
+      grid-area: 2 / 1 / 3 / -1;
+      justify-content: center;
+    }
+  }
+
+  /* The three words the whole library is built around, the middle item of the
+     credit row: version on one side, licence on the other, the statement between
+     them. Set exactly as it was before the row was rearranged — the display face
+     at regular weight, 14px, in ink, middots between the words and a dash
+     standing off each side — because that is the treatment the words are known
+     by. Baseline alignment in the row means it shares the credits' line of text
+     rather than sitting in it as a separate box. No hover state: these three
+     words are a statement, not links, and an underline would promise a click. */
+  .colophon-pipeline {
+    margin: 0;
+    white-space: nowrap;
+    text-align: center;
     font-family: var(--font-display);
-    font-style: italic;
+    font-style: normal;
     font-weight: 400;
     font-size: 14px;
-    color: var(--accent);
+    color: var(--ink);
     font-variant: normal;
     letter-spacing: 0;
   }
@@ -1719,14 +1739,6 @@ const ideas = [
       padding: 0 20px;
     }
 
-    .brand-tag {
-      display: none;
-    }
-
-    .hero-deco {
-      display: none;
-    }
-
     .hero-meta {
       grid-template-columns: 1fr;
       gap: 16px;
@@ -1757,5 +1769,17 @@ const ideas = [
     .library-item:hover {
       background: transparent;
     }
+  }
+
+  /* ---- flat pass -------------------------------------------------------
+   * The page speaks the knowledge base's language now: one mono face, ink
+   * text, hairline rules. Emphasis comes from weight and underline, so the
+   * markup's <em>/<i> are upright like everything else -- except inside the
+   * wordmark, whose own rules are more specific and still italic.
+   */
+  em,
+  i,
+  cite {
+    font-style: normal;
   }
 </style>
