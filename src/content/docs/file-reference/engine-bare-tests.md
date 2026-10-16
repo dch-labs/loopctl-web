@@ -1,21 +1,23 @@
 ---
-title: "`src/engine/bare/tests.rs` — the engine's test suite"
+title: "src/engine/bare/tests.rs"
 ---
 
+This file is the in-file test module for your driver, running about 5,300 lines, and it is the crate's behavioral constitution. Reading a test-name here is the fastest way to learn what the engine guarantees.
 
-The in-file test module for the driver (~5,300 lines) — the crate's behavioral constitution. Reading test names here is the fastest way to learn what the engine guarantees.
+## Coverage highlights
 
-**Coverage highlights (by test-name theme)**
+The loop covers turn sequencing, terminal behaviors, `finalize` on every path, and resume round-trips.
 
-- The loop: turn sequencing, terminal behaviors, `finalize` on every path, resume round-trips.
-- Compaction: threshold/emergency boundaries (exactly-at vs one-past), no-op vs compacted feeds, no-progress guard, deferred-turn reservation, zero-window policy.
-- Dispatch: parallel wave planning, sibling discard, recovery ceiling (`attempts == 6`), panic isolation, unknown-tool pre-answering.
-- Cancellation: every checkpoint (model call, stream, tool, backoff, pre-run).
-- Config: setter idleness, temp-dir lifecycle, overhead caching.
+Compaction covers threshold and emergency boundaries, exactly-at versus one-past, no-op versus compacted feeds, the no-progress guard, deferred-turn reservation, and zero-window policy.
 
-**Behavior notes**
+Dispatch covers parallel wave planning, sibling discard, the recovery ceiling where `attempts == 6`, panic isolation, and unknown-tool pre-answering.
 
-- Tests double as specification: names are behavior sentences ("`a_zero_window_disables_the_window_policy`"), and the project's TESTING.md culture (fail-first, both-ways boundaries) is visible throughout.
-- Cross-file integration tests (`tests/`) cover subsystem seams end-to-end — see [examples & tests](/file-reference/examples-tests/).
+Cancellation covers every checkpoint you have: model call, stream, tool, backoff, and pre-run. Config covers setter idleness, temp-dir lifecycle, and overhead caching.
+
+## Behavior notes
+
+Read these tests as specification. Names are behavior sentences such as `a_zero_window_disables_the_window_policy`, and the project's TESTING.md culture of fail-first, both-ways boundaries shows throughout.
+
+Cross-file integration tests in `tests/` cover your subsystem seams end-to-end. See [examples & tests](/file-reference/examples-tests/).
 
 Deep dive: [Testing](/integration/testing/).

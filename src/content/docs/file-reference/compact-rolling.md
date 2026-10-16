@@ -1,17 +1,21 @@
 ---
-title: "`src/compact/rolling.rs` — `RollingCompactor`, the maintenance-cadence compactor"
+title: "src/compact/rolling.rs"
 ---
 
+This file gives you compaction as a rolling cadence rather than one big rewrite. Each pass re-processes only the groups older than `age_turns`, rolling them into micro-summaries and leaving your recent tail verbatim.
 
-Compaction as a rolling cadence rather than one big rewrite: each pass re-processes only the **groups older than `age_turns`** (turn groups bounded by pair-safe role-transition boundaries), rolling them into micro-summaries and leaving the recent tail verbatim. Always compiled.
+Turn groups are bounded by pair-safe role-transition boundaries, and this compactor is always compiled.
 
-**Key items**
+## Key items
 
-- `RollingCompactor::new(...)` / `RollingConfig` — the `age_turns` knob (how many turn groups from the end ride verbatim) plus the summarizer-facing budget knobs.
+`RollingCompactor::new(...)` and `RollingConfig` give you the `age_turns` knob, which sets how many turn groups from the end ride verbatim.
 
-**Behavior notes**
+They also carry the summarizer-facing budget knobs you need.
 
-- The pass is cheap by construction — only the aged slice is summarized, so a long unattended run pays a small cost per pass instead of one giant rewrite.
-- Pairs stay safe: the group boundary snaps to role transitions, so tool call/result pairs never straddle the cut.
+## Behavior notes
 
-Deep dive: [Compaction — the compactor family](/engine/compaction/#the-compactor-family)
+The pass is cheap by construction, since only your aged slice is summarized. So a long unattended run pays a small cost per pass instead of one giant rewrite.
+
+Pairs stay safe, because the group boundary snaps to role transitions and tool call and result pairs never straddle the cut.
+
+For the deep dive, see the compactor family section of [Compaction](/engine/compaction/#the-compactor-family).

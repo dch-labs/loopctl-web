@@ -1,21 +1,27 @@
 ---
-title: "`src/provider/sse.rs` — the SSE reader [feature: providers]"
+title: "src/provider/sse.rs"
 ---
 
+This file is your shared line-level parser for Server-Sent Events, under the `providers` feature. The OpenAI, Anthropic, and Gemini clients all read through it, so you decode here once instead of three times.
 
-The shared line-level parser for Server-Sent Events, used by the OpenAI/Anthropic/Gemini clients.
+## Key items
 
-**Key items**
+You wrap a response with `SseReader::from_response(resp)`, which takes over the response's byte stream.
 
-- `SseReader::from_response(resp)` — wraps the response's byte stream.
-- Byte-oriented buffering (TCP chunks ignore character boundaries); `take_line` decodes complete lines only (invalid UTF-8 on a complete line = error); trims `\r` for CRLF wires.
-- 1 MiB per-line cap — an endless line is a protocol error, not unbounded memory.
-- `[DONE]` sentinel tracking (OpenAI family); provider-specific extractors live in each client (`next_openai_data`, `next_event`, `next_gemini_data`).
+Buffering is byte-oriented, because TCP chunks ignore character boundaries. `take_line` decodes complete lines only, so invalid UTF-8 on a complete line is an error, and it trims `\r` for CRLF wires.
 
-**Behavior notes**
+A 1 MiB per-line cap protects you: an endless line is a protocol error, not unbounded memory.
 
-- Comment lines (leading `:`) are skipped — that's keep-alives handled.
-- This layer is a parser, **not** a reconnector: a dead stream just ends without a terminal event; retry decisions belong to the `StreamHandler`.
-- The distinction it upholds: "server said done" (sentinel / terminal event seen) vs "connection died" (absence of terminal) — the engine's truncation detection depends on it.
+`[DONE]` sentinel tracking covers the OpenAI family, while provider-specific extractors live in each client as `next_openai_data`, `next_event`, and `next_gemini_data`.
+
+## Behavior notes
+
+Comment lines with a leading `:` are skipped, which is how your keep-alives get handled.
+
+So the reader consumes bytes, splits them into lines, and returns each complete line to whoever asked. It never retries, sleeps, or reconnects, and it does not decide when you give up.
+
+Treat this layer as a parser, not a reconnector. A dead stream ends without a terminal event, and retry decisions belong to your `StreamHandler`.
+
+The distinction it upholds: "server said done" means a sentinel or terminal event was seen, while "connection died" means absence of terminal. Your engine's truncation detection depends on that split.
 
 Deep dive: [SSE](/providers/sse/).

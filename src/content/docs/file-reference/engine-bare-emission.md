@@ -1,21 +1,33 @@
 ---
-title: "`src/engine/bare/emission.rs` — the notification hub"
+title: "src/engine/bare/emission.rs"
 ---
 
+This file is the notification hub. Every observer callback and hook notification in the engine is fired from here.
 
-Every observer callback and hook notification in the engine is fired from here. The driver's business modules never fan out directly — one place to audit the full event surface.
+Your driver's business modules never fan out directly, which leaves you one place to audit the full event surface.
 
-**Key items**
+## Key items
 
-- Observer fan-out: run start/end, turn start/end, response, tool call received/pre/post, stream success/failure, fallback, model switched, compaction, detected patterns, text/thinking deltas (delta dispatch also invokes the `text_streamer`).
-- Hook fan-out [hooks]: run start/end, pre/post tool use (block/ask → soft results), pre/post compact (veto + merged guidance).
-- `record_turn_success` / `record_turn_failure(_inner)` — the fallback bookkeeping (trip detection, `on_fallback`, chain advance via `mark_fallback_failed`, `on_stream_failure` always except cancel; poison supersedes the original error).
-- Turn accounting helpers (`TurnAccounting`) for the tool-phase `on_turn_end` (provider token pair repeated — dispatch spends no model tokens).
+Observer fan-out covers run start and end, turn start and end, response, and tool call received, pre, and post.
 
-**Behavior notes**
+It also covers stream success and failure, fallback, model switched, compaction, detected patterns, and the pre/post text and thinking deltas. Your delta dispatch also invokes the `text_streamer`.
 
-- `on_turn_end` fires twice for a tool-carrying turn (LLM phase + tool phase, disjoint durations); soft tool errors do **not** flip `success`.
-- `on_tool_call_received` fires for pre-answered unknown-tool calls too — their only event.
-- `on_model_switched` fires from `note_routed_model` on every routing change (trip, chain advance, recovery), deduplicated against the last routed model.
+Hook fan-out, behind the `hooks` feature, covers your run start and end. It adds pre and post tool use, where block and ask become soft results.
 
-Deep dive: [Observers](/extensions/observers/).
+It also covers pre and post compact, which is where you get veto plus merged guidance.
+
+`record_turn_success` and `record_turn_failure` with its `_inner` variant hold your fallback bookkeeping: trip detection, `on_fallback`, and chain advance via `mark_fallback_failed`.
+
+`on_stream_failure` always fires except on cancel, and a poison supersedes the original error for you.
+
+`TurnAccounting` helpers drive the tool-phase `on_turn_end`, where the provider token pair is repeated because dispatch spends no model tokens.
+
+## Behavior notes
+
+`on_turn_end` fires twice for a tool-carrying turn, once for the LLM phase and once for the tool phase, with disjoint durations. Soft tool errors do not flip `success` on you.
+
+`on_tool_call_received` fires for pre-answered unknown-tool calls too, and that is their only event.
+
+`on_model_switched` fires from `note_routed_model` on every routing change, meaning trip, chain advance, or recovery, deduplicated against the last routed model.
+
+For the deep dive, see [Observers](/extensions/observers/).

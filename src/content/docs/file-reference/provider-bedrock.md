@@ -1,23 +1,33 @@
 ---
-title: "`src/provider/bedrock.rs` — `BedrockClient` [feature: bedrock]"
+title: "src/provider/bedrock.rs"
 ---
 
+This file gives you `BedrockClient`, the AWS client under the `bedrock` feature: SigV4-signed requests, two wire paths, and binary event-stream decoding. It runs about 3,550 lines with tests.
 
-The AWS client: SigV4-signed requests, two wire paths, binary event-stream decoding. (~3,550 lines with tests.)
+## Key items
 
-**Key items**
+`from_env()` reads AWS_REGION, ACCESS_KEY_ID, and SECRET_ACCESS_KEY, plus an optional SESSION_TOKEN and AWS_BEDROCK_MODEL, then hands you a validating builder. Use `set_credentials(...)` for atomic triple rotation mid-run.
 
-- `from_env()` (AWS_REGION / ACCESS_KEY_ID / SECRET_ACCESS_KEY, optional SESSION_TOKEN, AWS_BEDROCK_MODEL) + validating builder; `set_credentials(...)` for atomic triple rotation.
-- `BedrockPath { Anthropic, Converse }` — auto-selected per model id (`anthropic.*` prefix), pinnable; URLs with percent-encoded model ids (the exact encoded path is signed).
-- SigV4: `sigv4_sign(...)` — canonical request, HMAC key chain, headers; pinned against AWS's documented vectors.
-- `AwsEventStreamDecoder` — the incremental binary frame parser (length-prefixed frames, typed headers, exception frames flagged).
-- Converse mapping: `toolUse`/`toolResult` blocks (with `status: success|error` — `is_error` travels), `toolConfig.toolSpec`, `inferenceConfig.maxTokens`.
+`BedrockPath { Anthropic, Converse }` is auto-selected per model id from the `anthropic.*` prefix, and you can pin it. Your URLs carry percent-encoded model ids, because the exact encoded path is signed.
 
-**Behavior notes**
+`sigv4_sign(...)` builds your canonical request, HMAC key chain, and headers. AWS's documented vectors pin it.
 
-- Streaming: the Anthropic path feeds the shared Anthropic emitter; the Converse path has its own emitter whose terminal pair (stop + usage) comes from the final `metadata` frame, emitted exactly once. Since 0.4.0 Converse's `cacheReadInputTokens` fills `Usage::cached_input_tokens`, and Anthropic-shape responses get the direct client's input normalization (raw + cache reads + creation).
-- Non-streaming responses are plain JSON in either shape; an unrecognized shape is an explicit error.
-- **No `RequestOptions` support** (base methods only) and HTTP errors aren't auto-classified into rate-limit/auth forms.
-- `max_tokens` defaults 8192; models with lower own caps reject bigger budgets — configure per client.
+`AwsEventStreamDecoder` is your incremental binary frame parser: length-prefixed frames, typed headers, and exception frames flagged.
+
+Converse mapping covers `toolUse` and `toolResult` blocks, where `status: success|error` carries `is_error`, plus `toolConfig.toolSpec` and `inferenceConfig.maxTokens`.
+
+## Behavior notes
+
+Streaming splits by path. Your Anthropic path feeds the shared Anthropic emitter.
+
+The Converse path has its own emitter, and its terminal pair of stop plus usage comes from the final `metadata` frame. That pair is emitted exactly once.
+
+Since 0.4.0 Converse's `cacheReadInputTokens` fills `Usage::cached_input_tokens`, and Anthropic-shape responses get the direct client's input normalization of raw plus cache reads plus creation.
+
+Non-streaming responses are plain JSON in either shape, and an unrecognized shape is an explicit error.
+
+There is no `RequestOptions` support, so you get base methods only, and HTTP errors are not auto-classified into rate-limit or auth forms.
+
+`max_tokens` defaults to 8192, and models with lower own caps reject bigger budgets, so configure per client.
 
 Deep dive: [Bedrock](/providers/bedrock/).

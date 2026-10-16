@@ -1,11 +1,10 @@
 ---
-title: "`src/capabilities.rs` — the capability traits"
+title: "src/capabilities.rs"
 ---
 
+This file gives you nine small traits, one per optional engine component, so your code can depend on "has detection" without depending on the whole bundle. `LoopManagers` implements all of them.
 
-Nine small traits, one per optional engine component, so code can depend on "has detection" without depending on the whole bundle. `LoopManagers` implements all of them.
-
-**Key items**
+## Key items
 
 | Trait | Method | Returns |
 |---|---|---|
@@ -19,9 +18,12 @@ Nine small traits, one per optional engine component, so code can depend on "has
 | `PipelineAware` | `pipeline()` | `Option<&ToolPipeline>` |
 | `HealthTrackable` [tool_health] | `health_registry()` | `Option<&ToolHealthRegistry>` |
 
-**Behavior notes**
+## Behavior notes
 
-- The `Option` returns encode "not configured" — the engine checks and skips cleanly. `StreamCapable` is the exception: it substitutes a no-resilience passthrough, so "is a real handler set?" is not answerable through the accessor.
-- Generic code should narrow to the traits it needs (`fn foo(b: &impl Detectable)`) — that's the entire point of this module.
+Your `Option` returns encode "not configured", so the engine checks and skips cleanly.
+
+`StreamCapable` is the exception: it substitutes a no-resilience passthrough, so "is a real handler set?" is not answerable through the accessor.
+
+Narrow your generic code to the traits it needs, as in `fn foo(b: &impl Detectable)`. That is the entire point of this module.
 
 Deep dive: [Managers](/extensions/managers/).

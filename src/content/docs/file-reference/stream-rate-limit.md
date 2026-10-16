@@ -1,21 +1,25 @@
 ---
-title: "`src/stream/rate_limit.rs` — the token bucket"
+title: "src/stream/rate_limit.rs"
 ---
 
+This file is your proactive rate limiter: it waits before you fire into a throttled endpoint, instead of only reacting to 429s.
 
-The proactive rate limiter: wait *before* firing into a throttled endpoint, instead of only reacting to 429s.
+## Key items
 
-**Key items**
+`TokenBucket::new(capacity)` sets your burst to capacity and refills continuously at `capacity/60` tokens per second. Refill is lazy on access, so you run no background task.
 
-- `TokenBucket::new(capacity)` — burst = capacity; continuous refill at `capacity/60` tokens per second; lazy refill on access (no background task).
-- `take()` / `take_at(instant)` — consume one token → `Ok(())` or `Err(RateLimitError::Wait(duration))` (time until a token refills; `Duration::MAX` for zero-refill buckets) or `Err(Poisoned)`.
-- `available()` / `available_at()` — non-consuming queries.
-- `RateLimiter::new(requests_per_minute)` — `0` disables; one bucket per base URL (lazily created, shared).
+`take()` and `take_at(instant)` consume one token and return `Ok(())`, or `Err(RateLimitError::Wait(duration))` telling you the time until a token refills, with `Duration::MAX` for zero-refill buckets, or `Err(Poisoned)`.
 
-**Behavior notes**
+`available()` and `available_at()` run your queries without consuming a token.
 
-- Provider identity is the base URL: OpenAI and Ollama get independent buckets; two clients on one endpoint share.
-- The handler's `gate_on_rate_limit` sleeps in slices bounded by `rate_limit_max_wait` (30s default) and then **proceeds anyway** — better to risk a 429 than hang.
-- Reactive throttling (honoring 429 responses) lives in the handler's retry ladder; this module is the proactive complement.
+`RateLimiter::new(requests_per_minute)` disables at `0` and keeps one bucket per base URL, lazily created and shared.
+
+## Behavior notes
+
+Your provider identity is the base URL, so OpenAI and Ollama get independent buckets while two clients on one endpoint share theirs.
+
+The handler's `gate_on_rate_limit` sleeps in slices bounded by `rate_limit_max_wait`, default 30s, and then proceeds anyway. Risking a 429 beats hanging your run.
+
+Reactive throttling, which honors 429 responses, lives in the handler's retry ladder. This module is its proactive complement.
 
 Deep dive: [Stream events](/core-data/stream-events/).

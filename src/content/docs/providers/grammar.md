@@ -1,13 +1,12 @@
 ---
-title: "Grammar constraints — steering local models' tool calls [feature: grammar]"
+title: "Grammar constraints"
 sidebar:
   order: 7
 ---
 
+Small local models in the 7B class often emit almost-valid tool-call JSON. You get a missing quote or a trailing comma.
 
-Small local models (7B-class) often emit *almost*-valid tool-call JSON — a missing quote, a trailing comma. Cloud APIs fix this with "strict mode," but local inference servers (vLLM and friends) fix it differently: **grammar-constrained decoding** — the sampler is only allowed to produce text that matches a given grammar. loopctl's `grammar` feature generates that grammar from your tool schemas. Source: `src/provider/grammar.rs`.
-
----
+Cloud APIs fix this with strict mode. Local inference servers such as vLLM fix it differently, through grammar-constrained decoding, where the sampler is only allowed to produce text that matches a given grammar. `grammar` is the feature that generates one from your tool schemas, and the source is `src/provider/grammar.rs`.
 
 ## The pieces
 
@@ -22,7 +21,9 @@ pub trait ToolGrammarProvider: Send + Sync + Debug {
 let provider = JsonSchemaGrammar::from_schemas(&registry.all_schemas())?;
 ```
 
-`JsonSchemaGrammar` merges your tools into one JSON-Schema object — `{"type":"object","properties":{"tool_a": <tightened schema>, ...},"additionalProperties":false}` — serialized as a string. Each tool's schema is **tightened** first (every object closed, every property required), the same transform strict-mode APIs demand, so a sampler guided by this grammar emits the shape strict mode would enforce.
+`JsonSchemaGrammar` merges your tools into one JSON-Schema object, serialized as a string. The shape is `{"type":"object","properties":{"tool_a": <tightened schema>, ...},"additionalProperties":false}`.
+
+Each tool's schema is tightened first, which means every object closed and every property required. That is the same transform a strict-mode API demands, so a sampler guided by this grammar emits the shape strict mode would enforce.
 
 ## Using it
 
@@ -35,33 +36,43 @@ let options = RequestOptions::new()
 agent.set_request_options(options);   // applies to every model request
 ```
 
-On the wire (OpenAI-compatible servers): the request carries `guided_json: <grammar>` — vLLM's field — **alongside** the normal `tools` list. The grammar constrains the sampler; the tools list tells the model what exists. With no tools registered, `guided_json` is omitted (nothing to force).
+On the wire for OpenAI-compatible servers, your request carries `guided_json` with the grammar, which is vLLM's field, alongside the normal `tools` list.
 
-Compatibility, enforced loudly:
+Each part has a job. The grammar constrains the sampler, and the tools list tells the model what exists. With no tools registered, `guided_json` is omitted, because there is nothing to force.
+
+## Compatibility, enforced loudly
 
 | Provider | Grammar support |
 |---|---|
-| OpenAI-compatible servers (vLLM, etc.) | ✅ `guided_json` |
-| Anthropic | ❌ rejected up front — no grammar decoding on that API |
-| Gemini | ❌ rejected up front |
+| OpenAI-compatible servers such as vLLM | Yes, through `guided_json` |
+| Anthropic | No, rejected up front, because that API has no grammar decoding |
+| Gemini | No, rejected up front |
 
-Rejections are `ApiError::config_validation` **before** any request is sent — never a silent downgrade to unconstrained calls.
+A rejection is an `ApiError::config_validation` raised before any request is sent. You never get a silent downgrade to unconstrained calls.
 
-## The three constraint modes, one table
+## The three constraint modes
 
-`ToolConstraint` (see [structured output](/integration/structured-output/)):
+`ToolConstraint` is covered in [structured output](/integration/structured-output/):
 
 | Mode | Mechanism | Where it works |
 |---|---|---|
-| `None` (default) | schemas advertised as-is; malformed calls detected and answered, not prevented | everywhere |
-| `Strict` | provider-native strict tool schemas (tightened) | OpenAI native; Anthropic/Gemini via tightened schemas |
-| `Grammar(provider)` | sampler-level grammar (`guided_json`) | grammar-aware local servers |
+| `None`, the default | Schemas are advertised as-is, and malformed calls are detected and answered rather than prevented | Everywhere |
+| `Strict` | Provider-native strict tool schemas, tightened | OpenAI native, and Anthropic or Gemini through tightened schemas |
+| `Grammar(provider)` | Sampler-level grammar through `guided_json` | Grammar-aware local servers |
 
-`Grammar` exists precisely for the local/small-model case where there is no cloud strict mode but you control the sampler.
+`Grammar` exists precisely for your local and small-model case, where there is no cloud strict mode but you do control the sampler.
 
-Since 0.4.0 the feature is **fail-loud and honest about its envelope**: `from_schemas` returns a `Result` and refuses at construction when the schemas can't yield a usable grammar (previously a broken schema silently produced whatever it produced); and the old "≥99% valid tool-call JSON" claim is retired — the e2e evidence is stated as what it is (a local-server corpus run, not a guarantee for your sampler), and the grammar rides the request alongside the tools list exactly as described, never silently dropped.
+## Fail loud, and be honest about the envelope
+
+Two behaviors define this feature.
+
+`from_schemas` is fail-loud. It returns a `Result` and refuses at construction when your schemas cannot yield a usable grammar. Earlier builds let a broken schema silently produce whatever it produced.
+
+The old claim of at least 99% valid tool-call JSON is retired. The evidence is now stated as what it is: a run over a local-server corpus, which is not a guarantee for your sampler.
+
+What the code does guarantee is narrower. The grammar rides the request alongside the tools list, exactly as described, and is never silently dropped.
 
 ## Related pages
 
-- [Structured output](/integration/structured-output/) — the other constraint modes.
-- [OpenAI client](/providers/openai/) — the wire this rides on.
+- [Structured output](/integration/structured-output/) covers the other constraint modes.
+- [OpenAI client](/providers/openai/) covers the wire this rides on.

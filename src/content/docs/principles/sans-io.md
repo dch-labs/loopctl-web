@@ -1,17 +1,22 @@
 ---
-title: "Sans-IO — a pure brain in a box"
+title: "Sans-IO"
 sidebar:
   order: 1
 ---
 
+**Sans-IO** means "without input/output". It is a design pattern with one rule at its center:
 
-**Sans-IO** means "without input/output." It is a design pattern with one rule at its center: **the part of your program that makes decisions should never touch the outside world.** No network, no files, no clock, no randomness — nothing whose answer could differ from one run to the next. All of that lives in a separate shell that does the dirty work and reports back.
+**the part of your program that makes decisions should never touch the outside world.**
 
-loopctl's engine is built this way. If you read one page about *how* loopctl works, the [big idea](/start-here/the-big-idea/) page shows the split. This page explains the pattern itself: where it came from, what it buys, what it costs, and how to spot it in the code.
+No network, no files, no clock, no randomness, and nothing whose answer could differ from one run to the next.
 
----
+All of that lives in a separate shell that does the dirty work and reports back to your program.
 
-## What counts as IO, and why it's separated
+loopctl's engine is built this way. If you read one page about how loopctl works, the [big idea](/start-here/the-big-idea/) page shows you the split.
+
+This page explains the pattern itself: where it came from, what it buys you, what it costs, and how to spot it in your code.
+
+## What counts as IO, and why it is separated
 
 **IO (input/output)** is anything a program does to reach outside its own memory:
 
@@ -22,13 +27,21 @@ loopctl's engine is built this way. If you read one page about *how* loopctl wor
 | The clock | "Now" is a different value every millisecond |
 | Randomness | Two identical questions get different answers |
 
-The common thread: **IO makes behavior depend on things you don't control.** A decision-maker that touches IO becomes hard to test (you must fake the world), hard to save (what do you do with an open network connection?), and hard to reason about (the same inputs no longer give the same answer).
+The common thread: **IO makes your behavior depend on things you do not control.** A decision-maker that touches IO becomes hard to test, because you must fake the world.
 
-The sans-IO answer is to quarantine the unpredictability. The decision core becomes **plain data in, plain decision out** — deterministic, meaning *the same inputs always produce the same outputs*.
+It becomes hard to save, since an open network connection does not serialize. And it becomes hard to reason about.
 
-> The name comes from the Rust networking world, where protocol libraries (HTTP, QUIC) keep their connection logic as pure state machines and push the actual sockets to the edges. loopctl applies the same idea to the agent loop. You may also see the general shape called a **pure core** with an **imperative shell**.
+The reason: your same inputs no longer give the same answer.
 
----
+The sans-IO answer is to quarantine your unpredictability. Your decision core becomes **plain data in, plain decision out**, and deterministic.
+
+That means your same inputs always produce the same outputs.
+
+The name comes from the Rust networking world, where protocol libraries (HTTP, QUIC) keep their connection logic as pure state machines.
+
+Those libraries push the actual sockets to the edges. loopctl applies the same idea to your agent loop.
+
+You may also see the general shape called a **pure core** with an **imperative shell**.
 
 ## The pattern, in the abstract
 
@@ -41,13 +54,13 @@ flowchart LR
     C -- "instructions as plain data" --> S
 ```
 
-1. **The core** holds all the state and all the rules. You ask it "what next?" and it answers with an instruction — data, not action.
-2. **The shell** executes the instruction in the real world.
-3. **The shell reports back**, feeding the outcome into the core as plain data. Repeat until the core says "done."
+1. **The core** holds all your state and all your rules. You ask it "what next?" and it answers with an instruction: data, not action.
 
-The core never "calls" anything. It only ever *asks to be told*. That single inversion is the whole pattern.
+2. **The shell** executes your instruction in the real world.
 
----
+3. **The shell reports back**, feeding the outcome into your core as plain data. Repeat until your core says "done."
+
+Your core never calls anything. It only ever asks to be told. That single inversion is the whole pattern.
 
 ## How loopctl applies it
 
@@ -58,17 +71,21 @@ The core never "calls" anything. It only ever *asks to be told*. That single inv
 | The instructions | `MachineStep`: `CallLLM` · `CallTools` · `Compact` · `Done` | the brain's only vocabulary |
 | The reports | The feeds: `model_response()` · `tool_results()` · `compaction_result()` · ... | the only way results enter the brain |
 
-The discipline is enforced by details, not comments:
+Your discipline is enforced by details, not comments:
 
-- **Settings are never stored in the brain.** The driver hands the brain a fresh `MachinePolicy` (max turns, context window, thresholds) on *every* step. This is what keeps the brain serializable — saved state is pure data, with no config to drift out of sync.
-- **The brain holds no clock, no connection, no handle to anything.** Turn counts and token estimates are numbers the driver feeds it, not things it observes.
-- **Asking never changes anything.** `next_step()` is pure: call it twice in a row and you get the same answer. All change happens through feeds.
+- **Settings are never stored in your brain.** The driver hands your brain a fresh `MachinePolicy` of max turns, context window and thresholds on every step.
 
----
+- This is what keeps your brain serializable: saved state is pure data, with no config to drift out of sync.
+
+- **Your brain holds no clock, no connection, no handle to anything.** Turn counts and token estimates are numbers your driver feeds it, not things it observes.
+
+- **Asking never changes anything.** `next_step()` is pure: call it twice in a row and you get the same answer.
+
+- All change in your engine happens through feeds.
 
 ## The vocabulary, in actual types
 
-The brain's entire outward vocabulary is four instructions; its inward vocabulary is the matching feedback methods. In real types (signatures shortened):
+The brain's entire outward vocabulary is four instructions, and its inward vocabulary is the matching feedback methods. In real types, with signatures shortened:
 
 ```rust
 enum MachineStep {
@@ -100,7 +117,11 @@ impl LoopMachine {
 }
 ```
 
-Count them: **one question, four instructions, eleven ways in.** That is the complete interface between the two halves of the engine. Anything else either half knows, it knows about itself — which is exactly why the seam is auditable: the entire set of ways the world can touch a run fits on one screen.
+Count them: **one question, four instructions, eleven ways in.** That is the complete interface between the two halves of your engine.
+
+Anything else either half knows, it knows about itself.
+
+That is exactly why your seam is auditable: the entire set of ways the world can touch your run fits on one screen.
 
 ## One loop iteration, method by method
 
@@ -130,14 +151,25 @@ sequenceDiagram
 
 Details a first reading misses:
 
-- **The turn number belongs to the brain.** It names the turn in `CallLLM { turn }`; the driver never counts turns itself — it borrows the brain's count, so there is exactly one turn ledger, not two that can drift.
-- **`tool_results` takes one user message containing all result parts** — the provider convention (results ride a user-role message) is assembled by the driver and accepted whole by the brain. One batch, one feed, one state change.
-- **`model_response` does classification.** The brain itself sorts each requested call against the tool names the driver advertised: known → a pending call awaiting dispatch; unknown → *pre-answered* with an `is_error` result ("tool 'x' is not available") that travels back to the model without ever touching the registry. Even error-recovery is a brain decision, made from data.
-- **The policy is rebuilt every iteration** from session config, run config, and current extras — a mid-run config change takes effect on the very next step. That's why nothing setting-shaped is ever serialized.
+- **The turn number belongs to your brain.** It names the turn in `CallLLM { turn }`. Your driver never counts turns itself but borrows your brain's count.
 
-## What serializes — exactly
+- So you get exactly one turn ledger rather than two that can drift. **`tool_results` takes one user message containing all result parts.**
 
-"Save the run" is `serde_json::to_string(&machine)`. What's inside the bytes, and what deliberately isn't:
+- Your provider convention, that results ride a user-role message, is assembled by your driver and accepted whole by your brain.
+
+- One batch, one feed, one state change. **`model_response` does classification.**
+
+- Your brain itself sorts each requested call against the tool names your driver advertised. A known name becomes a pending call awaiting dispatch.
+
+- An unknown name is pre-answered with an `is_error` result, "tool 'x' is not available", which travels back to your model without ever touching the registry.
+
+- Even your error-recovery is a brain decision, made from data. **Your policy is rebuilt every iteration** from session config, run config, and current extras.
+
+- So a mid-run config change of yours takes effect on the very next step. That is why nothing setting-shaped is ever serialized.
+
+## What serializes, exactly
+
+"Save the run" is `serde_json::to_string(&machine)`. Here is what is inside the bytes, and what deliberately is not:
 
 | Serializes (the brain) | Stays behind (the shell) |
 |---|---|
@@ -146,39 +178,61 @@ Details a first reading misses:
 | `turns_taken`, `context_tokens`, `cancelled` | the policy — settings are re-supplied per step |
 | `pending_tools` — including pre-answered unknown-tool results | nothing else: the brain has nothing else |
 
-Two refinements that tests pin: `fail()` stores the error inside `Terminal(Failed)` *before* anything could be serialized — a saved errored machine restores as an errored machine, never as a mysterious mid-state. And a restored machine makes **identical** `next_step` decisions — resume is exact by construction, because the state is the behavior.
+Two refinements that your tests pin. `fail()` stores the error inside `Terminal(Failed)` before anything could be serialized.
 
----
+So a saved errored machine of yours restores as an errored machine, never as a mysterious mid-state.
+
+And your restored machine makes identical `next_step` decisions, so your resume is exact by construction.
+
+The reason: your state is your behavior.
 
 ## What the pattern buys you
 
-**1. Testing without theater.**
-To test "does the engine compact at 95% of the window?", you build a machine, feed it a fake token count, and read its step. No mock HTTP server, no sleeping, no flakiness. The engine's behavior tests run in microseconds because the brain has nothing slow inside it.
+### 1. Testing without theater
 
-**2. Pause anywhere, resume anywhere.**
-Plain data can be serialized — turned into bytes with `serde` and stored. Because the brain is nothing *but* plain data, a run can be saved mid-flight on one machine and restored on another, and the resumed brain makes **identical** decisions (a test pins this). You cannot serialize an open network connection; that's exactly why the connection lives in the shell.
+To test "does the engine compact at 95% of the window?", you build a machine, feed it a fake token count, and read its step.
 
-**3. The engine outlives any provider.**
-The brain doesn't know what an OpenAI or an Anthropic is. All model access flows through one small trait (`ApiClient`) in the shell. New providers plug in without the decision logic ever noticing.
+No mock HTTP server, no sleeping, no flakiness. Your engine's behavior tests run in microseconds because your brain has nothing slow inside it.
 
-**4. Determinism makes bugs reproducible.**
-When a run misbehaves, the sequence of (state, feed) pairs is a complete, replayable explanation. Nothing hidden happened between two lines of your log — nothing *could* happen, because the brain can't act on its own.
+### 2. Pause anywhere, resume anywhere
 
----
+Your plain data can be serialized, turned into bytes with `serde` and stored.
+
+Because your brain is nothing but plain data, your run can be saved mid-flight on one machine and restored on another.
+
+The resumed brain makes identical decisions, which a test pins. You cannot serialize an open network connection.
+
+That is exactly why the connection lives in your shell.
+
+### 3. The engine outlives any provider
+
+The brain does not know what an OpenAI or an Anthropic is. All model access flows through one small trait, `ApiClient`, in the shell. New providers plug in without the decision logic ever noticing.
+
+### 4. Determinism makes bugs reproducible
+
+When a run misbehaves, the sequence of (state, feed) pairs is a complete, replayable explanation. Nothing hidden happened between two lines of your log, and nothing could happen, because the brain cannot act on its own.
 
 ## What the pattern costs
 
-Honest accounting — this split is not free:
+Honest accounting: this split is not free.
 
-- **Every outcome needs a matching feed.** The brain can't "just find out" — the shell must faithfully report model replies, tool results, compaction outcomes, cancel requests. A forgotten feed path is a real bug class (this is why the driver routes *all* exits through one `finalize()` door, and why there are exactly two compaction feeds — one for "history was rewritten" and one for "nothing changed" — where a lazier design would use one).
-- **More explicit plumbing.** An ordinary loop can inline "call the model, use the reply." A sans-IO loop must phrase that as a step, a state, and a feed. The machinery in [the state machine](/engine/state-machine/) and [the driver loop](/engine/driver-loop/) pages *is* that plumbing.
-- **The split must be honest.** One sneaky clock read or network call inside the brain and the guarantees (serializable, deterministic, testable) silently break. The boundary is a discipline, not a wall the compiler enforces here.
+- **Every outcome needs a matching feed.** Your brain cannot "find out" on its own, so your shell must faithfully report model replies, tool results, compaction outcomes and cancel requests.
 
----
+- A forgotten feed path is a real bug class for you. This is why your driver routes all exits through one `finalize()` door.
+
+- It is why you have exactly two compaction feeds, one for "history was rewritten" and one for "nothing changed", where a lazier design would use one.
+
+- **More explicit plumbing.** An ordinary loop of yours can inline "call the model, use the reply".
+
+- A sans-IO loop must phrase that as a step, a state, and a feed. The machinery in [the state machine](/engine/state-machine/) and [the driver loop](/engine/driver-loop/) pages is that plumbing.
+
+- **Your split must be honest.** One sneaky clock read or network call inside your brain and your guarantees of serializable, deterministic and testable silently break.
+
+- The boundary is a discipline for you, not a wall the compiler enforces here.
 
 ## How to spot the seams in the code
 
-When reading loopctl's source, ask of any line: *does this decide, or does this do?*
+When you read loopctl's source, ask of any line: does this decide, or does this do?
 
 | If it decides... | If it does... |
 |---|---|
@@ -186,12 +240,16 @@ When reading loopctl's source, ask of any line: *does this decide, or does this 
 | its inputs are policy + feeds | its inputs are connections, registries, the filesystem |
 | it can run in a plain `#[test]` with no mocks | it needs `#[tokio::test]`, a client, or a temp dir |
 
-The same question applies to the subsystems: the loop *detector* is pure (a window of recorded operations, no IO); the *reflector* runs a model call, so it lives behind a trait in the shell with a no-op default. Whenever loopctl needs both deciding and doing for one feature, the decision half is pure and the doing half is a pluggable trait object.
+The same question applies to your subsystems. Your loop detector is pure, a window of recorded operations with no IO.
 
----
+Your reflector runs a model call, so it lives behind a trait in your shell with a no-op default.
+
+Whenever loopctl needs both deciding and doing for one of your features, the decision half is pure and the doing half is a pluggable trait object.
 
 ## Related pages
 
-- [The big idea](/start-here/the-big-idea/) — the same split, as an introduction.
-- [State machines](/principles/state-machines/) — the shape the pure core takes.
-- [The state machine](/engine/state-machine/) · [the driver loop](/engine/driver-loop/) — the two halves in full detail.
+- [The big idea](/start-here/the-big-idea/): the same split, as your introduction.
+
+- [State machines](/principles/state-machines/): the shape your pure core takes.
+
+- [The state machine](/engine/state-machine/) and [the driver loop](/engine/driver-loop/): your two halves in full detail.

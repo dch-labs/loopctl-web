@@ -1,20 +1,25 @@
 ---
-title: "`src/provider/grammar.rs` — grammar constraints [feature: grammar]"
+title: "src/provider/grammar.rs"
 ---
 
+This file builds grammar-constrained tool calls for local, grammar-aware inference servers such as vLLM's `guided_json`. It rides the `grammar` feature.
 
-Grammar-constrained tool calls for local, grammar-aware inference servers (vLLM's `guided_json`).
+## Key items
 
-**Key items**
+The `ToolGrammarProvider` trait exposes `grammar() -> &str`, and you implement it for other sampler dialects such as GBNF or TGI.
 
-- `ToolGrammarProvider` trait — `grammar() -> &str`; implement it for other sampler dialects (GBNF, TGI).
-- `JsonSchemaGrammar::from_schemas(&[ToolSchema])` (returns `Result` since 0.4.0 — construction fails loud when the schemas can't yield a usable grammar) — one merged, tightened JSON-Schema object serialized to a string; empty input yields a valid empty object.
+`JsonSchemaGrammar::from_schemas(&[ToolSchema])` returns one merged, tightened JSON-Schema object serialized to a string, and empty input yields a valid empty object.
 
-**Behavior notes**
+It returns `Result` since 0.4.0, so construction fails loud when the schemas cannot yield a usable grammar.
 
-- Tightening matches the `Strict` path exactly — a grammar-guided sampler emits the shape strict-mode APIs would demand.
-- Rides as `guided_json` in the OpenAI-compatible body, **alongside** the normal `tools` (grammar constrains the sampler, tools inform the model); omitted when no tools are registered.
-- Rejected up front on Anthropic and Gemini (no grammar decoding there) — never a silent downgrade.
-- Validated end-to-end against a local vLLM 7B server: ≥99% valid tool-call JSON over a fixed corpus (gated behind `LOOPCTL_E2E=1`).
+## Behavior notes
 
-Deep dive: [Grammar](/providers/grammar/).
+Tightening matches the `Strict` path exactly, so a grammar-guided sampler emits the shape strict-mode APIs would demand.
+
+Your grammar rides as `guided_json` in the OpenAI-compatible body, alongside the normal `tools`, because the grammar constrains the sampler while tools inform the model.
+
+It is omitted when no tools are registered. Anthropic and Gemini reject it up front, since neither does grammar decoding there, so you never get a silent downgrade.
+
+This path is validated end-to-end against a local vLLM 7B server, reaching at least 99% valid tool-call JSON over a fixed corpus. That test is gated behind `LOOPCTL_E2E=1`.
+
+For the deep dive, see [Grammar](/providers/grammar/).

@@ -1,20 +1,25 @@
 ---
-title: "`src/memory/vector_memory.rs` — `VectorMemoryStore`, the semantic backend [feature: vector_memory]"
+title: "src/memory/vector_memory.rs"
 ---
 
+This file is your semantic `LoopMemory`, under the `vector_memory` feature. Entries are embedded through an `EmbeddingProvider` and stored in a `VectorIndex`.
 
-The semantic `LoopMemory`: entries are embedded through an `EmbeddingProvider` and stored in a `VectorIndex`; retrieval blends vector similarity with keyword + tag overlap (the shared scorer's lexical signal), consolidation prunes and merges with index eviction.
+Retrieval blends vector similarity with keyword and tag overlap, which is the shared scorer's lexical signal, and consolidation prunes and merges with index eviction.
 
-**Key items**
+## Key items
 
-- `VectorMemoryStore::new(embedder, index)` — `Box<dyn EmbeddingProvider>` + `Box<dyn VectorIndex>`; swapping tiers (linear → HNSW → Qdrant/pgvector) is one constructor call.
-- `VectorMemoryConfig` / `with_config` — retrieval blend and eviction knobs.
-- `GoldenSet` / `GoldenQuery` / `golden_set()` / `precision_ratio(hits)` — the quality bar: a fixed query set with known-relevant entries; the ≥ 80% precision gate runs against every backend.
+`VectorMemoryStore::new(embedder, index)` takes a `Box<dyn EmbeddingProvider>` plus a `Box<dyn VectorIndex>`, so swapping tiers from linear to HNSW to Qdrant or pgvector costs you one constructor call.
 
-**Behavior notes**
+`VectorMemoryConfig` and `with_config` expose your retrieval blend and eviction knobs.
 
-- The golden set is public — a custom backend proves itself against the same bar.
-- Real embedders arrive via `provider::embeddings` (`openai`/`ollama` + `vector_index`); `HashingEmbedder` covers tests.
-- With `MemoryDemotionSink` + `SearchMemoriesTool` this is the store half of the evict → demote → recall loop.
+`GoldenSet`, `GoldenQuery`, `golden_set()`, and `precision_ratio(hits)` carry your quality bar: a fixed query set with known-relevant entries, where the 80% precision gate runs against every backend.
 
-Deep dive: [Memory — the semantic tier](/extensions/memory/#the-semantic-tier--shipped-040)
+## Behavior notes
+
+The golden set is public, so your custom backend proves itself against the same bar.
+
+Real embedders arrive through `provider::embeddings` with `openai` or `ollama` plus `vector_index`, and `HashingEmbedder` covers your tests.
+
+Pair `MemoryDemotionSink` with `SearchMemoriesTool` and this becomes the store half of the evict, demote, recall loop.
+
+Deep dive: [Memory: the semantic tiers](/extensions/memory/#the-semantic-tiers)

@@ -1,129 +1,185 @@
 ---
-title: "Gotchas — the traps, collected"
+title: "Gotchas"
 sidebar:
   order: 1
 ---
 
+Every sharp edge in loopctl is in one place here. Each entry says what happens, why it happens, and what you should do instead.
 
-Every sharp edge in loopctl in one place. Each entry says what happens, why, and what to do. Organized by area; the worst ones first.
+The entries are organized by area, and the worst ones come first.
 
----
+## Engine and runs
 
-## Engine & runs
+### 1. Default settings give tools zero retries
 
-**1. Default settings give tools ZERO retries.**
-The stock reflector (`NoopReflector`) marks every failure non-recoverable, so each tool call gets exactly one attempt. Install a reflector ([reflection](/safety/reflection/)) if you want retry behavior.
+The stock reflector, `NoopReflector`, marks every failure non-recoverable, so each tool call gets exactly one attempt. Install a reflector from [reflection](/safety/reflection/) if you want retry behavior.
 
-**2. Setters must run before the first `run()`.**
-`set_memory`, `set_pipeline`, `register_observer`, ... — call them on a freshly built agent. Debug builds panic ("debug_assert_idle"); release builds misbehave quietly.
+### 2. Setters must run before the first run
 
-**3. A failed run keeps its completed turns — but a run that compacted mid-run rewrote history.**
-Since 0.4.0, cancel/ordinary failure **salvages the coherent prefix** (completed turns commit; the in-flight exchange drops). Only the `ContextExceeded` family discards whole. And compaction is a commit point: it folds the scratchpad into history, so a run that compacted and *then* failed leaves the compacted history behind. Don't expect "failed run = nothing changed" after mid-run compaction.
+Call `set_memory`, `set_pipeline`, `register_observer`, and their siblings on a freshly built agent. Debug builds panic with `debug_assert_idle`, and release builds misbehave quietly.
 
-**4. `max_turns` counts model turns, not tool calls.**
-One turn can contain many tool calls (a whole parallel wave is one turn). Default is 200 turns — that's a lot of work.
+### 3. A failed run keeps its completed turns, unless it compacted
 
-**5. The user input reaches the model only through the machine's scratchpad.**
-Don't "simplify" by passing input through custom plumbing — you'll send it twice or not at all. The input rides `accept_input` → `pending` → every request via `full_history()`.
+Since 0.4.0, a cancel or an ordinary failure salvages the coherent prefix, which means completed turns commit and the in-flight exchange drops. Only the `ContextExceeded` family discards whole.
 
-**6. Two token counters = flapping compaction.**
-Trigger decisions and post-compaction measurements must share one counter (install it on the `ContextManager`; the driver follows it automatically). Mixing a heuristic with real tokenizer counts makes compaction chase its tail.
+Compaction is a commit point, because it folds the scratchpad into history. So a run that compacted and then failed leaves the compacted history behind. Do not expect "failed run means nothing changed" after mid-run compaction.
 
-**7. `session.runs` is the recovery source after compaction.**
-After the conversation is summarized, the original per-turn text lives only in the audit trail (`session.runs[N].turns[M]`) — compaction never touches it.
+### 4. max_turns counts model turns, not tool calls
 
-## Tools & dispatch
+One turn can contain many tool calls, since a whole parallel wave is one turn. The default is 200 turns, and that is a lot of work.
 
-**8. Tool panics don't crash anything — they become soft errors.**
-The model sees "tool 'x' panicked: ...". Still, fix the panic; the message is diagnostics, not a strategy.
+### 5. User input reaches the model only through the scratchpad
 
-**9. Observers must pair tool events by `tool_call_id`.**
-Arrival order lies under parallel dispatch and retries. `(turn, tool)` also lies — two calls to one tool in one turn share it.
+Do not simplify by passing your input through custom plumbing, because you will send it twice or not at all. Your input rides `accept_input`, then `pending`, then every request via `full_history()`.
 
-**10. Retries re-fire everything per attempt.**
-Observers, hooks, detection records, health recordings — all per attempt, in both dispatch modes. Design observers and thresholds accordingly.
+### 6. Two token counters cause flapping compaction
 
-**11. `ToolSchema`'s name field is `tool`, not `name`.**
-Everyone trips once.
+Your trigger decisions and your post-compaction measurements must share one counter. Install it on the `ContextManager` and the driver follows it automatically.
 
-**12. Registering two tools with the same name silently replaces the first** (a warn log, original position kept). If two of your tools vanished into one — check names.
+Mixing a heuristic with real tokenizer counts makes compaction chase its tail.
 
-**13. Images don't reach providers yet.**
-The data model carries image parts end to end, but all shipped provider converters currently drop them. Vision needs a custom `ApiClient`.
+### 7. session.runs is the recovery source after compaction
 
-**14. Tools must be cancellation-safe.**
-A cancel drops the tool's future mid-flight — no polite cleanup. Write to temp + rename; use transactions.
+After the conversation is summarized, the original per-turn text lives only in the audit trail at `session.runs[N].turns[M]`, and compaction never touches it.
 
-## Context & compaction
+## Tools and dispatch
 
-**15. Exactly-at-threshold does not compact (strict comparison); exactly-at-95% does (inclusive).**
-The emergency line uses `>=`, the threshold line uses `>`. One token can matter in tests.
+### 8. Tool panics do not crash anything
 
-**16. `auto_compact: false` does NOT disable the emergency line.**
-Only `context_window: 0` disables all window policy — and that also disables overflow protection.
+A panic becomes a soft error, so your model sees "tool 'x' panicked: ...". Still fix the panic, because that message is diagnostics rather than a strategy.
 
-**17. `context_window` must match your real model — or trust the probe.**
-The default (200,000) is wrong for most local models. Since 0.4.0 a client that discloses its real window (llama.cpp `/props` ÷ slots, Ollama `/api/show`) outranks the declaration at run start — but the hosted APIs disclose nothing, so the declared number still rules there. A too-big window means real overflows (one overflow-salvage retry, then `ContextExceeded`); too-small means needless compaction.
+### 9. Observers must pair tool events by tool_call_id
 
-**18. A pre-compact hook veto at over-threshold ends the run.**
-Nothing shrank → the no-progress guard fires `ContextExceeded`. A veto is a decision to stop, not to proceed.
+Arrival order lies under parallel dispatch and retries. A `(turn, tool)` pair also lies, because two calls to one tool in one turn share it.
 
-**19. The truncator can't shrink short-but-fat conversations.**
-Fewer than `min_messages` (6) messages pass through untouched — a 3-message conversation with 200k tokens of content reports NoAction and the run ends. The LLM compactors don't have this floor — and the `FallbackCompactor` chain makes "compaction failed" a non-event (it falls through to the truncate terminal).
+### 10. Retries re-fire everything per attempt
 
-**19b. New defaults since 0.4.0 — check your assumptions.**
-Default construction now wires the **small-model profile**: builtin-verified pipeline, goal reminder, strict tool-calls (where the client supports them) — `FrontierProfile` is the opt-out. The compaction landing target tightened to **15% of the threshold line** (was 70%). The `Read` tool's default window is **400 lines / 32 KiB** (was 2,000 / 400 KB). Builtin wire names are **CamelCase** (`Read`, `Think`, `Write`, …) — gate rules and prompts written against lowercase names need updating. Prior-turn **thinking rides the conversation verbatim** — better prompt-cache hits, but reasoning-heavy models will compact more often.
+Observers, hooks, detection records, and health recordings all run per attempt, in both dispatch modes. Design your observers and thresholds accordingly.
 
-## Streaming & providers
+### 11. The name field on ToolSchema is called tool
 
-**20. Delta callbacks fire for failed attempts too.**
-Concatenating `on_text_delta` fragments without honoring attempt boundaries yields duplicated/garbled text. Use `on_response` for committed text, or reset on retry.
+Everyone trips on this once. The field is `tool`, not `name`.
 
-**21. Ollama streams report no usage** (the profile disables `stream_usage` for compatibility). Code against `Option<Usage>`.
+### 12. Registering two tools with the same name silently replaces the first
 
-**22. A fallback manager whose primary differs from the client's model silently reroutes every request.**
+You get a warn log and the original position is kept. If two of your tools vanished into one, check your names.
+
+### 13. Images do not reach providers yet
+
+Your data model carries image parts end to end, but all shipped provider converters currently drop them. Vision needs a custom `ApiClient`.
+
+### 14. Tools must be cancellation-safe
+
+A cancel drops your tool's future mid-flight, with no polite cleanup. Write to a temp file and rename, or use transactions.
+
+## Context and compaction
+
+### 15. Exactly at threshold does not compact, and exactly at 95 percent does
+
+The threshold line uses a strict `>` and the emergency line uses `>=`. One token can matter in your tests.
+
+### 16. Setting auto_compact to false does not disable the emergency line
+
+Only `context_window: 0` disables all window policy, and that also disables your overflow protection.
+
+### 17. The context_window must match your real model, or trust the probe
+
+The default of 200,000 is wrong for most local models.
+
+Since 0.4.0 a client that discloses its real window outranks the declaration at run start, which covers llama.cpp through `/props` divided by slots and Ollama through `/api/show`. The hosted APIs disclose nothing, so your declared number still rules there.
+
+A too-big window means real overflows, which is one overflow-salvage retry and then `ContextExceeded`. A too-small window means needless compaction.
+
+### 18. A pre-compact hook veto at over-threshold ends the run
+
+Nothing shrank, so the no-progress guard fires `ContextExceeded`. A veto is a decision to stop rather than to proceed.
+
+### 19. The truncator cannot shrink short but fat conversations
+
+Fewer than `min_messages` messages, which is 6, pass through untouched. So a 3-message conversation with 200k tokens of content reports NoAction and your run ends.
+
+The LLM compactors do not have this floor, and the `FallbackCompactor` chain makes "compaction failed" a non-event, since it falls through to the truncate terminal.
+
+### 20. New defaults since 0.4.0, so check your assumptions
+
+Default construction now wires the small-model profile: the builtin-verified pipeline, the goal reminder, and strict tool-calls where the client supports them. `FrontierProfile` is the opt-out.
+
+The compaction landing target tightened to 15% of the threshold line, where it was 70%. The `Read` tool's default window is 400 lines and 32 KiB, where it was 2,000 lines and 400 KB.
+
+Builtin wire names are now CamelCase, such as `Read`, `Think`, and `Write`, so gate rules and prompts written against lowercase names need updating.
+
+Prior-turn thinking rides the conversation verbatim. That gives you better prompt-cache hits, and it means reasoning-heavy models will compact more often.
+
+## Streaming and providers
+
+### 21. Delta callbacks fire for failed attempts too
+
+If you concatenate `on_text_delta` fragments without honoring attempt boundaries, you get duplicated or garbled text. Use `on_response` for committed text, or reset on retry.
+
+### 22. Ollama streams report no usage
+
+The profile disables `stream_usage` for compatibility, so code against `Option<Usage>`.
+
+### 23. A fallback manager whose primary differs from the client's model silently reroutes every request
+
 The manager's routing wins. Keep the names in sync, or embrace it deliberately.
 
-**23. Bedrock doesn't support `RequestOptions`** (model overrides, response formats, constraints) — those requests are rejected loudly, not silently degraded.
+### 24. Bedrock does not support RequestOptions
 
-**24. Empty `Vec` of tools is never sent** — fine — but a `response_format` suppresses tools for that request entirely (Q&A turn, not tool turn).
+Model overrides, response formats, and constraints are all rejected loudly on those requests rather than silently degraded.
+
+### 25. An empty tools vector is never sent
+
+That part is fine. Note though that a `response_format` suppresses tools for that request entirely, so it is a Q&A turn rather than a tool turn.
 
 ## Safety systems
 
-**25. Detection counts recovery attempts.**
-A flaky tool failing 3 retries looks like a repeating operation to the loop detector. Mark recoverable errors in your `ToolSignature` (`is_recoverable_error`) — the doc calls overriding it "critical" for exactly this.
+### 26. Detection counts recovery attempts
 
-**26. Loop-stop counts are window-relative.**
-Enough distinct traffic between repetitions can slide them out of the window (default 50 ops). Raise `max_history` if slow loops must be caught.
+A flaky tool failing 3 retries looks like a repeating operation to the loop detector. Mark recoverable errors in your `ToolSignature` with `is_recoverable_error`, since the doc calls overriding it critical for exactly this reason.
 
-**27. Repeated shield blocks open the tool's circuit breaker.**
-Once open, the model sees "temporarily unavailable" (breaker gate) instead of the shield's reason. Precedence is pinned; don't be surprised.
+### 27. Loop-stop counts are window-relative
 
-**28. `Ask` without a resolver becomes `Block` in headless sessions — with a resolver it parks.**
-Both hooks and permission middleware deny without an interactive resolver (safe default; one `AskUnresolved` gate record). Since 0.4.0, install an ask resolver (`ApprovalChannel::pair`) and a hook's `Ask` instead **parks the run** for an async answer — with a deadline, fail-closed drops, and one gate record per ending.
+Enough distinct traffic between repetitions can slide them out of the window, which defaults to 50 ops. Raise `max_history` if slow loops must be caught.
 
-**29. Memoize has no capacity limit.**
-Long sessions accumulate entries until TTL expiry. Pair with a short TTL or write a bounded cache.
+### 28. Repeated shield blocks open the tool's circuit breaker
 
-**30. `serde_json`'s `preserve_order` feature (anywhere in your tree) breaks memoize key canonicalization.**
-`{"a":1,"b":2}` stops equaling `{"b":2,"a":1}`. Rare, brutal to diagnose — check your dependency tree.
+Once the breaker is open, your model sees "temporarily unavailable" from the breaker gate instead of the shield's reason. The precedence is pinned, so do not be surprised.
+
+### 29. Ask without a resolver becomes Block in headless sessions
+
+Both hooks and permission middleware deny without an interactive resolver, which is the safe default and leaves one `AskUnresolved` gate record.
+
+Since 0.4.0, when you install an ask resolver through `ApprovalChannel::pair`, a hook's `Ask` instead parks your run for an async answer. That comes with a deadline, fail-closed drops, and one gate record per ending.
+
+### 30. Memoize has no capacity limit
+
+Long sessions accumulate entries until TTL expiry. Pair it with a short TTL or write a bounded cache.
+
+### 31. The preserve_order feature on serde_json breaks memoize key canonicalization
+
+If that feature appears anywhere in your tree, `{"a":1,"b":2}` stops equaling `{"b":2,"a":1}`. It is rare and brutal to diagnose, so check your dependency tree.
 
 ## Misc
 
-**31. `ToolRecoveryExhausted.attempts` counts total calls (6 = original + 5 retries).**
-Subtract 1 for the retry count.
+### 32. ToolRecoveryExhausted.attempts counts total calls
 
-**32. The engine stamps tool result ids after the pipeline.**
-Middleware can't corrupt model call↔result pairing — stop worrying about it, and don't try to "fix" ids yourself.
+Six means the original plus 5 retries, so subtract 1 for the retry count.
 
-**33. `StreamCapable::stream_handler()` never returns None** — an unset handler yields an invisible passthrough (no retries, no timeouts). Always configure one for production.
+### 33. The engine stamps tool result ids after the pipeline
 
-**34. AutoCommitHook stages only recorded files — never `git add -A`.**
-Default config + dirty tree + no tracked tool calls = a `Failed` result by design. It would rather fail loudly than commit unrelated changes.
+Middleware cannot corrupt your model's call-and-result pairing, so stop worrying about it and do not try to fix ids yourself.
 
-**35. Convergence detection is word-overlap, not meaning.**
-Paraphrases slip through; boilerplate false-positives. Hence the warn-only default — don't turn on `Stop` without weighing it.
+### 34. stream_handler never returns None
 
----
+An unset handler yields an invisible passthrough with no retries and no timeouts. Always configure one for production.
 
-Cross-referenced deep dives: [engine](/engine/driver-loop/) · [compaction](/engine/compaction/) · [middleware](/safety/middleware/) · [detection](/safety/loop-detection/) · [streaming](/core-data/stream-events/).
+### 35. AutoCommitHook stages only recorded files
+
+It never runs `git add -A`. Default config plus a dirty tree plus no tracked tool calls gives you a `Failed` result by design, because it would rather fail loudly than commit unrelated changes.
+
+### 36. Convergence detection is word overlap, not meaning
+
+Paraphrases slip through and boilerplate false-positives. That is why the default is warn-only, so do not turn on `Stop` without weighing it.
+
+For cross-referenced deep dives, see [engine](/engine/driver-loop/), [compaction](/engine/compaction/), [middleware](/safety/middleware/), [detection](/safety/loop-detection/), and [streaming](/core-data/stream-events/).

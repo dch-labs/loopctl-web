@@ -1,21 +1,33 @@
 ---
-title: "`src/mcp/convert.rs` — the MCP conversion layer [feature: mcp]"
+title: "src/mcp/convert.rs"
 ---
 
+This file holds the mapping between loopctl types and MCP wire types, in both directions, behind the `mcp` feature.
 
-The mapping between loopctl types and MCP wire types, in both directions, with the safety validation on the way out.
+It also holds the safety validation on the way out.
 
-**Key items**
+## Key items
 
-- Inbound: `bridge_content(&ContentBlock) -> ToolContentPart` (text, images, embedded resources as text notes — nothing silently dropped); `bridge_result(...) -> ToolOutput` (`isError` → `is_error`; `structuredContent` carried as a JSON-stringified text part; error with no content → `McpError::EmptyToolError`).
-- Outbound: `tool_schema_to_mcp(schema, is_read_only) -> Option<McpTool>` — the `tool`→`name` rename; **validation**: schema must compile under `jsonschema` with external references refused (`RefusingRetriever` — no IO during `tools/list`), and the root must be a typed object; anything else → `None` + warning (tool omitted).
-- `dispatch_result_to_call_tool(...)` — every tool outcome becomes a tool-level result (hard failures included).
-- `not_found_error(requested, available)` — the `METHOD_NOT_FOUND` payload.
+Inbound you get `bridge_content(&ContentBlock) -> ToolContentPart`, which covers text, images, and embedded resources as text notes, and nothing is silently dropped.
 
-**Behavior notes**
+`bridge_result(...) -> ToolOutput` maps `isError` to `is_error` and carries `structuredContent` as a JSON-stringified text part, and an error with no content becomes `McpError::EmptyToolError`.
 
-- Read-only forwarding is consistent with the spec's defaults: `readOnlyHint: true` **plus** `destructiveHint: false`; non-read-only gets no annotations at all.
-- The validation is the security boundary for served schemas — a `$ref` pointing at a URL or file path would make your server do IO mid-listing; it is refused instead.
-- MCP's name convention (`^[a-zA-Z0-9_-]{1,64}$`) is the embedding's responsibility — loopctl imposes no rules.
+Outbound you get `tool_schema_to_mcp(schema, is_read_only) -> Option<McpTool>`, which does the `tool` to `name` rename.
 
-Deep dive: [MCP](/integration/mcp/).
+Validation runs there, and your schema must compile under `jsonschema` with external references refused through `RefusingRetriever`. So there is no IO during your `tools/list`, and the root must be a typed object.
+
+Anything else gives you `None` plus a warning, and the tool is omitted.
+
+`dispatch_result_to_call_tool(...)` turns every tool outcome into a tool-level result, hard failures included.
+
+`not_found_error(requested, available)` builds the `METHOD_NOT_FOUND` payload you send back.
+
+## Behavior notes
+
+Read-only forwarding is consistent with the spec's defaults, so your tool gets `readOnlyHint: true` plus `destructiveHint: false`, and a non-read-only tool gets no annotations at all.
+
+The validation is the security boundary for the schemas you serve. A `$ref` pointing at a URL or file path would make your server do IO mid-listing, so it is refused instead.
+
+MCP's name convention, `^[a-zA-Z0-9_-]{1,64}$`, is the embedding's responsibility, since loopctl imposes no rules on you.
+
+For the deep dive, see [MCP](/integration/mcp/).

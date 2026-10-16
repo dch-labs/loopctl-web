@@ -1,26 +1,35 @@
 ---
-title: "`src/hooks/builtin/` — the shipped hooks [feature: hooks]"
+title: "src/hooks/builtin/"
 ---
 
+This folder ships four ready-made hooks under the `hooks` feature: auto-commit, blocklist, confirmation, and logging. They are re-exported from `hooks::builtin`.
 
-Four ready-made hooks: auto-commit, blocklist, confirmation, logging. Re-exported from `hooks::builtin`.
+## Key items, auto_commit.rs
 
-**Key items — `auto_commit.rs`**
+`AutoCommitHook` reads `AutoCommitConfig { enabled, message_template, auto_push, push_branch, skip_if_clean, commit_mode, commit_on_tools, files }` plus a builder.
 
-- `AutoCommitHook` + `AutoCommitConfig { enabled, message_template ("chore(agent): auto-commit" with `{{tool}}`/`{{session}}`), auto_push, push_branch, skip_if_clean, commit_mode (Create/Amend), commit_on_tools (["Write","Edit"]), files }` (+ builder).
-- `GitExecutor` — the subprocess wrapper: 30s timeout per call (kill -9 on expiry), `has_changes`, `stage_files` (per-file `git add`; **empty list is a hard error — never `git add -A`**), `commit`, `push`, `get_head_sha`; `GitExecutorError` (incl. `NoChanges`, `Timeout`).
-- `AutoCommitResult` — `Committed { sha }`, `NoChanges`, `Skipped { reason }`, `Failed { error }`.
+The default `message_template` is `"chore(agent): auto-commit"` and expands `{{tool}}` and `{{session}}`, while `commit_mode` is Create or Amend and `commit_on_tools` defaults to `["Write","Edit"]`.
 
-**Key items — the small ones**
+`GitExecutor` is your subprocess wrapper with a 30s timeout per call and a kill -9 on expiry. It gives you `has_changes`, `stage_files`, `commit`, `push`, and `get_head_sha`.
 
-- `BlocklistHook::deny(names)` / `allow_only(names)` — exact names; deny wins; empty allowlist allows everything.
-- `ConfirmationHook::new(tools, handler)` — `ConfirmationHandler::confirm(message) -> bool`; denial → `Block("User denied permission")`; framework provides no stdin reader or timeout.
-- `LoggingHook` — debug-level tracing for tool/compact events; no run-boundary logging; no side effects.
+`stage_files` runs a per-file `git add`, and an empty list is a hard error, never `git add -A`. `GitExecutorError` includes `NoChanges` and `Timeout`.
 
-**Behavior notes**
+`AutoCommitResult` is `Committed { sha }`, `NoChanges`, `Skipped { reason }`, or `Failed { error }`.
 
-- AutoCommit tracks `file_path`s from listed tools and commits at run end; with several tracked tools `{{tool}}` names the most recent; unknown placeholders pass through verbatim.
-- Default config + dirty tree + no tracked tool call = `Failed` (refuses to stage) — deliberate loud failure.
-- Git runs in the process CWD, synchronously inside `on_run_end` — a hung git delays run completion (bounded to 30s per call).
+## Key items, the small ones
+
+`BlocklistHook::deny(names)` and `allow_only(names)` compare exact names, deny wins, and an empty allowlist allows everything.
+
+`ConfirmationHook::new(tools, handler)` calls your `ConfirmationHandler::confirm(message) -> bool`, and a denial becomes `Block("User denied permission")`. The framework gives you no stdin reader and no timeout.
+
+`LoggingHook` traces tool and compact events at debug level, with no run-boundary logging and no side effects.
+
+## Behavior notes
+
+AutoCommit tracks `file_path` values from your listed tools and commits at run end. With several tracked tools, `{{tool}}` names the most recent, and unknown placeholders pass through verbatim.
+
+Default config plus a dirty tree plus no tracked tool call yields `Failed`, because it refuses to stage. That loud failure is deliberate.
+
+Git runs in your process CWD, synchronously inside `on_run_end`, so a hung git delays run completion, bounded to 30s per call.
 
 Deep dive: [Hooks](/extensions/hooks/).

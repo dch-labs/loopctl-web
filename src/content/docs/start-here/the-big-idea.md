@@ -1,16 +1,16 @@
 ---
-title: "The big idea — a brain that decides, hands that act"
+title: "The big idea"
 sidebar:
   order: 2
 ---
 
+You will find this question in every agent engine, asked over and over: what should happen next? loopctl splits that question between two pieces, with a strict border between them.
 
-Every agent engine, at heart, answers one question over and over: **"what should happen next?"** loopctl's design splits that into two pieces with a strict border between them:
+The brain is your `LoopMachine`. It decides what happens next, and it never touches the network, never runs a tool, and never reads a clock, because it is pure data.
 
-- **A brain** — the `LoopMachine`. It decides what happens next. It never touches the network, never runs a tool, never reads a clock. It is pure, plain data.
-- **A pair of hands** — the `BareLoop` driver. It does whatever the brain asked: calls the model, runs tools, shrinks the conversation. Then it reports the result back to the brain.
+The hands are your `BareLoop` driver. It runs whatever the brain asked, which means calling the model, running your tools, and shrinking the conversation. Then it reads the result back and reports it.
 
-This split has a name you may see in the code: **"sans-IO"** — "without input/output." The brain does no input/output at all.
+You will see a name for this split in the code, which is **sans-IO**, meaning without input or output. Your brain does no input or output at all.
 
 ```mermaid
 flowchart LR
@@ -20,15 +20,19 @@ flowchart LR
     hands -- "the result:<br/>'here is what happened'" --> brain
 ```
 
----
+## Why split them
 
-## Why split them? Three payoffs
+Three payoffs.
 
-**1. You can test the brain with no mocks.**
-The brain is plain data in, plain data out. To test "after 3 identical tool results, does it detect a loop?" you just build a machine, feed it results, and look at what it says. No fake network, no waiting, no flaky tests.
+### You can test the brain with no mocks
 
-**2. You can save a run mid-flight and continue it elsewhere.**
-Because the brain is pure data, it can be serialized (turned into bytes with `serde`, Rust's standard serialization library) and deserialized later. Pause an agent on one machine, resume it on another:
+The brain is plain data in, plain data out. So when you want to test whether it detects a loop after 3 identical tool results, you build a machine, feed it results, and check what it says.
+
+You get no fake network, no waiting, and no flaky tests.
+
+### You can save a run mid-flight and continue it elsewhere
+
+The brain is pure data, so `serde` can serialize it to bytes and read it back later. You can pause an agent on one machine and resume it on another:
 
 ```rust
 // Save: the machine is just data — turn it into JSON, store it anywhere.
@@ -40,25 +44,24 @@ let machine: LoopMachine = serde_json::from_str(&saved)?;
 let mut agent = BareLoop::from_machine(machine, config, client, tools);
 ```
 
-**3. The engine works with any model provider.**
-The brain does not know or care who the model is. The hands talk to the provider through one small trait (`ApiClient`). Swap OpenAI for a local Ollama model and the brain never notices.
+### The engine works with any model provider
 
----
+The brain does not know who your model is. Your hands talk to the provider through one small trait, `ApiClient`, so you can swap OpenAI for a local Ollama model and the brain never notices.
 
-## The four steps the brain can ask for
+## The four steps
 
-The brain speaks a tiny language — exactly four possible "steps". Each one names a matching "feedback" method the hands use to report back:
+Your brain speaks a tiny language of exactly four steps. Each one has a matching method your hands use to report back.
 
 | Step (brain says) | Meaning | Hands do | Feedback (hands report back) |
 |---|---|---|---|
 | `CallLLM { turn }` | "Ask the model now." | Send the conversation to the model | `machine.model_response(...)` |
 | `CallTools { turn, calls }` | "Run these tool calls." | Execute each tool | `machine.tool_results(...)` |
 | `Compact { reason }` | "Shrink the conversation first." | Rewrite history into something smaller | `machine.compaction_result(...)` or `machine.compaction_noop(...)` |
-| `Done(outcome)` | "We're finished." | Wrap up and return | — (nothing; the run is over) |
+| `Done(outcome)` | "We're finished." | Wrap up and return | Nothing. The run is over. |
 
-`LLM` = Large Language Model, the AI model. `Compact` = shrink the conversation (see [Compaction](/engine/compaction/)).
+`LLM` means large language model, the AI model. `Compact` means shrink the conversation, and [Compaction](/engine/compaction/) explains how.
 
-The loop inside the driver is literally this simple:
+Your driver's loop is literally this simple:
 
 ```rust
 loop {
@@ -71,15 +74,14 @@ loop {
 }
 ```
 
-(Real code shape, slightly simplified. The driver lives in `src/engine/bare.rs`.)
+This is the real code shape, slightly simplified, and the driver lives in `src/engine/bare.rs`.
 
-> **Hint — "policy":** the brain never stores settings like "max 200 turns" or "context window is 32,000 tokens". The driver hands it a fresh **`MachinePolicy`** (a small struct of those numbers) on every `next_step` call. That is what keeps the brain pure data that serializes cleanly.
+Your brain never stores settings such as "max 200 turns" or "context window is 32,000 tokens". Your driver hands it a fresh `MachinePolicy` on every `next_step` call. That
+small struct of numbers is what keeps the brain pure data that serializes cleanly.
 
----
+## Machine state
 
-## The brain's moods — `MachineState`
-
-At any moment the brain is in exactly one **state**, which tracks what it is waiting for:
+At any moment your brain sits in exactly one state, and that state tracks what your brain is waiting for.
 
 ```rust
 pub enum MachineState {
@@ -91,27 +93,27 @@ pub enum MachineState {
 }
 ```
 
-Once the machine is `Terminal` it stays terminal forever — a saved-and-restored machine that had finished still knows it finished.
+Once your machine reaches `Terminal` it stays terminal forever. A machine you saved, restored, and had already finished still knows it finished.
 
-**`MachineOutcome`** — how a run ended — has four variants:
+## Outcomes
+
+`MachineOutcome` says how your run ended, and you get four variants.
 
 | Outcome | Meaning |
 |---|---|
 | `Completed { final_text }` | The model gave a final answer with no tool calls. Success. |
-| `MaxTurnsExceeded` | Hit the turn limit (`RunConfig::max_turns`, default 200). |
-| `Cancelled` | Someone fired the cancel signal. A clean stop, **not** a failure. |
-| `Failed { error }` | Something broke (network dead, context overflow, loop detected, ...). |
+| `MaxTurnsExceeded` | Hit the turn limit. See `RunConfig::max_turns`, default 200. |
+| `Cancelled` | Someone fired the cancel signal. A clean stop, not a failure. |
+| `Failed { error }` | Something broke: network dead, context overflow, loop detected. |
 
----
+## History and pending
 
-## The two notebooks — `history` and `pending`
-
-The brain holds the conversation in **two** separate lists, and understanding this split explains most of loopctl's behavior:
+Your brain holds the conversation in two separate lists, and this split explains most of loopctl's behavior.
 
 | List | What lives there | When it changes |
 |---|---|---|
-| **`history`** (the notebook) | Messages from **previous, successful runs** | Only when a run finishes successfully (its scratchpad pages get glued in), or when compaction rewrites everything |
-| **`pending`** (the scratchpad) | The **current run's** messages: the user's input, each model reply, each tool result | Starts empty-ish each run; grows during the run; on cancel/failure the **coherent prefix is salvaged** into history (0.4.0) and only the in-flight tail is dropped — discarded whole only on the overflow family |
+| `history` (the notebook) | Messages from previous, successful runs | Only when a run finishes successfully, or when compaction rewrites everything |
+| `pending` (the scratchpad) | The current run's messages: the user's input, each model reply, each tool result | Starts empty each run and grows during it. On cancel or failure the coherent prefix is salvaged into history and only the in-flight tail is dropped. Since 0.4.0. |
 
 ```mermaid
 flowchart TD
@@ -122,32 +124,32 @@ flowchart TD
     Q -- "Failure or cancel" --> Toss["scratchpad is thrown away —<br/>the notebook keeps only earlier successful runs"]
 ```
 
-**Why this matters to you:** if a run fails halfway (say, the network dies on turn 7), the conversation is **not** poisoned. Since 0.4.0 the turns that *did* complete are salvaged into history — the next `run()` continues from them, minus the interrupted exchange. The model never sees a half-finished turn with a missing tool result — providers reject such conversations.
+This matters when your run fails halfway. Say the network dies on turn 7, and your conversation is not poisoned.
 
-> **Gotcha:** compaction is the one operation that touches both lists at once — it merges `history + pending` into a new, shorter `history` and empties `pending`. See [Compaction](/engine/compaction/) for the full story, including why a run that compacts and *then* fails leaves the compacted history behind (compaction is a commit point).
+Since 0.4.0 the turns that did complete are salvaged into history, so your next `run()` continues from them minus the interrupted exchange. The model never sees a half-finished turn with a missing tool result, because providers reject such conversations.
 
----
+Gotcha: compaction is the one operation that touches both lists at once. It merges `history + pending` into a new, shorter `history`, and it empties `pending`.
 
-## Who is allowed to decide what
+You can read the full story in [Compaction](/engine/compaction/), including why a run that compacts and then fails still keeps the compacted history, since compaction is a commit point.
 
-A useful rule to hold onto while reading the rest of this knowledge base:
+## Who decides what
+
+Hold onto this rule while you read the rest of the knowledge base.
 
 | Question | Answered by |
 |---|---|
-| What happens next? (model / tools / shrink / stop) | The brain — `LoopMachine` |
-| How exactly to do it? (HTTP, retries, running the tool) | The hands — `BareLoop` |
-| When has the context grown too big? | The brain (threshold + emergency line) |
-| How to shrink it? | A pluggable `ContextCompactor` (default: cut the middle, keep head and tail) |
+| What happens next? Model, tools, shrink, or stop. | The brain: `LoopMachine` |
+| How exactly to do it? HTTP, retries, running the tool. | The hands: `BareLoop` |
+| When has the context grown too big? | The brain: threshold plus emergency line |
+| How to shrink it? | A pluggable `ContextCompactor`. Default: cut the middle, keep head and tail. |
 | Should this tool call be allowed? | Hooks and middleware, if you install them |
 | Is the model stuck in a loop? | The `DetectionManager`, if enabled |
 
-The hands **never** decide turn order, compaction timing, or termination. That single discipline is what makes the whole engine predictable.
+Your hands never decide turn order, compaction timing, or termination. That one discipline is what makes the rest of the engine predictable to you.
 
----
+## Next
 
-## Where to go next
-
-- [Anatomy of a run](/start-here/anatomy-of-a-run/) — watch one full run travel through the brain and the hands.
-- [The state machine](/engine/state-machine/) — every rule the brain follows, in detail.
-- [The driver loop](/engine/driver-loop/) — every job the hands do, in detail.
-- [The principles section](/principles/sans-io/) — the ideas on this page ([sans-IO](/principles/sans-io/), [state machines](/principles/state-machines/), and more) explained from scratch.
+- [Anatomy of a run](/start-here/anatomy-of-a-run/): one full run travelling through the brain and the hands.
+- [The state machine](/engine/state-machine/): every rule the brain follows, in detail.
+- [The driver loop](/engine/driver-loop/): every job the hands do.
+- [The principles section](/principles/sans-io/): [sans-IO](/principles/sans-io/) and [state machines](/principles/state-machines/) explained from scratch.

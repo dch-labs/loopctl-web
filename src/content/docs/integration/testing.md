@@ -1,15 +1,16 @@
 ---
-title: "Testing your agent — the mock toolkit [feature: testing]"
+title: "Testing your agent"
 sidebar:
   order: 5
 ---
 
+Testing an agent against a live model is slow, flaky, and it costs you money. The `testing` feature in loopctl gives you a scripted fake model client and fake tools.
 
-Testing an agent against a live model is slow, flaky, and costs money. loopctl's `testing` feature gives you a scripted fake model client and fake tools, so your agent logic runs end-to-end in milliseconds with zero network. Source: `src/testing.rs`. Enable: `loopctl = { features = ["testing"] }` in `[dev-dependencies]`.
+Your agent logic therefore runs end-to-end in milliseconds with zero network.
 
----
+The source is `src/testing.rs`. Enable it in `[dev-dependencies]` with `loopctl = { features = ["testing"] }`.
 
-## `MockApiClient` — a model with a script
+## MockApiClient: a model with a script
 
 ```rust
 use loopctl::testing::{MockApiClient, MockResponse, MockToolCall};
@@ -30,19 +31,37 @@ let client = MockApiClient::new("test-model").with_responses(vec![
 ]);
 ```
 
-Facts that make it pleasant:
+Seven behaviors make it pleasant to work with:
 
-- **The script replays** — the last queued response repeats forever, so a run that overshoots its script never crashes the test.
-- It emits **the exact event sequence a real provider does** (message start, text deltas, tool-call deltas, terminal events) — streaming code paths get exercised for real.
-- Usage is reported as a fixed 50 input / 25 output tokens (so token-accounting assertions have something to bite).
-- `set_model` works (so [`switch_model`](/engine/model-switch/) is testable), and a per-request model override is honored — the response names the routed model, so fallback-routing tests can observe the routing.
-- `with_error("...")` makes every call fail — provider-failure paths without a provider.
-- `with_text_response("...")` is the one-liner for single-turn tests.
-- **`response_format` requests are served with the canned text as-is** — the mock can't enforce a schema (it has no model), which is exactly what structured-output parse-failure tests need: feed it prose, watch your error handling work. **`tool_constraint` is rejected loudly** (it shapes the tool-calling path the mock scripts — better a clear error than a lie).
+- **Your script replays.** The last queued response repeats forever, so a run that
+  overshoots its script never crashes your test.
+
+- It emits the exact event sequence a real provider produces, which means message start,
+  text deltas, tool-call deltas, and terminal events. Your streaming code paths get
+  exercised for real.
+
+- Usage comes back as a fixed 50 input and 25 output tokens, so your token-accounting
+  assertions have something to bite.
+
+- `set_model` works, so [`switch_model`](/engine/model-switch/) is testable, and a
+  per-request model override is honored. The response names the routed model, so your
+  fallback-routing tests can observe the routing.
+
+- `with_error("...")` makes every call fail, which covers your provider-failure paths
+  without a provider.
+
+- `with_text_response("...")` is your one-liner for single-turn tests.
+
+- A `response_format` request is served with the canned text as-is, because the mock
+  cannot enforce a schema when it has no model. That is exactly what your
+  structured-output parse-failure tests need: feed it prose and watch your error handling
+  work.
+- A `tool_constraint` is rejected loudly, because it shapes the tool-calling path that the
+  mock scripts, and a clear error beats a lie.
 
 ### The mock's stream, event by event
 
-Exactly what `stream_messages` yields for one canned response — the same shape a real provider produces, which is why streaming code paths can't tell the difference:
+This is exactly what `stream_messages` yields for one canned response:
 
 ```text
 MessageStart  { id: "msg_test", role: assistant, model }
@@ -57,18 +76,46 @@ MessageDelta  { stop_reason, usage: 50 input / 25 output }
 MessageStop
 ```
 
-Two deliberate details: the text arrives as a **single delta** (no artificial chunking — if your test needs multi-fragment assembly, that's accumulator territory, covered by the crate's own tests), and the tool lane opens with an **empty input that then streams its arguments** — mirroring how real providers deliver tool calls piecemeal, so accumulated tool input is byte-identical on mock and real paths. The non-streaming twin builds the same parts in the same lane order (text first, then tool call).
+Two details are deliberate:
 
-## The wire, recorded — asserting on what was actually sent
+- Your text arrives as a single delta, with no artificial chunking. If your test needs
+  multi-fragment assembly, that is accumulator territory, and the crate's own tests cover
+  it.
+- The tool lane opens with an empty input and then streams its arguments, which mirrors
+  how real providers deliver tool calls piecemeal. Your accumulated tool input is
+  therefore byte-identical on the mock and the real path.
 
-The mock also remembers what reached it, so tests can pin the exact request shape rather than just the outcome:
+The non-streaming twin builds the same parts in the same lane order, text first and then the tool call.
 
-- **`captured_requests()`** — clones of every served `create_message` request, oldest first. A request rejected before sending (unsupported options) is never captured — it never reached the wire. **`captured_stream_requests()`** (0.4.0) — the same record for the streaming path: every request the mock served on `stream_messages`.
-- **`create_message_calls()` / `with_options_calls()`** — counters for the two wire paths, so a test can prove which path a caller took. `with_options_calls` counts **both** options-bearing transports (`create_message_with_options` *and* `stream_messages_with_options`, 0.4.0); a rejected options request still increments it.
-- **`without_usage()`** (0.4.0) — serve the script with **no usage payload at all**, the shape of a backend that reports no usage — for fixtures asserting identity behavior on the engine's estimate side (no calibration, no anchor). The fixed 50/25 default report stays otherwise.
-- **`with_errors(Vec<Option<String>>)`** — scripts failures by call position: each call consumes the front entry; `Some(message)` fails that one call (still counted and captured, like `with_error`), `None` or an exhausted script serves normally. This is how a test fails *exactly one* turn — for example, only the corrective retry of a prompted structured-output flow.
+## The wire, recorded
 
-## `MockTool` — a tool with knobs
+The mock also remembers what reached it, so your tests can pin the exact request shape rather than the outcome alone:
+
+- **`captured_requests()`** returns clones of every served `create_message` request,
+  oldest first. A request rejected before sending, such as one with unsupported options,
+  is never captured, because it never reached the wire.
+
+- **`captured_stream_requests()`** arrived in 0.4.0 and gives you the same record for the
+  streaming path: every request the mock served on `stream_messages`.
+
+- **`create_message_calls()` and `with_options_calls()`** are counters for the two wire
+  paths, so a test can prove which path your caller took. The options counter, added in
+  0.4.0, covers both options-bearing transports, meaning `create_message_with_options` and
+  `stream_messages_with_options`, and a rejected options request still increments it.
+
+- **`without_usage()`**, new in 0.4.0, serves your script with no usage payload at all,
+  which is the shape of a backend that reports no usage.
+- Your fixtures can then assert identity behavior on the engine's estimate side, with no
+  calibration and no anchor. The fixed 50 and 25 default report stays otherwise.
+
+- **`with_errors(Vec<Option<String>>)`** scripts failures by call position. Each call
+  consumes the front entry, a `Some(message)` fails that one call while still being
+  counted and captured as `with_error` does, and a `None` or an exhausted script serves
+  normally.
+- This is how you fail exactly one turn, such as only the corrective retry of a prompted
+  structured-output flow.
+
+## MockTool: a tool with knobs
 
 ```rust
 MockTool::new("flaky", "A flaky tool")
@@ -78,13 +125,15 @@ MockTool::new("flaky", "A flaky tool")
     .with_error()                   // fail with `result` as the error message
 ```
 
-It ignores its input entirely (input-validation tests need a real tool — or a derived one) and exercises exactly the knobs dispatch behavior depends on: delay, concurrency flags, failure.
+It ignores its input entirely, so an input-validation test needs a real tool or one you derived. What it does exercise is exactly the set that dispatch behavior depends on: delay, concurrency flags, and failure.
 
 ## Fixtures and the env guard
 
-`test_config()` — a `SessionConfig` with a test system prompt; `test_message` / `test_assistant_message` / `test_tool_use_message` — message builders for lower-level tests.
+`test_config()` hands you a `SessionConfig` with a test system prompt. `test_message`, `test_assistant_message`, and `test_tool_use_message` are your message builders for lower-level tests.
 
-`EnvGuard` — for tests that touch environment variables: it snapshots named variables, lets you set/remove them, and restores everything on drop (even mid-panic). It serializes across the test binary (parallel tests mutating env is UB-adjacent) and refuses nested guards.
+`EnvGuard` is for tests that touch environment variables. It snapshots the named variables, lets you set and remove them, and restores everything on drop, even mid-panic.
+
+It also serializes across the test binary, because parallel tests mutating your environment is UB-adjacent, and it refuses nested guards.
 
 ## A complete test, start to finish
 
@@ -104,46 +153,65 @@ async fn echoes_and_finishes() {
 }
 ```
 
-That is a full engine pass — loop, dispatch, feedback, finalize — deterministic and instant. The same script style drives the repo's own integration tests (`tests/`), which double as executable examples of expected behavior for every subsystem: compaction no-ops, fallback switching, parallel sibling-discard, redaction, MCP wiring, and more.
+That is a full engine pass covering loop, dispatch, feedback, and finalize, and it runs deterministically and instantly.
+
+The same script style drives the repo's own integration tests in `tests/`. Those tests double as executable examples of expected behavior for every subsystem: compaction no-ops, fallback switching, parallel sibling-discard, redaction, MCP wiring, and more.
 
 ## What to test at which seam
 
 | Seam | Tool |
 |---|---|
-| The full agent (loop, dispatch, termination) | `MockApiClient` + `MockTool` through `BareLoop::run` |
-| One tool call in isolation | your `Tool::call` directly with a hand-built `ToolContext` |
-| Middleware behavior | `ToolPipeline::invoke` with crafted contexts (see `tests/memoize_tool_call_id.rs`) |
-| Compaction / fallback / detection | their managers directly — every subsystem is usable outside the engine |
-| Real-model smoke tests | the repo's `make e2e` pattern: gated behind `LOOPCTL_E2E=1`, run on demand |
+| Your full agent, meaning loop, dispatch, and termination | `MockApiClient` plus `MockTool` through `BareLoop::run` |
+| One tool call in isolation | Your `Tool::call` directly with a hand-built `ToolContext` |
+| Middleware behavior | `ToolPipeline::invoke` with crafted contexts, as in `tests/memoize_tool_call_id.rs` |
+| Compaction, fallback, and detection | Their managers directly, because every subsystem is usable outside the engine |
+| Real-model smoke tests | The repo's `make e2e` pattern, gated behind `LOOPCTL_E2E=1` and run on demand |
 
-The last one is the project's own philosophy: everything deterministic is tested with mocks; a small gated suite proves the provider wiring against real endpoints (Ollama for the free tier).
+That last row is the project's own philosophy. Everything deterministic is tested with mocks, and a small gated suite proves the provider wiring against real endpoints, with Ollama covering the free tier.
 
----
+## Two oracles beyond the mock
 
-## Two oracles beyond the mock — cassettes and goldens (0.4.0)
+Two harnesses from 0.4.0 pin the repo's own wire contracts, and you can use both from your own projects.
 
-The repo's own wire contracts are pinned by two harnesses shipped since 0.4.0, both usable from your own projects:
+### Cassettes: the wire is the oracle
 
-### Cassettes — the wire is the oracle
+A cassette is a real HTTP exchange. You record it through a forwarding proxy during a deliberate live session, and then you scrub it so credentials never enter the file.
 
-A **cassette** is a real HTTP exchange — recorded through a forwarding proxy during a deliberate live session, scrubbed (credentials never enter the file; provider-generated ids become deterministic placeholders consistently across the file) — replayed hermetically. Replay matching is exact on method, path, recorded query pairs and headers, and **full body bytes**: a request the client builds differently than the real server accepted misses every mock and fails as a 404. Replays additionally require the provider's contract headers to be *present* (never the value). The doctrine: **never weaken a cassette to make it pass** — a red replay is the finding (the client drifted, or the provider drifted and needs a deliberate re-record). A `committed_cassettes_carry_no_secrets` meta-test scans the corpus every run, fail-closed.
+Scrubbing turns provider-generated ids into deterministic placeholders consistently across the file, and the result replays hermetically.
 
-### Goldens — the engine is the oracle
+Replay matching is exact on method, path, recorded query pairs, headers, and full body bytes. A request your client builds differently than the real server accepted misses every mock and fails as a 404. Replays also require the provider's contract headers to be present, though never at a specific value.
 
-Where cassettes guard *provider-shape* truth, **golden request bytes** guard *engine-construction* truth: deterministic fixtures run through `BareLoop` against a recording mock that captures the exact request-and-options pair of every outbound call; canonical-JSON snapshots land in `tests/golden/`, one file per scenario. Object key order is never a contract; **array order is pinned** (message order, tool schema order in registration order). A red golden can only mean *our* construction drifted — no re-record exists to hide behind. Regeneration is a deliberate, reviewed act: `UPDATE_GOLDENS=1 cargo test --test golden_requests`, then read the diff like code.
+The doctrine is that you never weaken a cassette to make it pass. A red replay is the finding, which means either your client drifted or the provider drifted and needs a deliberate re-record. A `committed_cassettes_carry_no_secrets` meta-test scans the corpus on every run and fails closed.
 
-Both live in the crate's `tests/` (`cassettes/`, `golden/`) — see `TESTING.md` in the repository for the full doctrine.
+### Goldens: the engine is the oracle
 
----
+Cassettes guard provider-shape truth, and golden request bytes guard engine-construction truth.
+
+Deterministic fixtures run through `BareLoop` against a recording mock that captures the exact request-and-options pair of every outbound call. Canonical-JSON snapshots land in `tests/golden/`, one file per scenario.
+
+Object key order is never a contract, and array order is pinned, which covers your message order and your tool schema order in registration order. A red golden can only mean your construction drifted, and there is no re-record to hide behind.
+
+Regeneration is a deliberate, reviewed act. Run `UPDATE_GOLDENS=1 cargo test --test golden_requests`, then read the diff like code.
+
+Both live in the crate's `tests/` under `cassettes/` and `golden/`, and `TESTING.md` in the repository carries the full doctrine.
 
 ## Gotchas
 
-1. The mock **ignores request content** — it plays its script regardless of what you send. Tests of "the model should have seen X" belong to [observers](/extensions/observers/) or the audit trail, not the mock.
-2. Fixed usage numbers (50/25) leak into assertions — don't bake them into app logic.
-3. `with_responses(vec![])` is a no-op (keeps the default script) — an easy silent mistake.
-4. Derived tools make better test tools than `MockTool` when you care about input handling — the derive works in dev-dependencies like anywhere else.
+1. The mock ignores request content, because it plays its script regardless of what you
+  send. Tests of "the model should have seen X" belong to
+  [observers](/extensions/observers/) or the audit trail rather than to the mock.
+
+2. The fixed usage numbers of 50 and 25 leak into your assertions, so do not bake them into
+  app logic.
+
+3. `with_responses(vec![])` is a no-op that keeps the default script, which is an easy
+  silent mistake.
+
+4. Derived tools make better test tools than `MockTool` when you care about input handling,
+  and the derive works in dev-dependencies like anywhere else.
 
 ## Related pages
 
-- [API client](/core-data/api-client/) — what the mock implements.
-- [The repo's own tests](https://github.com/dch-labs/loopctl) — `tests/*.rs`, the best recipe book.
+- [API client](/core-data/api-client/) covers what the mock implements.
+- [The repo's own tests](https://github.com/dch-labs/loopctl) are `tests/*.rs`, and they
+  are the best recipe book.

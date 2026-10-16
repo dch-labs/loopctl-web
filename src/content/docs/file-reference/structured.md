@@ -1,26 +1,33 @@
 ---
-title: "`src/structured.rs` — structured (JSON) output"
+title: "src/structured.rs"
 ---
 
+This file holds the types and helpers you use to make your model answer in JSON you can parse. Read it before you mix structured output with tool calls, because the two compete.
 
-Types and helpers for making the model answer in JSON you can parse.
+## Key items
 
-**Key items**
+Your `StructuredOutput` trait gives you `name()`, `schema()`, and `from_value()`, where serde supplies the default.
 
-- `StructuredOutput` trait — `name()`, `schema()`, `from_value()` (default: serde).
-- `ResponseFormat { name, schema, strict }` + `from_type::<T>()` (strict default true).
-- `RequestOptions { response_format, tool_constraint, model }` + builders (`with_model` ignores empty names).
-- `ToolConstraint` — `None` / `Strict` / `Grammar(provider)` [grammar feature].
-- `ThinkingEffort` + `RequestOptions::effort(...)` (0.4.0) — Off/Low/Medium/High/Max for reasoning models; `RequestOptions` is `#[non_exhaustive]`.
-- `request_structured::<T>(client, messages, system)` — one-shot helper; **no parse-failure retry**.
-- `StructuredError { Deserialize, Api }`.
-- (internal) `parse_json_lenient` / `extract_json_substring` — the lenient JSON extractor; `tighten_json_schema` — the strict-mode schema transform.
+`ResponseFormat { name, schema, strict }` plus `from_type::<T>()` builds a format, and strict defaults to true.
 
-**Behavior notes**
+`RequestOptions { response_format, tool_constraint, model }` carries your per-request switches through its builders, and `with_model` ignores empty names.
 
-- A `response_format` **suppresses tools** for that request — the two share one slot.
-- `strict: true` formats are rejected up front on Anthropic/Gemini (no strict switch there) — never a silent downgrade.
-- Clients that can't honor options reject loudly (default `*_with_options` behavior).
-- Tightening recurses through nesting and `$defs`, closes every object, and makes every property required — idempotent, and exactly what OpenAI strict mode requires.
+`ToolConstraint` offers `None`, `Strict`, or `Grammar(provider)`, which you reach under the `grammar` feature.
+
+`ThinkingEffort` plus `RequestOptions::effort(...)` (0.4.0) gives you Off, Low, Medium, High, and Max for reasoning models, and `RequestOptions` stays `#[non_exhaustive]`.
+
+`request_structured::<T>(client, messages, system)` is your one-shot helper, and it runs with no parse-failure retry.
+
+`StructuredError { Deserialize, Api }` is what your caller matches on. Internally you get `parse_json_lenient` and `extract_json_substring` for the lenient extractor, plus `tighten_json_schema` for the strict-mode transform.
+
+## Behavior notes
+
+A `response_format` suppresses tools for that request, because the two share one slot.
+
+`strict: true` formats are rejected up front on Anthropic and Gemini, which have no strict switch, so you never eat a silent downgrade.
+
+Clients that cannot honor options reject loudly, which is the default `*_with_options` behavior.
+
+Tightening recurses through nesting and `$defs`, closes every object, and makes every property required. It is idempotent, and it is exactly what OpenAI strict mode requires.
 
 Deep dive: [Structured output](/integration/structured-output/).

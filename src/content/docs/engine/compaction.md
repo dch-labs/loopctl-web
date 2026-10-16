@@ -1,15 +1,16 @@
 ---
-title: "Compaction — shrinking the conversation so the run can continue"
+title: "Compaction"
 sidebar:
   order: 6
 ---
 
+Every model has a hard limit on how much text it can read per request: the **context window**. An agent that keeps appending will eventually build a request your provider rejects.
 
-Every model has a hard limit on how much text it can read per request: the **context window**. An agent that just keeps appending will eventually build a request the provider rejects. Compaction is the subsystem that notices the conversation approaching the ceiling and rewrites it into something smaller — then the run continues inside the budget. Sources: `src/compact.rs`, `src/compact/` (the compactor family), `src/engine/core/machine.rs`, `src/engine/bare/compact.rs`.
+Compaction is the subsystem that notices your conversation approaching the ceiling and rewrites it into something smaller, and then your run continues inside the budget.
 
-**Read this if:** your agent runs long, your tools produce big outputs, or you have met `LoopError::ContextExceeded` and want to know exactly what happened.
+Sources: `src/compact.rs`, `src/compact/` (the compactor family), `src/engine/core/machine.rs`, `src/engine/bare/compact.rs`.
 
----
+Read this page when your agent runs long, your tools produce big outputs, or you have met `LoopError::ContextExceeded` and want to know exactly what happened.
 
 ## The words, once
 
@@ -24,14 +25,13 @@ Every model has a hard limit on how much text it can read per request: the **con
 | **Compactor** | The strategy object deciding *how* to shrink. Default install: `TruncatingCompactor` — cut the middle, keep head and tail. The real LLM strategies ship alongside it (see [the compactor family](#the-compactor-family)) and compose best inside a `FallbackCompactor` chain. |
 | **Context manager** | Owns the compactor plus the sizing policy (window, threshold, target size, counter). |
 | **Landing target** | The post-compaction size the pass must actually reach: by default **15% of the trigger threshold** (window 200k × 80% × 15% = 24k tokens). A pass that lands over its target **declines** — it reports no-change rather than passing silently (0.4.0). |
-| **Demotion sink** | Where the evicted messages go. Default: nowhere (dropped). Install a `MemoryDemotionSink` and evicted content becomes retrievable memory (see [below](#demotion--evicted-is-not-destroyed)). |
+| **Demotion sink** | Where the evicted messages go. Default: nowhere (dropped). Install a `MemoryDemotionSink` and evicted content becomes retrievable memory (see [below](#demotion-evicted-is-not-destroyed)). |
 
 Two distinctions prevent most confusion:
 
-- **Threshold vs window:** crossing the threshold is *normal* — it's the trigger. Exceeding the window is a *contract violation* — no request is ever sent over it; the run fails first.
-- **Measurements vs hints:** a compactor may report its own token numbers, but they're **hints**. Every decision uses the manager's own re-count with its configured counter.
+- **Threshold versus window.** Crossing the threshold is normal, it is your trigger. Exceeding the window is a contract violation: no request is ever sent over it, because your run fails first.
 
----
+- **Measurements versus hints.** A compactor may report its own token numbers, but those are **hints**. Every decision uses your manager's own re-count with its configured counter.
 
 ## Four roles, cleanly split
 
@@ -56,19 +56,19 @@ flowchart TB
 | *Did it work?* | the manager (re-measures, classifies) |
 | *What now?* | the machine again (continue or fail) |
 
-This split is why you can swap the truncator for an LLM summarizer without touching the engine.
-
----
+This split is why you can swap the truncator for an LLM summarizer without touching your engine.
 
 ## When it triggers
 
 Before every model call, the brain checks (first hit wins):
 
-1. Turn limit exceeded? → end the run (not compaction's business).
-2. `estimate >= window × 95%` → **`Compact(Emergency)`** — inclusive comparison, always active.
-3. `auto_compact` and `estimate > window × threshold%` → **`Compact(ThresholdExceeded)`** — strict comparison (a payload exactly at 80% serves normally; past it compacts).
+1. Turn limit exceeded? Then end the run, which is not compaction's business.
 
-Worked example, window 8,000, threshold 80% (the trigger line is 6,400; the emergency line is 7,600):
+2. `estimate >= window × 95%` gives **`Compact(Emergency)`**, an inclusive comparison that is always active.
+
+3. `auto_compact` and `estimate > window × threshold%` gives **`Compact(ThresholdExceeded)`**, a strict comparison. So a payload exactly at 80% serves normally, and only growth past it compacts.
+
+Worked example, window 8,000, threshold 80%. The trigger line is 6,400 and the emergency line is 7,600:
 
 | Conversation estimate | What happens |
 |---|---|
@@ -78,9 +78,13 @@ Worked example, window 8,000, threshold 80% (the trigger line is 6,400; the emer
 
 ### When the estimate is refreshed
 
-The driver measures the payload at every growth point, so the trigger's number is always current before a request goes out: at run start (committed history + new input), after every model response, and after every batch of tool results (a single huge tool result becomes visible *before* the next request — you can't sneak past the trigger with a giant tool output). Extras riding the next request (memory, contributor messages) are counted too, and the turn defers to compaction if the fuller payload crosses the line — with a reserved budget so the extras still fit after shrinking.
+Your driver measures the payload at every growth point, so the trigger's number is always current before a request goes out.
 
----
+It measures at run start on committed history plus new input, after every model response, and after every batch of tool results.
+
+A single huge tool result therefore becomes visible before your next request, so you cannot sneak past the trigger with a giant tool output.
+
+Extras riding your next request, meaning memory and contributor messages, are counted too. If the fuller payload crosses the line, your turn defers to compaction with a reserved budget, so the extras still fit after shrinking.
 
 ## What one pass looks like
 
@@ -116,43 +120,73 @@ sequenceDiagram
 
 The classification rules, in the manager (`compact_with_reason`):
 
-- Compactor reported failure, or its result **still doesn't fit** the window (minus any reserved budget) → `Err(ContextOverflow)` — the run ends with `ContextExceeded`.
-- Same message count and no size reduction → `NoAction` — honest "nothing happened." Observers stay silent; hooks stay silent. Since 0.4.0 this includes **over-target landings**: a compactor that shrinks but lands above its target declines instead of passing silently — and on a threshold-triggered pass whose payload still fits the window, that decline *defers* the compaction and serves the turn (the emergency line still forces).
-- Anything else → `Compacted` — with `tokens_after`/`tokens_saved` **normalized to the manager's counter** (the compactor's self-report is overwritten).
+- The compactor reported failure, or its result **still does not fit** the window minus any reserved budget, gives `Err(ContextOverflow)`, and your run ends with `ContextExceeded`.
 
-### Watching a pass — start to finish (0.4.0)
+- Same message count and no size reduction gives `NoAction`, an honest "nothing happened". Your observers stay silent and your hooks stay silent.
 
-Observers see the whole pass now, not just the success:
+- Since 0.4.0 this includes **over-target landings**: a compactor that shrinks but lands above its target declines instead of passing silently.
 
-- `on_pre_compaction(PreCompactionContext)` — the pass is starting: trigger reason, pre-pass conversation stats (message counts by role, token estimate).
-- `on_compaction(CompactedContext)` — a real pass landed, carrying live `CompactTelemetry`: trigger, before/after stats, tokens saved, and the pass's wall-clock duration measured around the whole span (snapshot, counting, the compactor call, and the demotion handoff — not just the compactor in isolation).
-- `on_compaction_failed(CompactionFailedContext)` — the pass failed (typed `LoopError::CompactionFailed`/`CompactionStalled` at the run level, with payload-comparable numbers).
+- On a threshold-triggered pass whose payload still fits your window, that decline defers the compaction and serves the turn, while the emergency line still forces.
+
+- Anything else gives `Compacted`, with `tokens_after` and `tokens_saved` **normalized to the manager's counter**, which overwrites the compactor's self-report.
+
+### Watching a pass from start to finish
+
+Observers see the whole pass now, not only the success:
+
+- `on_pre_compaction(PreCompactionContext)`: your pass is starting. It carries the trigger reason and pre-pass conversation stats, meaning message counts by role and the token estimate.
+
+- `on_compaction(CompactedContext)`: a real pass landed. It carries live `CompactTelemetry` with the trigger, before and after stats, tokens saved, and the pass's wall-clock duration measured around the whole span.
+
+- That span is the snapshot, the counting, the compactor call and the demotion handoff, not the compactor in isolation.
+
+- `on_compaction_failed(CompactionFailedContext)`: your pass failed, typed as `LoopError::CompactionFailed` or `CompactionStalled` at the run level, with payload-comparable numbers.
 
 ### The target size
 
-The manager doesn't just say "shrink" — it passes a concrete target: by default **15% of the threshold line** (e.g. window 200k × threshold 80% × 15% = 24k tokens; tightened from 70% in 0.4.0 — small context slots need landings well below the trigger). Tune it with `with_compact_target(CompactBase::Threshold | Context)` and `with_compact_target_pct`. The sizing also rides every pass as a `CompactSizing` argument — the reserve the landing must leave room for (per-request overhead plus a deferred turn's transients) and an optional one-pass target override (the engine's overflow-salvage arm uses the override to force a landing strictly under a refused payload).
+Your manager does not only say "shrink". It passes a concrete target, by default **15% of the threshold line**, say window 200k × threshold 80% × 15% = 24k tokens.
 
----
+That was tightened from 70% in 0.4.0, because small context slots need landings well below the trigger.
 
-## What happens to the two buffers — the important part
+You tune it with `with_compact_target(CompactBase::Threshold | Context)` and `with_compact_target_pct`.
+
+The sizing rides every pass as a `CompactSizing` argument: the reserve the landing must leave room for, which is per-request overhead plus a deferred turn's transients.
+
+The argument also carries an optional one-pass target override. Your engine's overflow-salvage arm uses that override to force a landing strictly under a refused payload.
+
+## What happens to the two buffers
 
 After a **successful** pass (`compaction_result`):
 
 1. `history` is **replaced wholesale** by the compacted messages.
-2. `pending` is **cleared** — everything the current run said so far was folded into the compacted result.
-3. The token estimate is set to the new (smaller) count; state → `Start`; the deferred model call proceeds.
 
-The invariant: **compaction collapses `history + pending` into a new, shorter `history`, and `pending` restarts empty.** That's what makes it actually reduce context — both buffers become one smaller one.
+2. `pending` is **cleared**, because everything your run said so far was folded into the compacted result.
 
-After a **no-op** pass (`compaction_noop`): both buffers untouched. The run simply continues. This distinction exists so an unchanged pass doesn't accidentally glue half-finished run messages into permanent history.
+3. The token estimate is set to the new, smaller count, state moves to `Start`, and your deferred model call proceeds.
+
+The invariant: **compaction collapses `history + pending` into a new, shorter `history`, and `pending` restarts empty.**
+
+That is what makes it actually reduce your context, because both buffers become one smaller one.
+
+After a **no-op** pass (`compaction_noop`), both buffers are untouched and your run continues. This distinction exists so an unchanged pass does not accidentally glue half-finished run messages into permanent history.
 
 ### The no-progress guard
 
-Both feeds compare the driver's measured before/after numbers. If `tokens_after >= tokens_before` — nothing was shaved — the brain ends the run with `Failed(ContextExceeded)` instead of ping-ponging between Compact and CallLLM forever. This is also the honest price of a **hook veto** at over-threshold: nothing shrank, so the guard fires. A veto over-threshold is a decision to stop, not a decision to proceed.
+Both feeds compare your driver's measured before and after numbers. If `tokens_after >= tokens_before`, nothing was shaved.
+
+So the brain ends your run with `Failed(ContextExceeded)` instead of ping-ponging between Compact and CallLLM forever.
+
+This is also the honest price of a **hook veto** at over-threshold: nothing shrank, so the guard fires.
+
+A veto over-threshold is a decision to stop, not a decision to proceed.
 
 ### The audit trail is never touched
 
-Compaction rewrites the *operational* conversation the loop uses. The *observational* record — `session.runs[N].turns` with every turn's original input and output — survives intact. You can always read what was actually said before the summary replaced it. (One nuance: a turn that runs *after* compaction records the summarized view as its context — the trail shows what each turn really saw.)
+Compaction rewrites the operational conversation your loop uses. The observational record, `session.runs[N].turns` with every turn's original input and output, survives intact.
+
+You can always read what was actually said before the summary replaced it.
+
+One nuance: a turn that runs after compaction records the summarized view as its context, so your trail shows what each turn really saw.
 
 | | Before | After success | After no-op / failure |
 |---|---|---|---|
@@ -160,11 +194,9 @@ Compaction rewrites the *operational* conversation the loop uses. The *observati
 | `pending` | this run's messages | **cleared** (folded in) | unchanged |
 | `session.runs` audit trail | full record | **unchanged** | unchanged |
 
-And remember from [the big idea](/start-here/the-big-idea/): a run that compacts and *then* fails leaves the compacted history behind — compaction is a commit point.
+And remember from [the big idea](/start-here/the-big-idea/): a run that compacts and then fails leaves the compacted history behind, because compaction is a commit point.
 
----
-
-## The default strategy — `TruncatingCompactor`
+## The default strategy: `TruncatingCompactor`
 
 Dependency-free, no LLM calls. It drops the **middle** of the conversation:
 
@@ -195,15 +227,23 @@ flowchart LR
     compact -.-> dropped
 ```
 
-Two knobs: `with_preserve_recent(n)` (default 4, minimum 1) and `with_min_messages(n)` (default 6, minimum 2 — conversations shorter than this pass through untouched). Three rules:
+Two knobs: `with_preserve_recent(n)` (default 4, minimum 1) and `with_min_messages(n)` (default 6, minimum 2, so conversations shorter than this pass through untouched). That 6 is this truncator's own. The LLM-backed compactors further down default to 8 instead. Three rules:
 
-1. **The first message is always kept** — it usually holds the task or system prompt everything else depends on.
-2. **Tool call/result pairs are never orphaned.** If the cut would keep a tool result while dropping its call (or vice versa), the cut point moves so the pair survives together — providers reject conversations with orphaned halves. (The machinery handles even nasty cases: reused call ids pair per occurrence; results of the first message's calls are pulled back adjacent to it.)
-3. **Never return an empty list** — a conversation that can't be safely cut reports "no change" instead.
+1. **The first message is always kept**, because it usually holds the task or system prompt everything else depends on.
+
+2. **Tool call and result pairs are never orphaned.** If your cut would keep a tool result while dropping its call, or the reverse, the cut point moves.
+
+   It always moves so the pair survives together.
+
+3. Providers reject conversations with orphaned halves, so the machinery handles even nasty cases.
+
+   Reused call ids pair per occurrence, and results of the first message's calls are pulled back adjacent to it.
+
+4. **Never return an empty list.** A conversation that cannot be safely cut reports "no change" instead.
 
 ### Inside `TruncatingCompactor`, step by step
 
-The exact procedure behind those rules (`_target_tokens` is deliberately ignored — this is *positional* truncation, not token fitting):
+Here is the exact procedure behind those rules. Your `_target_tokens` is deliberately ignored, because this is positional truncation, not token fitting:
 
 ```text
 compact(messages):
@@ -223,11 +263,25 @@ compact(messages):
   8. re-measure with the manager's counter; report tokens_saved
 ```
 
-The pair-safety machinery behind step 3 works like a bracket-matcher for tool traffic: a forward scan keeps, per tool-call id, a stack of *unconsumed* calls; each `ToolResult` pops the most recent unconsumed preceding call with that id, and the two become a **pair**. Leftovers are classified — an unmatched call is a `LoneCall` (its result may still be in flight), an unmatched result is a `LoneResult` (a result cannot exist without its call — it's a protocol violation). The sanitizer then applies three asymmetric rules to the output: **`LoneResult`s are dropped everywhere**; **`LoneCall`s are kept *outside* the dropped region** (compaction can run before results land) but strict pairing applies *inside* it; and messages left empty by filtering are removed. Even the `unchanged()` path runs the same filtering, so a "no change" report is honest about what it would have saved.
+The pair-safety machinery behind step 3 works like a bracket-matcher for your tool traffic. A forward scan keeps, per tool-call id, a stack of unconsumed calls.
 
-`TokenSplitter` (same file, exported) gives you the same principled split for **custom** compactors — an old/recent boundary at a real turn transition, pair-safe (it slides an orphaning cut instead of refusing it, so agent tool-loop histories never wedge the pass) — so an LLM summarizer can summarize `to_compact` and keep `preserved`.
+Each `ToolResult` pops the most recent unconsumed preceding call with that id, and the two become a **pair**. Leftovers are then classified.
 
----
+An unmatched call is a `LoneCall`, because its result may still be in flight. An unmatched result is a `LoneResult`, because a result cannot exist without its call.
+
+That second case is a protocol violation.
+
+The sanitizer then applies three asymmetric rules to your output. **`LoneResult`s are dropped everywhere**, and **`LoneCall`s are kept outside the dropped region**.
+
+That asymmetry is deliberate: compaction can run before results land, while strict pairing applies inside the dropped region.
+
+Messages left empty by filtering are removed too. Even the `unchanged()` path runs the same filtering, so your "no change" report is honest about what it would have saved.
+
+`TokenSplitter`, exported from the same file, gives you the same principled split for **custom** compactors: an old and recent boundary at a real turn transition.
+
+It is pair-safe, since it slides an orphaning cut instead of refusing it, so your agent tool-loop histories never wedge the pass.
+
+An LLM summarizer can then summarize `to_compact` and keep `preserved`.
 
 ## The compactor family
 
@@ -241,15 +295,23 @@ The pair-safety machinery behind step 3 works like a bracket-matcher for tool tr
 | `FallbackCompactor` | The never-fail **chain**: stages in order until one succeeds. Default chain: QA → structured → `TerminalCapture(TruncatingCompactor)`. Failed stages' outputs are discarded (the next stage sees the *original* input); `last_report()` names the winning stage; `terminal_min_recent` (default 4) is a structural floor the last-resort truncate cannot go below. | Production — with a non-failing terminal, an out-of-tokens condition stops being a failed pass. |
 | `RollingCompactor` | Compacts only the groups older than `age_turns` (pair-safe role-transition boundaries), rolling them into micro-summaries on each pass — compaction as a maintenance cadence, not one big rewrite. | Long unattended runs where each pass should be cheap. |
 
-Two shared contracts worth knowing: every LLM compactor runs its client calls on a caller-supplied client (a dedicated cheaper model is the documented production shape), and a compactor's failure — API error, blank response, over-budget summary — fails **that stage** with the original messages intact, which is exactly the shape the `FallbackCompactor` chain consumes. The compactors' token spend is reported per pass through `loopctl.compaction.summarizer.tokens` metric events (the QA pass) and the chain emits `loopctl.compaction.passes` / `loopctl.compaction.degradations`.
+Two shared contracts are worth knowing. Every LLM compactor runs its client calls on a client you supply, and a dedicated cheaper model is the documented production shape.
 
-Both LLM compactors consume pre-compact hook guidance identically — `CompactionContext::instructions` rides as host instructions and every `additional_context` fragment as context to weave in — and both honor the **retention classes**: `Requery`-tagged results render as omission markers in the transcript (a summary physically cannot restate content it never saw), `Durable` results survive eviction.
+A compactor's failure, whether an API error, a blank response or an over-budget summary, fails **that stage** with your original messages intact.
 
----
+That is exactly the shape the `FallbackCompactor` chain consumes.
 
-## Demotion — evicted is not destroyed
+The compactors' token spend is reported per pass through `loopctl.compaction.summarizer.tokens` metric events for the QA pass.
 
-`CompactionOutcome` carries an `evicted` list — the messages the pass dropped. By default they go nowhere. Install a demotion sink and they become retrievable:
+The chain also emits `loopctl.compaction.passes` and `loopctl.compaction.degradations`.
+
+Both LLM compactors consume your pre-compact hook guidance identically. `CompactionContext::instructions` rides as host instructions, and every `additional_context` fragment as context to weave in.
+
+Both honor the **retention classes**. `Requery`-tagged results render as omission markers in the transcript, because a summary physically cannot restate content it never saw. `Durable` results survive eviction.
+
+## Demotion: evicted is not destroyed
+
+Your `CompactionOutcome` carries an `evicted` list, which holds the messages the pass dropped. By default they go nowhere. Install a demotion sink and they become retrievable:
 
 ```rust
 use loopctl::compact::{MemoryDemotionSink, FallbackConfig, ChainBuilder};
@@ -260,7 +322,11 @@ let sink = MemoryDemotionSink::new(memory_store, max_chars_per_message);
 //  evicted messages to the sink after the history rewrite)
 ```
 
-`MemoryDemotionSink` renders each evicted exchange (tool name, arguments, truncated result — `render_evicted` is the same renderer the QA summarizer feeds its transcript) into a `Trajectory`-category memory entry. Combined with `SearchMemoriesTool` ([memory](/extensions/memory/)) this closes the loop: **what compaction evicts, the model can recall on demand.** The prune pass (see [context accounting](/engine/context-accounting/)) hands its cleared tool outputs to the same sink under `CompactReason::Prune`.
+`MemoryDemotionSink` renders each evicted exchange, meaning tool name, arguments and truncated result, into a `Trajectory`-category memory entry. Your renderer is `render_evicted`, the same one the QA summarizer feeds its transcript.
+
+Combined with `SearchMemoriesTool` ([memory](/extensions/memory/)) this closes your loop: **what compaction evicts, the model can recall on demand.**
+
+The prune pass, described in [context accounting](/engine/context-accounting/), hands its cleared tool outputs to the same sink under `CompactReason::Prune`.
 
 ## Writing your own compactor
 
@@ -284,7 +350,7 @@ impl ContextCompactor for SummarizingCompactor {
 }
 ```
 
-`CompactionContext` carries everything a smart strategy needs: `tokens_before`, the `reason` (an emergency may justify more aggression), the `context_window`, the turn, the manager's counter (use it for self-reports), plus hook-supplied `instructions` and `additional_context`.
+Your `CompactionContext` carries everything a smart strategy needs: `tokens_before`, the `reason`, the `context_window`, the turn, and the manager's counter for your self-reports. It also carries hook-supplied `instructions` and `additional_context`. An emergency may justify more aggression.
 
 Install it:
 
@@ -296,13 +362,13 @@ let manager = ContextManager::new(Arc::new(SummarizingCompactor { /* ... */ }))
 agent.set_context_manager(Arc::new(manager));
 ```
 
-> **Gotcha — one counter, everywhere.** Trigger decisions and post-compaction classification must run in the same "unit." Mixing the heuristic counter (trigger) with a real tokenizer or billed counts (compactor) causes flapping — compact, look small, un-compact, look big, repeat. Install one counter on the manager; the driver reuses *its* counter automatically.
+Watch the counter unit. Trigger decisions and post-compaction classification must run in the same unit.
 
----
+Mixing the heuristic counter for your trigger with a real tokenizer for the compactor causes flapping: compact, look small, un-compact, look big, repeat. Install one counter on the manager, and your driver reuses its counter automatically.
 
-## Failure — reading a `ContextExceeded`
+## Failure: reading a `ContextExceeded`
 
-`ContextExceeded { used, limit }` can arrive from three places; the numbers tell you which:
+`ContextExceeded { used, limit }` can arrive from three places, and the numbers tell you which:
 
 | `limit` means | Cause | Fix |
 |---|---|---|
@@ -310,15 +376,29 @@ agent.set_context_manager(Arc::new(manager));
 | the pre-pass size | no-progress guard: nothing was shaved (includes hook vetoes and short-but-fat conversations the truncator can't cut) — the typed form is now `CompactionStalled` | summarizing compactor, bigger window, or trim the seed content |
 | — | a compactor *error* surfaces as `CompactionFailed` (same payload-comparable numbers) | check the summarizer's client, or let the chain fall through to the terminal truncate |
 
-A threshold-triggered stall whose payload still fits the window no longer kills the run — the pass declines, the machine latches the deferral, and the next model call serves. Only a genuinely over-window (emergency-line) stall does.
+A threshold-triggered stall whose payload still fits your window no longer kills your run. The pass declines, your machine latches the deferral, and your next model call serves.
 
-Four promises hold in every case: **no request is ever sent over the window** (the run fails first — or, since 0.4.0, the one [overflow-salvage](/engine/context-accounting/) compact-and-retry runs under a target strictly below the refused payload); **an interrupt salvages the coherent prefix** (a failed run keeps its completed turns); **a `ContextExceeded` discard leaves the notebook clean** (an unshrinkable history is dropped whole); **the estimate is never faked** (a no-op is reported as a no-op).
+Only a genuinely over-window stall on the emergency line still ends the run.
 
----
+Four promises hold in every case. You can rely on them when you debug.
 
-## Who counts the tokens — the heuristic and the ratio presets
+- **No request is ever sent over the window.** Your run fails first, or, since 0.4.0, the one [overflow-salvage](/engine/context-accounting/) compact-and-retry runs under a target strictly below the refused payload.
 
-Compaction triggers on an *estimate* of the conversation's size, and the estimator is pluggable. The default is **`HeuristicTokenCounter`** — a rough chars-per-token guess with no provider knowledge. Since 0.3.1 there is a second option: **`RatioTokenCounter`** presets, one per provider family, each pinned to a measured characters-per-token ratio plus a fixed per-message overhead:
+- **An interrupt salvages the coherent prefix**, so a failed run keeps its completed turns.
+
+- **A `ContextExceeded` discard leaves the notebook clean**, with an unshrinkable history dropped whole.
+
+- **The estimate is never faked**, so a no-op is reported as a no-op.
+
+## Who counts the tokens: the heuristic and the ratio presets
+
+Compaction triggers on an estimate of the conversation's size, and the estimator is
+pluggable. The default is **`HeuristicTokenCounter`**, a rough chars-per-token guess
+with no provider knowledge.
+
+Since 0.3.1 there is a second option, the **`RatioTokenCounter`** presets, one per
+provider family, each pinned to a measured characters-per-token ratio plus a fixed
+per-message overhead:
 
 ```rust
 use loopctl::compact::RatioTokenCounter;
@@ -330,11 +410,15 @@ let custom  = RatioTokenCounter::new(3.9, 4);    // your own calibration
 agent.set_token_counter(Arc::new(counter));
 ```
 
-The honest long-term answer for local models is the custom ratio: send one known text, read the provider's reported `input_tokens`, divide — the three-minute calibration recipe is in the type's docs. A ratio that is NaN, infinite, or not positive is rejected with a warning and the 4.0 fallback takes over, so a bad constant can never wedge the gate. Presets and heuristic render messages through the same helper, so the two counters can drift only in how they divide — never in *what* they count.
+The honest long-term answer for local models is the custom ratio: send one known text,
+read the provider's reported `input_tokens`, and divide. The three-minute calibration
+recipe is in the type's docs.
 
-**Defaults are unchanged**: the engine keeps `HeuristicTokenCounter` unless you install a counter. Presets are opt-in, byte-comparable behavior for everyone else. (For why estimates matter at all, see [tokens & context windows](/principles/tokens-and-context/).)
+A ratio that is NaN, infinite, or not positive is rejected with a warning and the 4.0 fallback takes over, so a bad constant can never wedge your gate.
 
----
+Presets and the heuristic render messages through the same helper, so your two counters can drift only in how they divide, never in what they count.
+
+**Defaults are unchanged**: the engine keeps `HeuristicTokenCounter` unless you install a counter. Presets are opt-in, with byte-comparable behavior for everyone else. For why estimates matter at all, see [tokens and context windows](/principles/tokens-and-context/).
 
 ## Configuration quick reference
 
@@ -350,13 +434,18 @@ ContextManager::new(Arc::new(TruncatingCompactor::default()))  // the seeded def
 
 The production shape is the chain: `FallbackCompactor::default_chain(client)` (QA → structured → truncate), or compose your own with `ChainBuilder::stage(name, compactor)...terminal(&truncator)` and set the floor via `FallbackConfig::terminal_min_recent`.
 
-Host-facing calls on the manager: `ensure_context_fits(messages, turn)` (checks the threshold itself), `compact_manual(messages, turn)` (bypasses the threshold — hook trigger `Manual`), and `compact_with_reason(..., sizing)` (the engine's path — the sizing argument carries the reserve and any one-pass target override). Watching: `on_pre_compaction` / `on_compaction` / `on_compaction_failed` observers bracket every pass; the `pre_compact` hook can veto or steer (its merged `new_instructions` reach the compactor's `CompactionContext`).
+Your manager exposes three host-facing calls. `ensure_context_fits(messages, turn)` checks the threshold itself, and `compact_manual(messages, turn)` bypasses the threshold and fires hook trigger `Manual`.
 
----
+The third, `compact_with_reason(..., sizing)`, is the engine's path, where the sizing argument carries the reserve and any one-pass target override.
+
+For watching, the `on_pre_compaction`, `on_compaction` and `on_compaction_failed` observers bracket every pass.
+
+Your `pre_compact` hook can veto or steer, since its merged `new_instructions` reach the compactor's `CompactionContext`.
 
 ## Related pages
 
-- [Tokens and context windows](/principles/tokens-and-context/) — what tokens are, why the window is finite, and why the estimate errs high.
-- [Session config](/core-data/session-config/) — where the window and threshold live.
-- [Hooks](/extensions/hooks/) — the pre/post compact hooks.
+- [Tokens and context windows](/principles/tokens-and-context/): what tokens are, why the
+  window is finite, and why the estimate errs high.
+- [Session config](/core-data/session-config/): where the window and threshold live.
+- [Hooks](/extensions/hooks/): the pre/post compact hooks.
 - [File reference: compact.rs](/file-reference/compact/)

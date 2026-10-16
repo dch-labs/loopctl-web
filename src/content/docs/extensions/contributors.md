@@ -1,17 +1,14 @@
 ---
-title: "Contributors — a message before every turn"
+title: "Contributors"
 sidebar:
   order: 4
 ---
 
+A context contributor is the simplest extension point in loopctl. Before each model call, every registered contributor is asked whether it wants to add a message to this turn's request. Its answer rides that request and then vanishes. The source is `src/contributor.rs`.
 
-A **context contributor** is the simplest extension point in loopctl: before each model call, every registered contributor gets asked *"want to add a message to this turn's request?"* — and its answer rides that request, then vanishes. Source: `src/contributor.rs`.
+The classic use is keeping a small model on task by re-sending the original goal every few turns.
 
-The classic use: keep a small model on task by re-sending the original goal every few turns.
-
----
-
-## The trait — one method
+## The trait: one method
 
 ```rust
 pub trait ContextContributor: Send + Sync {
@@ -24,7 +21,9 @@ pub struct ContributorContext<'a> {
 }
 ```
 
-Return `Some(message)` to inject, `None` to stay quiet this turn. A `Role::System` message is usually right — providers route it correctly (loopctl folds system content into each provider's native shape).
+Return `Some(message)` to inject, or `None` to stay quiet this turn.
+
+A `Role::System` message is usually the right choice, because providers route it correctly. loopctl folds system content into each provider's native shape.
 
 ```rust
 struct GoalReminder {
@@ -43,38 +42,43 @@ impl ContextContributor for GoalReminder {
 agent.add_contributor(Box::new(GoalReminder { every_n: 5 }));
 ```
 
-(That exact pattern — re-emit the first user message every N turns — ships as `presets::GoalReminder::new(n)`; since 0.4.0 a `GoalReminder` is **default-wired** into every fresh construction — [presets](/integration/presets/) — so small models get re-anchored unless you opt out with `FrontierProfile`.)
+That exact pattern, re-emitting the first user message every N turns, ships as `presets::GoalReminder::new(n)`.
 
-## The lifecycle — the part to internalize
+A `GoalReminder` has been default-wired into every fresh construction since 0.4.0, so your small models get re-anchored unless you opt out with `FrontierProfile`. See [presets](/integration/presets/).
 
-- Contributors are consulted at the **top of each turn**, in registration order, *before* the request is built.
-- Their messages are **prepended** to that turn's request — extras first, conversation after.
-- They are **never persisted**. Not into history, not into pending, not into the audit trail. Next turn the contributor is asked again; if it returns nothing, its message is simply absent. There is nothing to clean up, ever.
-- If a turn defers to compaction (the fuller payload crossed the threshold), the retried turn consults contributors **again** against the compacted history — and the reserved budget guarantees the fresh extras still fit.
-- Extras count toward the context estimate the compaction trigger uses (see [the LLM turn](/engine/llm-turn/)).
+## The lifecycle
 
-## Contributors vs memory — when to use which
+Six behaviors are worth internalizing:
 
-Both inject per-turn context. The difference is *where the content comes from*:
+- Contributors are consulted at the top of each turn, in registration order, before the request is built.
+- Their messages are prepended to that turn's request, extras first, conversation after.
+- They are never persisted. Not into history, not into pending, and not into the audit trail.
+- Your contributor is asked again next turn, and if it returns nothing its message is absent. There is nothing to clean up, ever.
+- If a turn defers to compaction because the fuller payload crossed the threshold, the retried turn consults your contributors again against the compacted history. The reserved budget guarantees the fresh extras still fit.
+- Extras count toward the context estimate that the compaction trigger uses, which [the LLM turn](/engine/llm-turn/) covers.
+
+## Contributors vs memory
+
+Both inject per-turn context, and the difference is where the content comes from:
 
 | | Contributor | [Memory](/extensions/memory/) |
 |---|---|---|
-| Content | your code computes it | a store retrieved by relevance |
-| Stateful across turns? | whatever your struct holds | yes, that's its point |
-| Typical jobs | goal reminders, deadlines, policy restated, "today's date" | lessons learned, trajectories, facts |
-| Cost per turn | your computation | a retrieve call |
+| Content | Your code computes it | A store retrieved by relevance |
+| Stateful across turns? | Whatever your struct holds | Yes, and that is its point |
+| Typical jobs | Goal reminders, deadlines, policy restated, today's date | Lessons learned, trajectories, facts |
+| Cost per turn | Your computation | A retrieve call |
 
-They compose — a run can have both, and their messages ride the request in a stable order (contributors, then memory).
+They compose. A run can have both, and their messages ride the request in a stable order, contributors first and then memory.
 
 ## Gotchas
 
-- `ctx.conversation` is a *snapshot view* — building expensive derived state per call is your budget, not the engine's. Keep `contribute` fast.
-- A contributor that always returns `Some(big_message)` adds its size to **every** request — mind the context budget on small windows.
-- `ContributorContext` is deliberately not `Clone` and borrows only for the consultation — you can't stash it for later.
+- `ctx.conversation` is a snapshot view, so building expensive derived state per call is your budget and not the engine's. Keep `contribute` fast.
 
----
+- A contributor that always returns a large message adds its size to every request, so mind your context budget on small windows.
+
+- `ContributorContext` is deliberately not `Clone` and it borrows only for the consultation, so you cannot stash it for later.
 
 ## Related pages
 
-- [Memory](/extensions/memory/) — the retrieved-context counterpart.
-- [Presets](/integration/presets/) — `GoalReminder` in the Constrained profile.
+- [Memory](/extensions/memory/) is the retrieved-context counterpart.
+- [Presets](/integration/presets/) covers `GoalReminder` in the Constrained profile.

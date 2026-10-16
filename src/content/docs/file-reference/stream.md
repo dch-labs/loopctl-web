@@ -1,23 +1,35 @@
 ---
-title: "`src/stream.rs` — stream events and the accumulator"
+title: "src/stream.rs"
 ---
 
+This file holds the neutral event vocabulary every provider speaks, plus the folding machine that turns those events into a message you can read.
 
-The neutral event vocabulary every provider speaks, and the folding machine that turns events into a finished message.
+Learn this vocabulary once and you can debug any provider's stream.
 
-**Key items**
+## Key items
 
-- `StreamEvent` — `MessageStart`, `PartStart { index, part }`, `IndexedDelta { index, delta }`, `PartStop { index }`, `MessageDelta { stop_reason, usage }`, `MessageStop`, `Ping`.
-- `DeltaPart` — `Text`, `InputJson` (tool-argument fragments), `ToolCall` (legacy), `Thinking { text, signature, redacted }` (0.4.0: signatures/redacted payloads latch; a closed thinking lane flushes a `MessagePart::Thinking` into the assembled message — empty text with a redacted payload = withheld reasoning).
-- `StreamAccumulator` — `process(event)`, `build() -> Message`, `usage()`, `peek_parts()`.
-- `StreamStopReason` — `ToolCall`, `MaxTokens`, `StopSequence`, `EndTurn`; `from_api_str` maps provider spellings; `should_continue_tool_loop()` is true only for `ToolCall`.
-- `Usage { input_tokens, output_tokens, cached_input_tokens }` + `total_tokens()` (the cached share is a subset of input; `with_cached_input(n)` attaches it — 0.4.0).
-- `StreamError::InvalidToolInputJson` — the accumulator's only error.
+`StreamEvent` covers `MessageStart`, `PartStart { index, part }`, `IndexedDelta { index, delta }`, `PartStop { index }`, `MessageDelta { stop_reason, usage }`, `MessageStop`, and `Ping`.
 
-**Behavior notes**
+`DeltaPart` covers `Text`, `InputJson` for tool-argument fragments, and `ToolCall` which is legacy.
 
-- The lifecycle order is a contract: `MessageStart → (PartStart → deltas → PartStop)* → MessageDelta → MessageStop`. Never a synthetic `MessageStop` on failure — its absence *is* the truncation signal.
-- Routing is by the (index, lane-kind) pair — indices are reused across text/thinking/tool lanes on some wires.
-- Empty tool input becomes `{}`; still-open lanes at `build()` are dropped; thinking flushes nothing.
+`Thinking { text, signature, redacted }` arrived in 0.4.0, where signatures and redacted payloads latch. A closed thinking lane flushes a `MessagePart::Thinking` into your assembled message, and empty text with a redacted payload means withheld reasoning.
+
+`StreamAccumulator` gives you `process(event)`, `build() -> Message`, `usage()`, and `peek_parts()`.
+
+`StreamStopReason` covers `ToolCall`, `MaxTokens`, `StopSequence`, and `EndTurn`. `from_api_str` maps provider spellings, and `should_continue_tool_loop()` is true only for `ToolCall`.
+
+`Usage { input_tokens, output_tokens, cached_input_tokens }` adds `total_tokens()`, where the cached share is a subset of input, and `with_cached_input(n)` attaches it as of 0.4.0.
+
+`StreamError::InvalidToolInputJson` is your accumulator's only error.
+
+## Behavior notes
+
+Treat the lifecycle order as a contract: `MessageStart → (PartStart → deltas → PartStop)* → MessageDelta → MessageStop`.
+
+Expect never a synthetic `MessageStop` on failure, because its absence is the truncation signal.
+
+Routing keys on the index and lane-kind pair, since indices are reused across text, thinking, and tool lanes on some wires.
+
+Empty tool input becomes `{}`. Lanes still open at `build()` are dropped, so a thinking lane you never closed flushes nothing.
 
 Deep dive: [Stream events](/core-data/stream-events/).

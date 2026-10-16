@@ -1,20 +1,37 @@
 ---
-title: "`src/tool/builtin/search.rs` + `search/` — the search tool family [feature: search_tools]"
+title: "src/tool/builtin/search.rs"
+sidebar:
+  order: 40
 ---
 
+This file and its `search/` directory hold four tools over one seam: `GlobTool`, `GrepTool`, `CodeSearchTool`, and `TreeTool`. They register as `Glob`, `Grep`, `CodeSearch`, and `Tree` in CamelCase since 0.4.0, and they sit behind the `search_tools` feature.
 
-Four tools over one seam: `GlobTool`, `GrepTool`, `CodeSearchTool`, `TreeTool` — registering as `Glob`, `Grep`, `CodeSearch`, `Tree` (CamelCase, 0.4.0) — all generic over `SearchSource`, with `FsSearchSource` as the shipped filesystem implementation. The seam exists so a remote tree source (a GitHub tree at a pinned revision) can serve the same tools unchanged. Submodules: `walk.rs` (the ignore-crate walker), `content.rs` (the shared `SearchJob` engine), `glob.rs` / `grep.rs` / `code_search.rs` / `tree.rs` (the tools), `output.rs` (rendering + the spill), `regex_cache.rs` (the process-global bounded LRU of compiled patterns), `resolve.rs` (lexical root resolution).
+All four are generic over `SearchSource`, and `FsSearchSource` ships as the filesystem implementation. The seam exists so a remote tree source, such as a GitHub tree at a pinned revision, can serve your same tools unchanged.
 
-**Key items**
+The submodules split the work. `walk.rs` wraps the ignore-crate walker, and `content.rs` holds the shared `SearchJob` engine.
 
-- Gitignore-aware walking: `.gitignore` inside git work trees, custom names `.loopctlignore` **and** `.dchignore` applied regardless of git, and an always-exclude list (`target/`, `node_modules/`, `.git/`, `__pycache__/`, …) that prunes even in non-git trees — directory nodes included.
-- Content search: binary sniffing (extension list + NUL/control ratio), a 1 MiB per-file read ceiling, per-file and global match caps, include/exclude globs; patterns served from the LRU cache (case-folding folded into the key idempotently).
-- Output shaping: oversized results spill to an owner-only, exclusively-created file under the context temp dir with a ~10 KiB preview and a Read-tool pointer (chunks bounded by the Read tool's own ceiling, so the pointer never names a file Read would refuse); inline truncation is the degrade path.
+The tools themselves live in `glob.rs`, `grep.rs`, `code_search.rs`, and `tree.rs`. `output.rs` does rendering plus the spill, `regex_cache.rs` keeps the process-global bounded LRU of compiled patterns, and `resolve.rs` resolves lexical roots.
 
-**Behavior notes**
+## Key items
 
-- Roots resolve lexically against the context cwd (no filesystem probing, no tilde expansion); URL-shaped roots are `InvalidInput`s redirecting to a filesystem path.
-- A present-but-wrong-typed field is an `InvalidInput` naming the field and expected type — never a silent default.
-- Explicit registration only; `default = []` unchanged.
+Walking is gitignore-aware. `.gitignore` applies inside git work trees, and the custom names `.loopctlignore` and `.dchignore` apply regardless of git.
 
-Deep dive: [Tools](/core-data/tools/) — the builtin families table.
+An always-exclude list covers `target/`, `node_modules/`, `.git/`, and `__pycache__/`, and it prunes even in your non-git trees, with directory nodes included.
+
+Content search sniffs binaries through an extension list plus a NUL and control ratio, and it enforces a 1 MiB per-file read ceiling. Per-file and global match caps apply, and include and exclude globs narrow the walk.
+
+Your patterns are served from the LRU cache, where case-folding is folded into the key idempotently.
+
+Oversized results spill to an owner-only, exclusively-created file under the context temp dir, and you get a roughly 10 KiB preview plus a Read-tool pointer.
+
+Those chunks are bounded by the Read tool's own ceiling, so the pointer never names a file your Read tool would refuse. Inline truncation is the degrade path.
+
+## Behavior notes
+
+Roots resolve lexically against your context cwd, with no filesystem probing and no tilde expansion. A URL-shaped root is an `InvalidInput` that redirects you to a filesystem path.
+
+A present-but-wrong-typed field is an `InvalidInput` naming the field and the expected type, never a silent default.
+
+Registration is explicit only, and `default = []` is unchanged.
+
+For the deep dive, see the builtin families table in [Tools](/core-data/tools/).

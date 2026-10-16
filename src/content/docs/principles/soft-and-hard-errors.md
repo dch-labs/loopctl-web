@@ -1,30 +1,44 @@
 ---
-title: "Soft and hard errors — tell the model, or end the run"
+title: "Soft and hard errors"
 sidebar:
   order: 4
 ---
 
+When something fails inside your agent, there are exactly two places the failure can go:
 
-When something fails inside an agent, there are exactly two places the failure can go:
+- **Soft**: it becomes a message your model reads, and your run continues.
 
-- **Soft** — it becomes a *message the model reads*, and the run continues.
-- **Hard** — it becomes a `LoopError` returned to *your code*, and the run ends.
+- **Hard**: it becomes a `LoopError` returned to your code, and your run ends.
 
-Which one to pick is the single most consequential error-design decision in an agent framework, and loopctl answers it with a principle: **the model is a collaborator that can read and adapt — most failures are information for it, not emergencies for you.** This page explains the principle, where loopctl draws the line, and what the choice costs.
+Which one to pick is the most consequential error-design decision in your agent framework.
 
----
+loopctl answers it with a principle: your model is a collaborator that can read and adapt, so most failures are information for it.
+
+They are not emergencies for you. This page explains the principle, where loopctl draws the line, and what your choice costs.
 
 ## The failure that teaches the pattern
 
-A classic first agent looks like this: the model asks to read `src/mian.rs` (a typo). The tool call fails. The program propagates the error. The run crashes.
+A classic first agent looks like this: your model asks to read `src/mian.rs` (a typo). The tool call fails. Your program propagates the error. The run crashes.
 
-Now watch the same moment with soft errors: the tool result comes back as a message — *"tool call failed: file `src/mian.rs` not found"* — and the model reads it, says "oops," and asks for `src/main.rs`. The run succeeds, and nobody was paged.
+Now watch your same moment with soft errors. The tool result comes back as a message: *"tool call failed: file `src/mian.rs` not found"*.
 
-The model misspells paths, guesses at argument shapes, asks for tools that don't exist, and sends queries that time out — *constantly*, because it is guessing its way through your program's interface. Each of those is a normal, expected, recoverable moment. Crashing on them means crashing on the normal case. So: **if the model could plausibly read the failure and change its plan, the failure is soft.**
+Your model reads it, says "oops," and asks for `src/main.rs`. The run succeeds, and nobody was paged.
 
-Hard errors are reserved for the cases where continuing would be pointless or impossible: the network is gone, the context cannot fit at all, the model is stuck in a [detected loop](/safety/loop-detection/), the user pressed Ctrl-C. Nothing the model *reads* will fix those — so it never sees them; your code does, as a typed `LoopError`.
+Your model misspells paths, guesses at argument shapes, asks for tools that do not exist, and sends queries that time out.
 
-The whole philosophy in one picture — including the escalation path that keeps softness from becoming a trap:
+It does this constantly, because it is guessing its way through your program's interface.
+
+Each of those is a normal, expected, recoverable moment for you, and crashing on them means crashing on the normal case.
+
+So: **if your model could plausibly read the failure and change its plan, the failure is soft.**
+
+Hard errors are reserved for cases where continuing would be pointless or impossible: the network is gone, or your context cannot fit at all.
+
+Or your model is stuck in a [detected loop](/safety/loop-detection/), or your user pressed Ctrl-C.
+
+Nothing your model reads will fix those, so it never sees them. Your code does, as a typed `LoopError`.
+
+The whole philosophy in one picture, including the escalation path that keeps your softness from becoming a trap:
 
 ```mermaid
 flowchart TD
@@ -39,8 +53,6 @@ flowchart TD
     HARD --> FIN["finalize(): coherent prefix salvaged<br/>(completed turns commit), run recorded,<br/>Err returns to YOUR code"]
     HARD2 --> FIN
 ```
-
----
 
 ## The two channels, side by side
 
@@ -67,30 +79,43 @@ Everything the dispatcher can produce lands on one side deliberately:
 | Loop / convergence stop | hard | the model already proved it won't adapt |
 | Recovery retries past the ceiling (5) | hard | the model's retries aren't converging; stop wasting tokens |
 
-Read the two columns of "why" and the rule falls out: **soft failures are ones the model's next turn can act on; hard failures are ones no next turn can save.**
+Read the two columns of "why" and the rule falls out for you: **soft failures are ones your model's next turn can act on.**
 
-> **The no-panic promise is this principle taken to the limit.** The crate compiles with `panic = "deny"` for itself, and a tool that panics anyway is *caught at the dispatch boundary* and converted to a soft error. A crashing tool becomes one more piece of information in the conversation instead of a dead process.
+Hard failures are ones no next turn can save.
 
----
+**The no-panic promise is this principle taken to the limit.** Your crate compiles with `panic = "deny"` for itself. A tool that panics anyway is caught at the dispatch boundary.
 
-## What softness costs — and what pays for it
+It is converted to a soft error. A crashing tool of yours becomes one more piece of information in the conversation instead of a dead process.
 
-Soft errors are permissive by design, and a permissive system can be *trapped* by it: a model that responds to "file not found" by asking for the same missing file, again and again, politely reading its own failure every turn. Every soft error is also an invitation to loop.
+## What softness costs, and what pays for it
 
-That is not a flaw in the principle; it is the boundary condition that shapes the rest of the safety stack. loopctl keeps errors soft *because* separate systems watch for the pathological consequences:
+Soft errors are permissive by design, and a permissive system can be trapped by its own permissiveness.
 
-- The [loop detector](/safety/loop-detection/) catches identical calls returning identical failures — the "model ignoring its errors" case — and stops the run at the hard layer.
-- [Convergence detection](/safety/convergence/) catches the answer-side version (near-identical final replies).
-- The [recovery](/safety/reflection/) layer adds memory between "error seen" and "retry blindly" — analyze, correct, back off.
-- Circuit breakers ([fallback](/safety/fallback/), [tool health](/safety/tool-health/)) turn *sustained* soft failure into temporary refusal — still soft, still model-visible.
+Picture a model of yours that responds to "file not found" by asking for the same missing file again and again.
 
-The clean way to hold the whole design in your head:
+It politely reads its own failure every turn. Every soft error is also an invitation to loop.
 
-> **Soft errors handle the *expected* failure; the safety systems handle the *repeated* failure.**
+That is not a flaw in the principle. It is the boundary condition that shapes the rest of your safety stack.
+
+loopctl keeps errors soft because separate systems watch for the pathological consequences:
+
+- Your [loop detector](/safety/loop-detection/) catches identical calls returning identical failures, which is the "model ignoring its errors" case.
+
+- It stops your run at the hard layer. [Convergence detection](/safety/convergence/) catches the answer-side version: near-identical final replies.
+
+- Your [recovery](/safety/reflection/) layer adds memory between "error seen" and "retry blindly": analyze, correct, back off.
+
+- Your circuit breakers ([fallback](/safety/fallback/), [tool health](/safety/tool-health/)) turn sustained soft failure into temporary refusal.
+
+- It stays soft and model-visible for you.
+
+The clean way to hold the whole design in your head: **soft errors handle the *expected* failure.**
+
+Your safety systems handle the *repeated* failure.
 
 ## The exact words the model reads
 
-Soft errors are text the model will *reason about* — so their wording is part of the design. The actual shapes:
+Soft errors are text your model will reason about, so their wording is part of your design. The actual shapes:
 
 | Producer | Result text (shape), `is_error: true` |
 |---|---|
@@ -103,11 +128,15 @@ Soft errors are text the model will *reason about* — so their wording is part 
 | Hook veto | the hook's own reason text |
 | Recovery gives up | the **original** failing result, verbatim — analysis never rewrites history |
 
-Each string is written to be *acted on*: it names the thing that failed and, where possible, the alternatives. A stack trace is none of that; a phrase like "did you mean" is.
+Each string is written to be acted on: it names the thing that failed and, where possible, the alternatives you offer.
+
+A stack trace is neither of those, and a phrase like "did you mean" is.
 
 ## The recovery ceiling, precisely
 
-The retry machinery around soft errors has one number that overrides everything: `MAX_RECOVERY_ATTEMPTS = 5`. How it actually counts:
+Your retry machinery around soft errors has one number that overrides everything: `MAX_RECOVERY_ATTEMPTS = 5`.
+
+Here is how it actually counts for you:
 
 ```text
 attempt 0  = the original call (failed)
@@ -115,41 +144,61 @@ attempt 1..5 = retries granted by the recovery strategy
 attempt 6 would be the 6th total call → ToolRecoveryExhausted { attempts: 6 }
 ```
 
-The ceiling is enforced **twice, deliberately**: the strategy receives `max_attempts = 5` as an input to its decisions, *and* the driver independently stops any strategy that keeps saying "retry" past it. A misbehaving custom strategy cannot turn "soft errors plus retries" into an infinite loop — the hard channel catches what the soft channel's judgment misses. (Hence the error payload's quirk: `attempts` counts total *calls*, so 6 means "original plus 5 retries.")
+Your ceiling is enforced **twice, deliberately**. Your strategy receives `max_attempts = 5` as an input to its decisions.
 
-One more precision: when recovery answers `Skip`, `AskUser`, or `Fail`, the *original* failing result is returned soft — not the reflector's analysis, not a summary. The model sees exactly what went wrong, unedited; any correction is applied to the *retry's* input, never to the record of what happened.
+And your driver independently stops any strategy that keeps saying "retry" past it.
+
+A misbehaving custom strategy of yours cannot turn "soft errors plus retries" into an infinite loop.
+
+Your hard channel catches what your soft channel's judgment misses. Hence the error payload's quirk: `attempts` counts total calls.
+
+So 6 means "original plus 5 retries."
+
+One more precision for you: when recovery answers `Skip`, `AskUser`, or `Fail`, your original failing result is returned soft.
+
+It is not the reflector's analysis and not a summary. Your model sees exactly what went wrong, unedited.
+
+Any correction is applied to your retry's input, never to the record of what happened.
 
 ## Where each hard error is born
 
-The hard channel is small enough to map completely — every `LoopError` that ends a run through this philosophy, and the single spot it comes from:
+Your hard channel is small enough to map completely. Here is every `LoopError` that ends your run through this philosophy, and the single spot it comes from:
 
 | Error | Born at |
 |---|---|
 | `Cancelled` | any cancellation checkpoint ([the signal](/engine/cancellation/)) |
 | `ContextExceeded` | compaction overflow, or the no-progress guard inside the compaction feed |
 | `LoopDetected` | the loop detector's stop threshold, or convergence with action `Stop` |
-| `UserInputRequired` | convergence with action `AskUser` — the one "hard" error that asks for a human, not a fix |
+| `UserInputRequired` | convergence with action `AskUser`, the one "hard" error that asks for a human, not a fix |
 | `ToolRecoveryExhausted` | the ceiling above |
 | `FallbackExhausted` | every model in the chain spent while the breaker's cooldown runs |
 
-Note what's *absent*: no tool-level error appears here. A tool cannot end a run — ever. The engine decides when runs end; tools only contribute information.
+Note what is absent from your map: no tool-level error appears here. A tool cannot end your run, ever.
 
----
+Your engine decides when your runs end, and your tools only contribute information.
 
 ## Writing your own tools with the principle
 
 When your tool's function fails, you choose the channel too:
 
-- Return `Err(...)` from `Tool::call` — or a `ToolOutput` marked error — and you stay **soft**: the text reaches the model. Do this for everything the model could fix: bad paths, invalid arguments, upstream 404s, empty results.
-- There is no tool-level way to force a hard error, and that is deliberate — the engine decides when runs end, not tools. (If a failure truly must stop the world, the *host* observes it — [observers](/extensions/observers/) and [hooks](/extensions/hooks/) can fire the cancel signal.)
+- Return `Err(...)` from `Tool::call`, or a `ToolOutput` marked error, and you stay **soft**: the text reaches your model.
 
-And one craft rule: **write error text for the model, not for a log.** "File `/etc/osts` not found; did you mean `/etc/hosts`?" is something the model can act on. A stack trace is not.
+- Do this for everything your model could fix: bad paths, invalid arguments, upstream 404s, empty results.
 
----
+- There is no tool-level way to force a hard error, and that is deliberate: your engine decides when your runs end, not your tools.
+
+- If a failure truly must stop your world, your host observes it, and [observers](/extensions/observers/) and [hooks](/extensions/hooks/) can fire the cancel signal.
+
+And one craft rule for you: **write error text for your model, not for a log.**
+
+"File `/etc/osts` not found. Did you mean `/etc/hosts`?" is something your model can act on. A stack trace is not.
 
 ## Related pages
 
-- [Errors](/core-data/errors/) — every `LoopError` variant and its meaning.
-- [Tools](/core-data/tools/) — the tool-side surface of this split.
-- [Loop detection](/safety/loop-detection/) — what catches soft errors being ignored.
-- [Circuit breakers](/principles/circuit-breakers/) — refusing *reliably* failing things, softly.
+- [Errors](/core-data/errors/): every `LoopError` variant and its meaning.
+
+- [Tools](/core-data/tools/): the tool-side surface of your split.
+
+- [Loop detection](/safety/loop-detection/): what catches your soft errors being ignored.
+
+- [Circuit breakers](/principles/circuit-breakers/): refusing reliably failing things, softly.

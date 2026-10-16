@@ -1,20 +1,29 @@
 ---
-title: "`src/middleware/shield.rs` — `SafetyShieldMiddleware` [feature: tool_shield]"
+title: "src/middleware/shield.rs"
 ---
 
+This file holds your pipeline wiring for tool safety shields, under the `tool_shield` feature. Read it before you decide where the shield sits in your chain, because position changes what it can see.
 
-The pipeline wiring for tool safety shields.
+## Key items
 
-**Key items**
+You install it with `SafetyShieldMiddleware::new(shield: Arc<dyn ToolSafetyShield>)`, which registers under the name `"safety_shield"`.
 
-- `SafetyShieldMiddleware::new(shield: Arc<dyn ToolSafetyShield>)` — name `"safety_shield"`; maintains the last-20 watched-calls window that becomes `ShieldContext::recent_calls`.
+It maintains your last-20 watched-calls window, and that window becomes `ShieldContext::recent_calls` when the shield runs.
 
-**Behavior notes**
+## Behavior notes
 
-- `Block` → soft error `"blocked by safety shield: <reason>"`, zero duration — run continues. `Warn` → tracing warning, call proceeds. `Allow` → proceed.
-- Every admitted watched call is recorded via `shield.record_invocation` (blocked attempts never are; an inner cache-served repeat still is).
-- Install order: **after** renaming middleware (evaluate the executed name), **before** memoize (score repetitions even on cache hits), **exactly once**.
-- Repeated blocks count as failures toward the tool's breaker — once open, the engine's gate refuses first and the model sees "temporarily unavailable".
-- An empty watched set skips the middleware entirely.
+A `Block` verdict reaches your model as the soft error `"blocked by safety shield: <reason>"` with zero duration, so your run continues.
+
+A `Warn` verdict logs a tracing warning and lets your call proceed, and an `Allow` verdict simply proceeds.
+
+Every admitted watched call is recorded through `shield.record_invocation`, so your shield can score repetition. Blocked attempts never enter that record.
+
+An inner cache-served repeat still counts, because you sit before the cache.
+
+Your install order carries three rules: place it after renaming middleware so it evaluates the executed name, and before memoize so it scores repetitions even on cache hits, exactly once.
+
+Repeated blocks count as failures toward your tool's breaker. Once the breaker opens, the engine's gate refuses first and your model sees "temporarily unavailable".
+
+Leave your watched set empty and you skip this middleware entirely, at no cost.
 
 Deep dive: [The shield](/safety/tool-shield/).

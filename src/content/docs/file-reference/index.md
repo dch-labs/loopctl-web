@@ -1,31 +1,40 @@
 ---
-title: "File reference — one page per source file"
+title: "File reference, one page per source file"
 sidebar:
   order: 0
 ---
 
+This section covers every file in `loopctl/src/`, the companion crates under `crates/`, and the supporting trees, all in plain words. Those companions are `derive`, `sqlite`, `hnsw`, `client`, and `vector`, which moved there in 0.4.0.
 
-Every file in `loopctl/src/`, the companion crates under `crates/` (`derive`, `sqlite`, `hnsw`, `client`, `vector` — moved there in 0.4.0), and the supporting trees, in plain words. Each page: what the file is, its key items, its behavior notes, and a link to the deep-dive article.
+Each page tells you what the file is, lists its key items, records its behavior notes, and links to the deep-dive article.
 
-Use this when you're *in the code* and want to know what the file in front of you does — or when you're looking for *where* something lives.
+You reach for this section when you sit in the code and want to know what the file in front of you does. It is also how you find where something lives.
 
-## The crate root & foundations
+You open a page here to learn what a file owns, which items it exports, and how it behaves. Each page follows the same shape, so you can skim two dozen of them and still know where you are.
+
+Every page keeps the same three sections. The first section names what the file holds and what it sets up for you. The second records how it handles failures, cancel, and configuration, which is where the surprises live.
+
+Read those notes before you change the file. They tell you what the code assumes, and they mean what they say: a page that says a lock is never held across a call means the authors checked it.
+
+The tables below gather those pages by area, and every row links to the deep dive that explains the reasoning.
+
+## The crate root and foundations
 
 | File | One line |
 |---|---|
-| [`lib.rs`](/file-reference/lib/) | Crate root — module wiring and the feature gates. |
+| [`lib.rs`](/file-reference/lib/) | Crate root: module wiring and the feature gates. |
 | [`message.rs`](/file-reference/message/) | The conversation data model: `Message`, parts (incl. signed thinking), roles, tool content, retention. |
-| [`error.rs`](/file-reference/error/) | `LoopError` — the one error enum, plus the lock-poison policy. |
-| [`config.rs`](/file-reference/config/) | `SessionConfig` — system prompt, context window, compaction knobs. |
-| [`cancel.rs`](/file-reference/cancel/) | `CancelSignal` — cooperative cancellation. |
+| [`error.rs`](/file-reference/error/) | `LoopError`: the one error enum, plus the lock-poison policy. |
+| [`config.rs`](/file-reference/config/) | `SessionConfig`: system prompt, context window, compaction knobs. |
+| [`cancel.rs`](/file-reference/cancel/) | `CancelSignal`: cooperative cancellation. |
 | [`capabilities.rs`](/file-reference/capabilities/) | Small traits asking "does this bundle have X?" |
-| [`contributor.rs`](/file-reference/contributor/) | `ContextContributor` — per-turn message injection. |
+| [`contributor.rs`](/file-reference/contributor/) | `ContextContributor`: per-turn message injection. |
 | [`numeric.rs`](/file-reference/numeric/) | Internal safe-math helpers (not public). |
-| [`managers.rs`](/file-reference/managers/) | `LoopManagers` — the bundle of optional components (ask resolver, clock/id seams). |
+| [`managers.rs`](/file-reference/managers/) | `LoopManagers`: the bundle of optional components (ask resolver, clock/id seams). |
 | [`presets.rs`](/file-reference/presets/) | Constrained/Frontier profiles + `GoalReminder` (Constrained is the default wiring since 0.4.0). |
-| [`budget.rs`](/file-reference/budget/) | `BudgetGate` — soft/hard spend lines consulted before each request. |
-| [`ask.rs`](/file-reference/ask/) | The external-approver channel — park a run at a hook's ask, resume on the answer. |
-| [`determinism.rs`](/file-reference/determinism/) | `Clock`/`IdGen`/`Rng` seams — same run, same bytes. |
+| [`budget.rs`](/file-reference/budget/) | `BudgetGate`: soft/hard spend lines consulted before each request. |
+| [`ask.rs`](/file-reference/ask/) | The external-approver channel: park a run at a hook's ask, resume on the answer. |
+| [`determinism.rs`](/file-reference/determinism/) | `Clock`/`IdGen`/`Rng` seams: same run, same bytes. |
 | [`manifest.rs`](/file-reference/manifest/) | The `loop.yaml` model: parse → merge → interpolate → validate → hash [feature: manifest]. |
 
 ## Talking to models
@@ -33,9 +42,9 @@ Use this when you're *in the code* and want to know what the file in front of yo
 | File | One line |
 |---|---|
 | [`api.rs`](/file-reference/api/) | The `ApiClient` trait and request/response carriers. |
-| [`api/error.rs`](/file-reference/api-error/) | `ApiError` + `ErrorCode` — provider errors classified. |
+| [`api/error.rs`](/file-reference/api-error/) | `ApiError` + `ErrorCode`: provider errors classified. |
 | [`stream.rs`](/file-reference/stream/) | Stream events, deltas, stop reasons, the accumulator. |
-| [`stream/handler.rs`](/file-reference/stream-handler/) | `StreamHandler` — retries, timeouts, fallback. |
+| [`stream/handler.rs`](/file-reference/stream-handler/) | `StreamHandler`: retries, timeouts, fallback. |
 | [`stream/rate_limit.rs`](/file-reference/stream-rate-limit/) | Token-bucket rate limiter. |
 | [`structured.rs`](/file-reference/structured/) | Structured (JSON) output: trait, formats, constraints. |
 | [`provider.rs`](/file-reference/provider/) | Provider profiles + shared HTTP plumbing. |
@@ -43,7 +52,7 @@ Use this when you're *in the code* and want to know what the file in front of yo
 | [`provider/anthropic.rs`](/file-reference/provider-anthropic/) | Anthropic client (base of Z.ai path). |
 | [`provider/gemini.rs`](/file-reference/provider-gemini/) | Gemini client. |
 | [`provider/bedrock.rs`](/file-reference/provider-bedrock/) | AWS Bedrock client (signing, two wire paths). |
-| [`provider/embeddings.rs`](/file-reference/provider-embeddings/) | `OllamaEmbedder` + `OpenAiEmbedder` — the real `EmbeddingProvider` backends. |
+| [`provider/embeddings.rs`](/file-reference/provider-embeddings/) | `OllamaEmbedder` + `OpenAiEmbedder`: the real `EmbeddingProvider` backends. |
 | [`provider/sse.rs`](/file-reference/provider-sse/) | The SSE reader shared by the clients. |
 | [`provider/grammar.rs`](/file-reference/provider-grammar/) | Grammar constraints for local samplers. |
 
@@ -52,10 +61,10 @@ Use this when you're *in the code* and want to know what the file in front of yo
 | File | One line |
 |---|---|
 | [`engine.rs`](/file-reference/engine/) / [`engine/core.rs`](/file-reference/engine-core/) | Module roots (re-exports). |
-| [`engine/core/machine.rs`](/file-reference/engine-machine/) | **The brain** — the pure state machine. |
+| [`engine/core/machine.rs`](/file-reference/engine-machine/) | **The brain**: the pure state machine. |
 | [`engine/core/lifecycle.rs`](/file-reference/engine-lifecycle/) | `Loop` trait, `Run`/`Session`/`Turn`, `RunConfig`. |
 | [`engine/core/outcome.rs`](/file-reference/engine-outcome/) | Outcome → error translation. |
-| [`engine/bare.rs`](/file-reference/engine-bare/) | **The hands** — the driver loop and its handlers. |
+| [`engine/bare.rs`](/file-reference/engine-bare/) | **The hands**: the driver loop and its handlers. |
 | [`engine/bare/llm_turn.rs`](/file-reference/engine-bare-llm-turn/) | Building and sending one model request. |
 | [`engine/bare/dispatch.rs`](/file-reference/engine-bare-dispatch/) | The tool-call pipeline and recovery. |
 | [`engine/bare/compact.rs`](/file-reference/engine-bare-compact/) | The driver side of compaction. |
@@ -65,19 +74,19 @@ Use this when you're *in the code* and want to know what the file in front of yo
 | [`engine/bare/model_switch.rs`](/file-reference/engine-bare-model-switch/) | Atomic mid-session model change. |
 | [`engine/bare/tests.rs`](/file-reference/engine-bare-tests/) | The engine's own test suite (in-file). |
 
-## Tools & safety
+## Tools and safety
 
 | File | One line |
 |---|---|
 | [`tool.rs`](/file-reference/tool/) | The `Tool` trait, outputs, errors, contexts, retention classes. |
-| [`tool/builtin/read.rs`](/file-reference/tool-builtin-read/) | `ReadTool` + `ContentSource` — line-aware reads over any source [feature: builtin_tools]. |
+| [`tool/builtin/read.rs`](/file-reference/tool-builtin-read/) | `ReadTool` + `ContentSource`: line-aware reads over any source [feature: builtin_tools]. |
 | [`tool/builtin/fs.rs`](/file-reference/tool-builtin-fs/) | `Write`/`Edit`/`MultiEdit`/`FileViewer` + `FileSource` [feature: fs_tools]. |
 | [`tool/builtin/search.rs`](/file-reference/tool-builtin-search/) | `Glob`/`Grep`/`CodeSearch`/`Tree` over a `SearchSource` [feature: search_tools]. |
 | [`tool/builtin/shell.rs`](/file-reference/tool-builtin-shell/) | `Shell` + `Jobs` over a `ShellBackend` [feature: shell_tools]. |
-| [`tool/builtin/think.rs`](/file-reference/tool-builtin-think/) | `ThinkTool` — the planning scratchpad (`Think` since 0.4.0) [feature: builtin_tools]. |
+| [`tool/builtin/think.rs`](/file-reference/tool-builtin-think/) | `ThinkTool`: the planning scratchpad (`Think` since 0.4.0) [feature: builtin_tools]. |
 | [`tool/registry.rs`](/file-reference/tool-registry/) | `ToolRegistry` + `FnTool`. |
-| [`tool/permission.rs`](/file-reference/tool-permission/) | `PermissionCheck` + `GateDecision` — the decision type and its audit record. |
-| [`tool/grant.rs`](/file-reference/tool-grant/) | `GrantStore` — persisted approvals with narrow scopes [feature: file_grants]. |
+| [`tool/permission.rs`](/file-reference/tool-permission/) | `PermissionCheck` + `GateDecision`: the decision type and its audit record. |
+| [`tool/grant.rs`](/file-reference/tool-grant/) | `GrantStore`: persisted approvals with narrow scopes [feature: file_grants]. |
 | [`tool/health.rs`](/file-reference/tool-health/) | Per-tool stats and circuit breakers. |
 | [`tool/shield.rs`](/file-reference/tool-shield/) | The safety shield trait + `UnixShield`. |
 | [`middleware.rs`](/file-reference/middleware/) | The pipeline core: trait, context, builder. |
@@ -98,31 +107,31 @@ Use this when you're *in the code* and want to know what the file in front of yo
 | [`reflection/llm.rs`](/file-reference/reflection-llm/) | The model-powered reflector. |
 | [`reflection/backoff.rs`](/file-reference/reflection-backoff/) | Exponential backoff strategy. |
 
-## Watching & extending
+## Watching and extending
 
 | File | One line |
 |---|---|
 | [`observer.rs`](/file-reference/observer/) + [`observer/context.rs`](/file-reference/observer-context/) | The `LoopObserver` trait + event payloads. |
-| [`observer/hub.rs`](/file-reference/observer-hub/) | `EventHub` — one observer feeding a broadcast `LoopEvent` stream. |
+| [`observer/hub.rs`](/file-reference/observer-hub/) | `EventHub`: one observer feeding a broadcast `LoopEvent` stream. |
 | [`hooks.rs`](/file-reference/hooks/) + [`hooks/context.rs`](/file-reference/hooks-context/) | The `Hook` trait + contexts. |
 | [`hooks/executor.rs`](/file-reference/hooks-executor/) | First-block-wins execution. |
 | [`hooks/builtin/*`](/file-reference/hooks-builtin/) | AutoCommit, Blocklist, Confirmation, Logging. |
 | [`memory.rs`](/file-reference/memory/) + [`entry.rs`](/file-reference/memory-entry/) + [`builtin.rs`](/file-reference/memory-builtin/) + [`score.rs`](/file-reference/memory-builtin/) | The memory trait, entries, in-memory store, shared retrieval scorer. |
-| [`memory/file.rs`](/file-reference/memory-file/) | `FileMemoryStore` — JSONL persistence that survives a restart (`file_memory`). |
-| [`memory/trajectory.rs`](/file-reference/memory-trajectory/) + [`memory/trajectory/sink.rs`](/file-reference/memory-trajectory/) | `TrajectoryObserver` — each run as a serializable record (memory + JSONL ledger). |
-| [`memory/consolidate.rs`](/file-reference/memory-consolidate/) | Quality scoring, category-weighted decay, duplicate merging — the consolidation primitives. |
+| [`memory/file.rs`](/file-reference/memory-file/) | `FileMemoryStore`: JSONL persistence that survives a restart (`file_memory`). |
+| [`memory/trajectory.rs`](/file-reference/memory-trajectory/) + [`memory/trajectory/sink.rs`](/file-reference/memory-trajectory/) | `TrajectoryObserver`: each run as a serializable record (memory + JSONL ledger). |
+| [`memory/consolidate.rs`](/file-reference/memory-consolidate/) | Quality scoring, category-weighted decay, duplicate merging: the consolidation primitives. |
 | [`memory/extractor.rs`](/file-reference/memory-extractor/) | Mines learned memories from recorded runs (`MemoryExtractor`). |
 | [`memory/vector.rs`](/file-reference/memory-vector/) | `EmbeddingProvider` + `VectorIndex` primitives and reference impls (`vector_index`). |
-| [`memory/vector_memory.rs`](/file-reference/memory-vector-memory/) | `VectorMemoryStore` — the semantic `LoopMemory` backend + the golden-set bar (`vector_memory`). |
-| [`memory/search_tool.rs`](/file-reference/memory-search-tool/) | `SearchMemoriesTool` — the model-callable memory search. |
+| [`memory/vector_memory.rs`](/file-reference/memory-vector-memory/) | `VectorMemoryStore`: the semantic `LoopMemory` backend + the golden-set bar (`vector_memory`). |
+| [`memory/search_tool.rs`](/file-reference/memory-search-tool/) | `SearchMemoriesTool`: the model-callable memory search. |
 | [`compact.rs`](/file-reference/compact/) + [`types.rs`](/file-reference/compact-types/) + [`truncating.rs`](/file-reference/compact-truncating/) | Compaction manager, outcome types, truncator. |
-| [`compact/qa_summarizer.rs`](/file-reference/compact-qa-summarizer/) | `QaSummarizer` — the three-step LLM compactor. |
-| [`compact/structured_summarizer.rs`](/file-reference/compact-structured-summarizer/) | `StructuredSummarizer` — sectioned summaries with stable headings. |
-| [`compact/fallback.rs`](/file-reference/compact-fallback/) | `FallbackCompactor` — the never-fail chain with `TerminalCapture`. |
+| [`compact/qa_summarizer.rs`](/file-reference/compact-qa-summarizer/) | `QaSummarizer`: the three-step LLM compactor. |
+| [`compact/structured_summarizer.rs`](/file-reference/compact-structured-summarizer/) | `StructuredSummarizer`: sectioned summaries with stable headings. |
+| [`compact/fallback.rs`](/file-reference/compact-fallback/) | `FallbackCompactor`: the never-fail chain with `TerminalCapture`. |
 | [`compact/demote.rs`](/file-reference/compact-demote/) | `DemotionSink` + `MemoryDemotionSink` + `render_evicted`. |
-| [`compact/rolling.rs`](/file-reference/compact-rolling/) | `RollingCompactor` — the maintenance-cadence compactor. |
+| [`compact/rolling.rs`](/file-reference/compact-rolling/) | `RollingCompactor`: the maintenance-cadence compactor. |
 
-## Integration & support
+## Integration and support
 
 | File | One line |
 |---|---|
@@ -131,8 +140,8 @@ Use this when you're *in the code* and want to know what the file in front of yo
 | [`mcp/convert.rs`](/file-reference/mcp-convert/) | The type conversion layer between worlds. |
 | [`testing.rs`](/file-reference/testing/) | Mocks and fixtures. |
 | [`crates/derive/src/*`](/file-reference/derive-lib/) | The `#[derive(Tool)]` macro crate. |
-| [`crates/sqlite/`](/file-reference/sqlite-crate/) | `loopctl-sqlite` — durable SQLite `LoopMemory` (WAL, FTS5, ranking parity). |
-| [`crates/client/`](/file-reference/client-crate/) | `loopctl-client` — the shared daemon client (UDS REST + SSE, both modes). |
-| [`crates/hnsw/`](/file-reference/hnsw-crate/) | `loopctl-hnsw` — the HNSW `VectorIndex` companion. |
-| [`crates/vector/`](/file-reference/vector-crate/) | `loopctl-vector` — Qdrant + pgvector backends (side workspace). |
+| [`crates/sqlite/`](/file-reference/sqlite-crate/) | `loopctl-sqlite`: durable SQLite `LoopMemory` (WAL, FTS5, ranking parity). |
+| [`crates/client/`](/file-reference/client-crate/) | `loopctl-client`: the shared daemon client (UDS REST + SSE, both modes). |
+| [`crates/hnsw/`](/file-reference/hnsw-crate/) | `loopctl-hnsw`: the HNSW `VectorIndex` companion. |
+| [`crates/vector/`](/file-reference/vector-crate/) | `loopctl-vector`: Qdrant + pgvector backends (side workspace). |
 | [`examples & tests`](/file-reference/examples-tests/) | The runnable tour. |

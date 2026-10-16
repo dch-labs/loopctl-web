@@ -1,0 +1,20 @@
+---
+/**
+ * Knowledge base header brand: the same wordmark as the landing masthead
+ * (src/pages/index.astro) — name and accent dot — so the docs read as the
+ * same site rather than a sub-product with its own title treatment.
+ *
+ * Class names match the landing deliberately. Its styles do not apply here: they
+ * live in that page's <style> block, which Astro scopes to the page's own
+ * elements. docs.css mirrors the values under `html[data-kb]` instead, and both
+ * sides read the same tokens, so each page resolves the brand in its own palette
+ * (cream on the landing, near-white and dim on the docs).
+ */
+const { siteTitleHref } = Astro.locals.starlightRoute;
+---
+
+<div class="site-title brand">
+	<a class="brand-name" href={siteTitleHref} translate="no"
+		>loopctl<span class="brand-dot">.</span></a
+	>
+</div>

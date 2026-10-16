@@ -1,13 +1,12 @@
 ---
-title: "Termination — every way a run can end"
+title: "Termination"
 sidebar:
   order: 7
 ---
 
+A run ends in exactly one of five shapes, with a few new error faces inside them.
 
-A run ends in exactly one of five shapes (with a few new error faces inside them). This page is the complete map: what triggers each ending, the code path it takes, and what state is left behind.
-
----
+This page is your complete map: what triggers each ending, the code path it takes, and what state is left behind for you.
 
 ## The five endings
 
@@ -19,9 +18,11 @@ A run ends in exactly one of five shapes (with a few new error faces inside them
 | **ContextExceeded** | Compaction couldn't shrink enough | `Err(LoopError::ContextExceeded { used, limit })` |
 | **Failed** | Any other error: provider dead, loop detected, recovery exhausted... | `Err(the matching LoopError)` |
 
-Note the retention asymmetry (0.4.0): **`Completed` commits the whole scratchpad**; **`Cancelled` and ordinary failures salvage the coherent prefix** — completed turns commit, the in-flight exchange drops, so an interrupt costs one turn, not the run's conversation; **the `ContextExceeded` family discards the scratchpad whole** — an unshrinkable over-window history must not wedge every future run. One further exception cuts across: a run that compacted mid-run and *then* failed keeps the compacted history (compaction is a commit point; see [the big idea](/start-here/the-big-idea/)).
+Note the retention asymmetry, new in 0.4.0. **`Completed` commits the whole scratchpad.** **`Cancelled` and ordinary failures salvage the coherent prefix**, so completed turns commit and the in-flight exchange drops. That means an interrupt costs you one turn, not the run's conversation.
 
----
+**The `ContextExceeded` family discards the scratchpad whole**, because an unshrinkable over-window history must not wedge every future run you start.
+
+One further exception cuts across all of this. A run that compacted mid-run and then failed keeps the compacted history, because compaction is a commit point. [The big idea](/start-here/the-big-idea/) covers why.
 
 ## The code paths, one by one
 
@@ -45,7 +46,7 @@ next_step(): turns_taken >= policy.max_turns
   → Err(MaxTurnsExceeded { max })
 ```
 
-The check is first in the decision order, so a run at its turn limit never starts one more model call — not even a compaction pass.
+The check is first in the decision order. So a run at your turn limit never starts one more model call, not even a compaction pass.
 
 ### Cancelled
 
@@ -57,11 +58,11 @@ cancel fires → some biased select! returns Err(Cancelled)
   → Err(Cancelled)
 ```
 
-Full story: [cancellation](/engine/cancellation/). The distinction Cancelled-vs-Failed is deliberate — your code can treat a user stop as control flow (`err.is_cancelled()`).
+The full story is in [cancellation](/engine/cancellation/). The distinction between Cancelled and Failed is deliberate, because your code can treat a user stop as control flow through `err.is_cancelled()`.
 
 ### ContextExceeded
 
-Several entrances, one family — and since 0.4.0, one rescue in front of them all:
+You have several entrances here and one family, plus, since 0.4.0, one rescue in front of them all:
 
 ```text
 0) overflow salvage (first rejection only):
@@ -85,7 +86,9 @@ B) no-progress guard:
     window defers and serves instead — only emergency-line stalls die)
 ```
 
-In all, the buffers are left as they were. Full story: [compaction](/engine/compaction/) and [context accounting](/engine/context-accounting/). Whatever still kills the run, the run-end carries `unfinished_input` so a host can offer one-click resubmission.
+In all of these, your buffers are left as they were. The full stories are [compaction](/engine/compaction/) and [context accounting](/engine/context-accounting/).
+
+Whatever still kills your run, the run-end carries `unfinished_input`, so your host can offer one-click resubmission.
 
 ### Failed (everything else)
 
@@ -97,9 +100,7 @@ a handler returns Err (provider, dispatch, loop detected, recovery exhausted,
   → Err(error)
 ```
 
-The `Done` arm defends itself against future unknown outcomes too: a terminal outcome that maps to no error becomes `LoopError::Internal("unmapped terminal outcome")` rather than silently committing as success.
-
----
+The `Done` arm defends itself against future unknown outcomes too. A terminal outcome that maps to no error becomes `LoopError::Internal("unmapped terminal outcome")` rather than silently committing as success on you.
 
 ## What each ending leaves behind
 
@@ -109,7 +110,9 @@ The `Done` arm defends itself against future unknown outcomes too: a terminal ou
 | Cancelled / ordinary failure | + the run's completed turns (salvaged) | in-flight tail dropped | run recorded, `stop_reason: Some(err)` | re-armed |
 | `ContextExceeded` family | unchanged | cleared whole | run recorded, `stop_reason: Some(err)` | re-armed |
 
-The run record always survives — every ending writes its `Run` (with `stop_reason`) into the audit trail, and `on_run_end` always fires (observers see `success: false` and the error text on failures).
+Your run record always survives. Every ending writes its `Run`, with `stop_reason`, into the audit trail.
+
+And `on_run_end` always fires, so your observers see `success: false` and the error text on failures.
 
 ### What observers see, per ending
 
@@ -121,7 +124,9 @@ The run record always survives — every ending writes its `Run` (with `stop_rea
 | ContextExceeded | `success: false` + the error | `on_compaction` if a real pass ran before the failure |
 | Failed | `success: false` + the error | failure-specific: `on_stream_failure`, `on_loop_detected`, `on_fallback`... |
 
-The Cancelled row's "without its post" case is worth flagging for anyone pairing events: a cancellation mid-tool leaves an `on_tool_pre` orphaned by design — the tool was dropped, there is no result to report. Pair by id, and treat an orphaned pre as "cancelled," not "lost."
+The Cancelled row's "without its post" case is worth flagging for anyone pairing events. A cancellation mid-tool leaves an `on_tool_pre` orphaned by design, because the tool was dropped and there is no result to report.
+
+Pair by id, and treat an orphaned pre as cancelled rather than lost.
 
 ### Outcome → error → `stop_reason`, the complete mapping
 
@@ -132,13 +137,13 @@ The Cancelled row's "without its post" case is worth flagging for anyone pairing
 | `Cancelled` | `Cancelled` | `Cancelled` |
 | `Failed { error }` | the error it was born with | that error |
 
-Total and mechanical — and the `Done` arm defends the corner case: a terminal outcome that maps to *no* error becomes `LoopError::Internal("unmapped terminal outcome")` rather than silently committing as success.
+That mapping is total and mechanical, and the `Done` arm defends the corner case. A terminal outcome that maps to no error becomes `LoopError::Internal("unmapped terminal outcome")` rather than silently committing as success.
 
----
+## After a failed run: what now?
 
-## After a failed run — what now?
+Your agent is **immediately reusable**. Your history is clean, the signal is fresh, and your next `run()` starts from the last good state.
 
-The agent is **immediately reusable**: history is clean, the signal is fresh, the next `run()` starts from the last good state. But fix the cause first, or you'll hit the same wall:
+Fix the cause first, or you will hit the same wall:
 
 | You saw | Typical fixes |
 |---|---|
@@ -150,11 +155,15 @@ The agent is **immediately reusable**: history is clean, the signal is fresh, th
 | `ToolRecoveryExhausted` | install a smarter [reflector](/safety/reflection/) or fix the tool |
 | `FallbackExhausted` | wait out the cooldown (default 60s — the next turn probes the primary) or add chain depth |
 
-One more subtle guarantee worth knowing: at the end of **every** run, the engine clears a pending loop-detection stop that the run never fired (e.g. the model crossed the stop threshold on its last call but then went terminal on its own). Without this, the *next* run's first dispatch would be killed by repetitions it never produced. Cross-run detection state is deliberately clean; convergence state deliberately persists (cross-run answer streaks are meaningful for the opt-in `Stop`/`AskUser` actions).
+One more subtle guarantee is worth knowing about your runs. At the end of **every** run, the engine clears a pending loop-detection stop that the run never fired.
 
----
+That happens, for example, when the model crossed the stop threshold on its last call but then went terminal on its own.
+
+Without this, your next run's first dispatch would be killed by repetitions it never produced. Cross-run detection state is deliberately clean.
+
+Convergence state, by contrast, deliberately persists, because cross-run answer streaks are meaningful for the opt-in `Stop` and `AskUser` actions you can wire up.
 
 ## Related pages
 
-- [Errors](/core-data/errors/) — the full `LoopError` table.
-- [The state machine](/engine/state-machine/) — where terminal states come from.
+- [Errors](/core-data/errors/): the full `LoopError` table.
+- [The state machine](/engine/state-machine/): where terminal states come from.
