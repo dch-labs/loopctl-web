@@ -30,7 +30,9 @@ A blank response or an over-budget summary fails the pass the same way, strictly
 
 Your pre-compact hook guidance reaches the prompts through `instructions` and `additional_context`. The previous pass's summary message is filtered out of the transcript so accumulate mode never presents you the same summary twice, and a leading system-role message is pulled back unsummarized.
 
-The split delegates to `TokenSplitter`, which is pair-safe and snaps to an assistant then user transition.
+Since 0.4.1 the recognition is two-armed: exact text equality anywhere, or on the first assistant message alone a strip of exactly the leading summary part. The compaction seam now coalesces your summary into the tail's first assistant message, so the recognition reads the coalesced head.
+
+The split delegates to `TokenSplitter`'s budgeted variant, which is pair-safe and snaps to an assistant then user transition. Its durable pull is budget-bounded since 0.4.1, so `Durable` receipts ride verbatim only while your landing's budget allows, newest first.
 
 Evicted content rides `CompactionOutcome::evicted` for your demotion sink, and the summarizer's own token spend reports per pass through `loopctl.compaction.summarizer.tokens` events.
 

@@ -43,7 +43,7 @@ The resolution rules:
 
 ## The figure — estimate, calibration, anchor
 
-The raw figure is the token counter's estimate of what the wire will carry: conversation + system prompt + tool schemas + this turn's transients. Three corrections sit on top:
+The raw figure is the token counter's estimate of what the wire will carry: conversation + system prompt + tool schemas + this turn's transients. With a [tool selector](../01-core-data/07-tool-selection.md) installed, the schema component is the **advertised subset** (0.4.1): every figure of the upcoming payload counts what the request will carry, and a narrowed surface lets the figure fall below the prior report. Three corrections sit on top:
 
 ### 1. Suppression-aware overhead
 
@@ -58,7 +58,7 @@ When the provider reports real `input_tokens`, the prediction error feeds a roll
 When the provider reports usable `input_tokens`, the figure becomes **`reported_input + calibrated(estimate of the appends since that report)`** — the real number carries the figure; the error surface shrinks from the whole history to the tail. The anchor:
 
 - arms only on non-zero reports (an all-zero backend never anchors — dch's local shape),
-- invalidates wherever the wire changes wholesale (a compaction pass, any model change — a different tokenizer breaks the pairing),
+- invalidates wherever the wire changes wholesale (a compaction pass, any model change — a different tokenizer breaks the pairing; since 0.4.1 also an advertised-surface change, a steering drain that delivered guidance, or a history rewind),
 - ages on the session-wide turn basis (an anchor surviving into later runs reads as aging, not fresh).
 
 With no anchor, the figure is exactly the calibrated estimate — usage-less backends are byte-identical to before. `RunEndContext.context_figure` says which figure drove the last trigger (`source: Anchored | Estimated`, plus the anchor's age in completed turns).
@@ -101,6 +101,8 @@ provider rejects: "prompt too long" (is_context_overflow)
   → a repeat rejection on the spent turn is a genuine misfit:
     Err(ContextExceeded), run-end carries unfinished_input
 ```
+
+The oversized-prompt matcher understands both phrasing families: the hosted providers' spaced phrases (`"context length"`, `"max tokens"`) and the self-hosted engine's snake_case forms (`context_length_exceeded`, `prepared prompt exceeds Engine max_context`) — the underscore forms cannot collide with the `"context deadline exceeded"` transient idioms the strict set excludes, so they joined verbatim in 0.4.1. Without them, a local engine's 400 never armed the salvage and the run died with the raw error.
 
 The budget is **per run** (turn numbers restart; the spent retry clears at run start — a follow-up run's salvage is never denied by the prior run's). If the conversation has nothing to shrink, the figure resets and the turn re-enters directly.
 

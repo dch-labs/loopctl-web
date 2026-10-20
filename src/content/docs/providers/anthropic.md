@@ -34,6 +34,10 @@ The field is always sent, as an empty string when there is nothing to send. You 
 
 Your assistant tool calls become `tool_use` content blocks, and your results become `tool_result` blocks carrying `tool_use_id`. Unlike OpenAI, the `is_error` flag travels on the wire. It is set only on errors, because success omits it.
 
+Adjacent assistant messages are merged since 0.4.1. After system-folding, the request build folds runs of adjacent assistant messages into one message, with a `\n\n` separator when two texts would otherwise glue.
+
+Some Anthropic-compatible providers, Z.ai's GLM among them, reject the adjacent shape with `HTTP 400 [1214]`, so the merge is a safety net behind the machine's own compaction seam. Whatever a compactor or host hands this client, your wire carries a legal shape.
+
 ### Thinking and extended reasoning
 
 `thinking` and `redacted_thinking` blocks stream on a dedicated thinking lane (0.4.0). Visible reasoning arrives as `on_thinking_delta` fragments, and redacted reasoning arrives as an empty-text thinking delta that carries its opaque payload.

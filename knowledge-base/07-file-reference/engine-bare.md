@@ -11,7 +11,8 @@ The hands: the run loop, the three handlers, `finalize`, and the loop's own stat
 - The three handlers: `handle_call_llm` (transients → deferral check → `do_turn` → detection → feed), `handle_call_tools` (preresolved slots + dispatch → one results message), `handle_compact` (thin, delegates to `bare/compact.rs`).
 - `set_error_state` — Cancelled routes through `machine.cancel()`, everything else through `machine.fail()`.
 - Internals: `machine_policy()`, `count_context`, `overhead_tokens` (OnceLock-cached), `MAX_RECOVERY_ATTEMPTS = 5`, `detection_disabled` (sticky, set on detection poison).
-- Accessors: `conversation`, `session`, `run_config`, `tools`, `machine`, `cancel_signal`, `is_cancelled`, `turn_mode`.
+- Accessors: `conversation`, `session`, `run_config`, `tools`, `machine`, `cancel_signal`, `is_cancelled`, `turn_mode`, plus the 0.4.1 host seams: `steering()` (the shared guidance slot), `tool_registry()` (the `Arc<ToolRegistry>` mutation handle), and `rewind_history_to(len)` (the loop-level history rewind).
+- **Steering drain (0.4.1)** — the loop drains the slot at each turn boundary through `machine.inject`; a drain invalidates the prepared turn and the usage anchor, and a `SteeringCloseGuard` closes the slot when the `run()` future is dropped (abort, timeout, `select!`).
 
 **Behavior notes**
 

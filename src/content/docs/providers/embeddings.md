@@ -63,6 +63,8 @@ Both backends honor the same seven contracts:
 
 One retrieval note spans the whole stack: a `k` of `0` returns empty on every index tier. On the external tiers in [`loopctl-vector`](/extensions/memory/#the-semantic-tiers), non-finite and zero-norm vectors reject loudly at `add` and `search`, because cosine over a degenerate vector is undefined.
 
+Both backends also feed a consumer outside memory. Since 0.4.1, `EmbeddingSelector` embeds your registry's tool corpus and each turn's query to advertise the top-k nearest tools. See [tool selection](/core-data/tool-selection/).
+
 ## Related pages
 
 - [Memory](/extensions/memory/) covers what these backends feed: `VectorMemoryStore`, the golden-set bar, and the tier table.

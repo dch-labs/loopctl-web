@@ -45,6 +45,8 @@ That estimate feeds `machine.set_context_tokens(...)`, and it is the number your
 
 Since 0.4.0 the counting is honest about what the wire suppresses: a turn running under a `response_format` no longer reserves the tool schemas its request drops.
 
+Since 0.4.1 the schema set itself is the selection. `turn_tool_schemas` consults your configured [tool selector](/core-data/tool-selection/), sync or async, exactly once per turn ahead of the payload estimate, so the request you send and the estimate share one selection. A `response_format` turn still suppresses the schemas entirely.
+
 The OpenAI and Gemini bodies omit `tools` outright, and Anthropic swaps in one forced tool that rides uncounted, a bounded and small under-reserve stated in the docs.
 
 On backends that report usage, the [calibration ratio](/engine/context-accounting/) further corrects your raw estimate, and a usable `input_tokens` report can anchor the figure wholesale.

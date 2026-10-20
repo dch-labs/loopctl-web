@@ -34,6 +34,10 @@ Thinking rides the conversation verbatim since 0.4.0, with no turn-boundary stri
 
 Your prefix stays byte-stable so provider prompt caches keep hitting.
 
+Adjacent assistant runs fold since 0.4.1 through `coalesce_adjacent_assistants`, which serves both the compaction seam and the Anthropic request build. Runs of assistant messages merge into one carrying the parts of every member in order, with a `\n\n` separator when two texts would glue.
+
+Some providers, Z.ai's GLM among them, reject the adjacent shape with `HTTP 400 [1214]`.
+
 `ToolResult.name` defaults to `""` when you deserialize old data, because the field came later.
 
 Deep dive: [Messages](/core-data/messages/).

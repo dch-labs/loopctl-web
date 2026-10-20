@@ -8,6 +8,8 @@ Command execution over a pluggable `ShellBackend`: the `Shell` tool (model-facin
 - `UnixShellBackend` — `bash -c` in its own process group with `kill_on_drop`; an RAII `ChildGuard` whose drop SIGKILLs the whole group on timeout (sub-shells and grandchildren die with the deadline; a reaped child disarms the guard so a detached helper survives); both streams read concurrently under a one-million-byte per-stream cap with drain-past-cap; `[exit {code}, {duration_ms}ms]` metadata, nonzero exits as error-text.
 - Background jobs: `background: true` records a running entry in the shared `JobStore` (hosts hand one `Arc` to both tools — isolated slates, no process global) and detaches a bounded completion task — the one sanctioned `tokio::spawn`. `Jobs` lists, polls (`operation` ∈ `jobs`/`job_status`/`cleanup_jobs`), and clears; terminal jobs evict past twenty.
 - Dynamic concurrency: the read-only-prefix allowlist (`cargo check` yes, `cargo checkout` no) with compound/redirection disqualifiers, the mutating-substring denylist, and expansion disqualifiers (any `$` or `{` — the shell expands `${IFS}`, `$'…'`, `{a,b}` into words the checked text never shows) drive `is_safe_for_concurrent_execution`.
+- Retention classification (0.4.1): sequenced and piped read-only compounds (`cd /repo && grep -n needle file`) stamp `Requery`, decided segment-wise — `cd` admitted as a read-only prefix, every segment through the allowlist, any mutating segment, redirection, or control separator (a newline counts) keeps the whole receipt `Durable`. A failed read-only compound stays unclassed.
+- A missing `command` rejects with the shared teaching shape: `Missing command (got top-level keys: no keys; expected key 'command')` (0.4.1).
 
 **Behavior notes**
 

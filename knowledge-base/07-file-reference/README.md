@@ -15,6 +15,7 @@ Use this when you're *in the code* and want to know what the file in front of yo
 | [`cancel.rs`](cancel.md) | `CancelSignal` — cooperative cancellation. |
 | [`capabilities.rs`](capabilities.md) | Small traits asking "does this bundle have X?" |
 | [`contributor.rs`](contributor.md) | `ContextContributor` — per-turn message injection. |
+| [`attachment.rs`](attachment.md) | Pinned per-turn context (file / memory / todo) that compaction cannot touch (0.4.1). |
 | [`numeric.rs`](numeric.md) | Internal safe-math helpers (not public). |
 | [`managers.rs`](managers.md) | `LoopManagers` — the bundle of optional components (ask resolver, clock/id seams). |
 | [`presets.rs`](presets.md) | Constrained/Frontier profiles + `GoalReminder` (Constrained is the default wiring since 0.4.0). |
@@ -58,6 +59,7 @@ Use this when you're *in the code* and want to know what the file in front of yo
 | [`engine/bare/emission.rs`](engine-bare-emission.md) | All observer/hook fan-out. |
 | [`engine/bare/config.rs`](engine-bare-config.md) | The `set_*`/`with_*` builders, temp dir. |
 | [`engine/bare/model_switch.rs`](engine-bare-model-switch.md) | Atomic mid-session model change. |
+| [`engine/bare/steering.rs`](engine-bare-steering.md) | The `Steering` slot — host guidance drained at turn boundaries (0.4.1). |
 | [`engine/bare/tests.rs`](engine-bare-tests.md) | The engine's own test suite (in-file). |
 
 ## Tools & safety
@@ -70,7 +72,8 @@ Use this when you're *in the code* and want to know what the file in front of yo
 | [`tool/builtin/search.rs`](tool-builtin-search.md) | `Glob`/`Grep`/`CodeSearch`/`Tree` over a `SearchSource` [feature: search_tools]. |
 | [`tool/builtin/shell.rs`](tool-builtin-shell.md) | `Shell` + `Jobs` over a `ShellBackend` [feature: shell_tools]. |
 | [`tool/builtin/think.rs`](tool-builtin-think.md) | `ThinkTool` — the planning scratchpad (`Think` since 0.4.0) [feature: builtin_tools]. |
-| [`tool/registry.rs`](tool-registry.md) | `ToolRegistry` + `FnTool`. |
+| [`tool/registry.rs`](tool-registry.md) | `ToolRegistry` + `FnTool` (runtime-mutable since 0.4.1). |
+| [`tool/selector.rs`](tool-selector.md) | The per-turn tool advertisement: `ToolSelector`, `KeywordSelector`, the async family (0.4.1). |
 | [`tool/permission.rs`](tool-permission.md) | `PermissionCheck` + `GateDecision` — the decision type and its audit record. |
 | [`tool/grant.rs`](tool-grant.md) | `GrantStore` — persisted approvals with narrow scopes [feature: file_grants]. |
 | [`tool/health.rs`](tool-health.md) | Per-tool stats and circuit breakers. |

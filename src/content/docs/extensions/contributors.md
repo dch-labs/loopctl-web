@@ -70,6 +70,10 @@ Both inject per-turn context, and the difference is where the content comes from
 
 They compose. A run can have both, and their messages ride the request in a stable order, contributors first and then memory.
 
+Two 0.4.1 siblings extend the idea with different lifetimes. An [attachment](/extensions/attachments/) is pinned context that also rides every request, but you manage it as data and it renders deterministically.
+
+[Steering](/engine/steering/) is the one that lands in committed history, because guidance a user pushes mid-run becomes part of the conversation. A contributor message can never do that, by design.
+
 ## Gotchas
 
 - `ctx.conversation` is a snapshot view, so building expensive derived state per call is your budget and not the engine's. Keep `contribute` fast.

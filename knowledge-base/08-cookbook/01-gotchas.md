@@ -119,6 +119,15 @@ Default config + dirty tree + no tracked tool calls = a `Failed` result by desig
 **35. Convergence detection is word-overlap, not meaning.**
 Paraphrases slip through; boilerplate false-positives. Hence the warn-only default — don't turn on `Stop` without weighing it.
 
+**36. Removing a tool mid-run does not stop its in-flight calls (0.4.1).**
+Dispatch holds an owned handle, so a running call drains to completion; only the *next* call to the name fails the unknown-tool path. Cancel the run if you need the execution itself to stop.
+
+**37. A steering push into an idle loop is refused — check the return value (0.4.1).**
+`push` returns `false` and stores nothing when no run is in flight. A UI that fire-and-forgets loses the message silently. Keep it and send it as ordinary input instead.
+
+**38. The whitespace-tolerant Edit keeps the file's formatting, not the model's (0.4.1).**
+An `old_text` that matches modulo indentation applies with the file's own indentation, line endings, and indent characters. The receipt discloses it (`matched with normalized indentation`). An ambiguous normalized match still refuses with the file's lines echoed.
+
 ---
 
 Cross-referenced deep dives: [engine](../02-engine/02-driver-loop.md) · [compaction](../02-engine/06-compaction.md) · [middleware](../03-safety/01-middleware.md) · [detection](../03-safety/02-loop-detection.md) · [streaming](../01-core-data/04-stream-events.md).

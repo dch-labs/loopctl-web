@@ -31,15 +31,16 @@ let client = McpClient::stdio(CommandSpec {              // spawn a subprocess
 let mut provider = McpToolProvider::connect(client, Some("fs".into()))?;
 
 // 3. Register them like any other tools:
-let mut registry = ToolRegistry::new();
-provider.register_into(&mut registry);
+let registry = ToolRegistry::new();
+provider.register_into(&registry);          // &ToolRegistry since 0.4.1
+// or, when the registry is live: provider.sync_into(&registry).await?
 
 let mut agent = BareLoop::new(my_client, registry, config);
 ```
 
 The optional prefix namespaces your imported tools as `fs__read_file`, so multiple servers cannot collide. Discovery reads the server's `tools/list` and is auto-paginated.
 
-Six behaviors are worth knowing:
+Seven behaviors are worth knowing:
 
 - **Every `tools/call` has a timeout.** The default is 60s, and you tune it with
   `provider.with_call_timeout(...)`. A wedged server costs you one soft error result that
@@ -56,6 +57,14 @@ Six behaviors are worth knowing:
 - **`provider.refresh()` re-reads `tools/list`,** because servers change their tools. It
   does not retro-update tools you already registered under stale names, so you decide when
   to rebuild.
+
+- **Live registries sync since 0.4.1.** Call `provider.sync_into(&registry).await` to
+  re-list the server and mirror the diff into a live registry. Added names register.
+  Dropped names are removed while the target still holds this provider's registration.
+
+  Identical survivors keep their handles untouched, and a survivor whose contract moved is
+  refreshed in place. You get back an `McpSyncReport { added, removed, untouched }` with the
+  sorted diff. A foreign tool that overwrote a shared name is left alone with a warning.
 
 - **`client.reconnect(&retry_config)` re-establishes a dropped stdio or HTTP connection**
   with the same backoff strategy your stream handler uses. In-process clients cannot
@@ -99,7 +108,7 @@ Five corners of the conversion are not visible from the happy path:
 use loopctl::mcp::McpServerAdapter;
 
 let adapter = McpServerAdapter::new(
-    registry,                          // your ToolRegistry (moved in — snapshot semantics)
+    registry,                          // your ToolRegistry (served live since 0.4.1)
     ToolContext::default(),
     "my-agent-tools".into(),           // server name
     "1.0.0".into(),                    // server version
@@ -130,13 +139,47 @@ Any MCP client that spawns your process now sees your tools. Five behaviors matt
   future, so a served tool must be cancellation-safe, exactly like an engine-dispatched
   tool.
 
-- **Semantics are snapshot-based.** The adapter takes your registry as-is, so serving a
-  different tool set means building a new adapter. There are no `listChanged`
-  notifications.
+- Your registry is served live since 0.4.1. The adapter reads it on every `tools/list`
+  and every call, and `adapter.registry()` hands you the shared handle, so mutations you
+  make surface on the next request.
+
+  You no longer rebuild the adapter to serve a changing tool set. There are still no
+  `listChanged` notifications, so clients re-list.
+
+## Structured content, both lanes (0.4.1)
+
+The protocol lets a server attach a `structuredContent` JSON object beside the text of a
+result, validated against the tool's declared `outputSchema`. loopctl now speaks both
+sides.
+
+On the client side, a tool whose server declared a compilable `outputSchema` has every
+call's `structuredContent` validated:
+
+| Outcome | What you get |
+|---|---|
+| valid payload | a pretty-printed JSON part beside the text lane, with the whole output marked `DisplayHint::Json` |
+| invalid payload | a soft tool error naming the violated schema keyword, and the raw payload preserved under a 2 KiB bound, so your model adapts and the loop continues |
+| `Lenient` policy | a warning and passthrough, for hosts that trust their servers |
+| schema declared, no structured content | the text lane alone |
+| uncompilable `outputSchema` | omitted at discovery with a warning, and the tool stays listed but unvalidated |
+
+The default policy is `StructuredContentPolicy::Error`. Switch with
+`provider.with_structured_policy(StructuredContentPolicy::Lenient)`. The policy is compared
+on sync, so a change you make reaches already-registered tools through the next
+`sync_into`.
+
+On the server side, a host tool whose result carries `DisplayHint::Json` has its
+parseable-object payload emitted as `structuredContent` beside the text lane. The emission
+parses the payload's last text part, so a prose-plus-JSON multipart round-trips its
+structured lane.
+
+A hint that lies, meaning prose or a non-object, keeps the text lane with a warning.
 
 ## The conversion layer, briefly
 
-Foreign content blocks map onto loopctl types. Text becomes text parts, images become base64 image sources, and embedded resources become text notes rather than being silently dropped. A `structuredContent` is carried as a JSON-stringified text part.
+Foreign content blocks map onto loopctl types. Text becomes text parts, images become base64 image sources, and embedded resources become text notes rather than being silently dropped.
+
+A `structuredContent` becomes a validated JSON part when the tool declares a compilable `outputSchema`. A schema-less tool keeps the JSON-stringified text part byte-for-byte.
 
 Outbound, your `ToolSchema` becomes an MCP tool, and the `tool` field maps to `name`. An `is_read_only` becomes `readOnlyHint: true` plus `destructiveHint: false`, which is consistent with the spec's defaults. Your `DisplayHint` and other loopctl-specific details stay home.
 

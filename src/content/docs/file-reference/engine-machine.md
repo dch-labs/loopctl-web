@@ -14,11 +14,15 @@ Steps and feeds are where you drive the machine. You get `next_step(policy)`, `i
 
 `model_response` classifies tool calls against `available_tools`, pre-answering unknown ones. `tool_results` is the only `pending_tools` consumer.
 
-`compaction_result` does a wholesale replace plus a pending clear for you, and `compaction_noop` leaves your buffers untouched.
+`compaction_result` does a wholesale replace plus a pending clear for you, and `compaction_noop` leaves your buffers untouched. Since 0.4.1 the adopted history runs through the adjacent-assistant coalescer: your summary and a tail opening with an assistant turn fold into one message, the shape a transcript rebuild produces.
 
 `adopt_pruned` arrived in 0.4.0 and adopts a pruned conversation for you. It splits at the old history length and performs no state transition.
 
 Maintenance gives you `commit_pending`, `salvage_pending`, and `discard_pending`. `salvage_pending` came in 0.4.0, where the longest coherent prefix commits and the unanswered tail drops.
+
+`rewind_to(len)` arrived in 0.4.1 and drops committed history past `len`, snapping the cut to a turn boundary. It refuses while a turn is in flight, and a `len` at or beyond the current length is `Ok(0)`.
+
+It clears the deferred-compaction latch and invalidates your usage anchor and any prepared turn. `last_coherent_len` is the unbounded face of the shared `coherent_cut(messages, limit)`.
 
 Reads give you `history`, `full_history`, `state`, and `turns_taken`. You also get `is_terminal`, `is_cancelled`, and `context_tokens`, a new read accessor in 0.4.0.
 

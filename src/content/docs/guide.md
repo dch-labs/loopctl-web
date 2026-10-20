@@ -19,10 +19,10 @@ If you are new to loopctl, read these four pages in order, because they build on
 
 | Section | What you find inside |
 |---|---|
-| **[01 Core data](/core-data/messages/)** | The vocabulary everything else uses: [messages](/core-data/messages/), [tools](/core-data/tools/), [the API client](/core-data/api-client/), [stream events](/core-data/stream-events/), [errors](/core-data/errors/), and [configuration](/core-data/session-config/) |
-| **[02 The engine](/engine/state-machine/)** | How a run actually works: [state machine](/engine/state-machine/), [driver loop](/engine/driver-loop/), [LLM turn](/engine/llm-turn/), [tool dispatch](/engine/tool-dispatch/), [cancellation](/engine/cancellation/), [compaction](/engine/compaction/), [termination](/engine/termination/), [model switch](/engine/model-switch/), and [context accounting](/engine/context-accounting/) |
+| **[01 Core data](/core-data/messages/)** | The vocabulary everything else uses: [messages](/core-data/messages/), [tools](/core-data/tools/), [tool selection](/core-data/tool-selection/), [the API client](/core-data/api-client/), [stream events](/core-data/stream-events/), [errors](/core-data/errors/), and [configuration](/core-data/session-config/) |
+| **[02 The engine](/engine/state-machine/)** | How a run actually works: [state machine](/engine/state-machine/), [driver loop](/engine/driver-loop/), [LLM turn](/engine/llm-turn/), [tool dispatch](/engine/tool-dispatch/), [cancellation](/engine/cancellation/), [compaction](/engine/compaction/), [termination](/engine/termination/), [model switch](/engine/model-switch/), [context accounting](/engine/context-accounting/), [steering](/engine/steering/), and [history rewind](/engine/history-rewind/) |
 | **[03 Safety systems](/safety/middleware/)** | Keeping your agent alive and harmless: [middleware](/safety/middleware/), [loop detection](/safety/loop-detection/), [convergence](/safety/convergence/), [model fallback](/safety/fallback/), [reflection and recovery](/safety/reflection/), [tool health](/safety/tool-health/), [safety shield](/safety/tool-shield/), [permissions](/safety/permission/), [approvals and grants](/safety/approvals/), and [the budget gate](/safety/budget-gate/) |
-| **[04 Extensions](/extensions/observers/)** | Watching and shaping runs: [observers](/extensions/observers/), [hooks](/extensions/hooks/), [memory](/extensions/memory/), [contributors](/extensions/contributors/), [the component bundle](/extensions/managers/), and [the event hub](/extensions/event-hub/) |
+| **[04 Extensions](/extensions/observers/)** | Watching and shaping runs: [observers](/extensions/observers/), [hooks](/extensions/hooks/), [memory](/extensions/memory/), [contributors](/extensions/contributors/), [attachments](/extensions/attachments/), [the component bundle](/extensions/managers/), and [the event hub](/extensions/event-hub/) |
 | **[05 Providers](/providers/overview/)** | Real models: [overview and features](/providers/overview/), [the OpenAI family](/providers/openai/), [Anthropic](/providers/anthropic/), [Gemini](/providers/gemini/), [Bedrock](/providers/bedrock/), [SSE](/providers/sse/), [grammar](/providers/grammar/), and [embeddings](/providers/embeddings/) |
 | **[06 Integration](/integration/structured-output/)** | Structured answers and the wider world: [structured output](/integration/structured-output/), [MCP](/integration/mcp/), [the derive macro](/integration/derive-macro/), [presets](/integration/presets/), [testing](/integration/testing/), [the manifest](/integration/manifest/), and [loopctl-client](/integration/loopctl-client/) |
 | **[07 File reference](/file-reference/)** | One page per source file, covering what it is, its key items, and its gotchas |
@@ -57,7 +57,7 @@ Read [What is loopctl](/start-here/what-is-loopctl/), then the whole safety sect
 
 ## About this knowledge base
 
-These pages are grounded in source. They were written against loopctl `v0.4.0`, so every default value, threshold, and behavior stated here comes from the code or its tests.
+These pages are grounded in source. They were written against loopctl `v0.4.1`, so every default value, threshold, and behavior stated here comes from the code or its tests.
 
 They are plain by design. You get no unexplained jargon, short sentences, and every diagram can be read on its own.
 

@@ -38,15 +38,19 @@ Ported output is committed, so the site builds standalone.
 
 ### Workflow for a content change
 
-1. Write or edit markdown anywhere under `knowledge-base/` (any folder, any
-   depth).
-2. Run `npm run port:kb` — it regenerates `src/content/docs/` (titles come from
-   `#` headings, reading order from `NN-` filename prefixes, relative `.md`
-   links are rewritten, and a folder's `README.md` becomes its index page).
+Since the reader-voice rewrite (PR #3), the words live in `src/content/docs/`:
+edit the pages there directly, and keep `knowledge-base/` factually in sync when
+you can — it is the retained pre-rewrite source and reads as different prose.
+`npm run port:kb` is kept for reference, but running it against today's
+`knowledge-base/` would overwrite the rewrite, so do not run it as part of a
+normal edit.
+
+1. Edit the page under `src/content/docs/` (new pages: copy the frontmatter
+   shape — `title` plus `sidebar: order` for sections that use it).
+2. Run `npm run style` and `npm run facts` (see STYLE.md); fix what they flag.
 3. For a brand-new section only: add one sidebar entry in
    `astro.config.mjs`.
-4. Commit both the source and the regenerated `src/content/docs/`, push — CI
-   deploys.
+4. Commit, push — CI deploys.
 
 ## Deployment
 

@@ -182,4 +182,16 @@ It never runs `git add -A`. Default config plus a dirty tree plus no tracked too
 
 Paraphrases slip through and boilerplate false-positives. That is why the default is warn-only, so do not turn on `Stop` without weighing it.
 
+### 37. Removing a tool mid-run does not stop its in-flight calls (0.4.1)
+
+Dispatch holds an owned handle, so a running call drains to completion. Only the next call to that name fails the unknown-tool path. Cancel your run if you need the execution itself to stop.
+
+### 38. A steering push into an idle loop is refused (0.4.1)
+
+`push` returns `false` and stores nothing when no run is in flight. A UI that fire-and-forgets loses the message silently, so check the return value. Keep the message and send it as ordinary input instead.
+
+### 39. The whitespace-tolerant Edit keeps the file's formatting (0.4.1)
+
+An `old_text` that matches modulo indentation applies with the file's own indentation, line endings, and indent characters. The receipt discloses it with `matched with normalized indentation`. An ambiguous normalized match still refuses with the file's lines echoed.
+
 For cross-referenced deep dives, see [engine](/engine/driver-loop/), [compaction](/engine/compaction/), [middleware](/safety/middleware/), [detection](/safety/loop-detection/), and [streaming](/core-data/stream-events/).

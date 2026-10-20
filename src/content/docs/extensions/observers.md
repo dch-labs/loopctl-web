@@ -47,6 +47,7 @@ agent.register_observer(Arc::new(Metrics { requests: AtomicUsize::new(0) }));
 | `on_turn_end` | End of the LLM phase and separately end of the tool phase, so one model turn with tools produces two events | `turn`, `success`, `error`, `duration_ms`, token counts, `stop_reason`, `history`, `context_tokens`, `context_window`. History is the machine's conversation at the boundary, committed plus this run's turns, `Arc`-shared. |
 | `on_stream_success` / `on_stream_failure` | After each model call, with the model that served it | `turn`, `model`, `usage` or `error` |
 | `on_transport_fallback` | When a turn was rescued by the non-streaming fallback, even when a later policy discards the record | `turn`, the fallback detail |
+| `on_tool_surface_changed` | After any registry mutation changes the advertised surface, with added, removed, and schema-changed names sorted (0.4.1) | the `ToolSurfaceContext` diff and the registry `version` |
 | `on_pre_compaction` | As a compaction pass starts, carrying the pre-pass snapshot | Trigger reason, pre-pass stats such as messages by role and the token estimate |
 | `on_compaction` | Only when compaction actually happened, never on no-ops | Live `CompactTelemetry`: before and after stats, `tokens_saved`, the pass's wall-clock duration |
 | `on_compaction_failed` | When a pass fails outright. At the run level this is typed `CompactionFailed` or `CompactionStalled`. | The payload-comparable numbers |

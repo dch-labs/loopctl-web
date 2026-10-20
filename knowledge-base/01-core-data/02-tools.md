@@ -179,12 +179,12 @@ pub struct ToolContext {
 ## `ToolRegistry` — the phone book
 
 ```rust
-let mut tools = ToolRegistry::new();
-tools.register(EchoTool);            // registers by name()
-tools.register(EchoTool);            // same name again? silently REPLACES (warn log),
-                                     // and keeps the original position in listing order
+let tools = ToolRegistry::new();
+tools.register(EchoTool);             // registers by name()
+tools.register(EchoTool);             // same name again? silently REPLACES (warn log),
+                                      // and keeps the original position in listing order
 
-tools.get("echo")                    // Option<&dyn Tool>
+tools.get("echo")                    // Option<Arc<dyn Tool>> — an owned handle
 tools.contains("echo")
 tools.tool_names()                   // sorted alphabetically
 tools.all_schemas()                  // Vec<ToolSchema> — what the model is shown
@@ -192,9 +192,32 @@ tools.all_tools()                    // everything, in registration order
 tools.concurrent_safe_tools()        // only the concurrency-safe subset
 ```
 
-The engine sends `all_schemas()` with every model request, and classifies model replies against `tool_names()`: a call to a name that was never advertised is answered with "tool 'x' is not available" before any dispatch happens (see [tool dispatch](../02-engine/04-tool-dispatch.md)).
+The engine sends the advertised schemas with every model request, and classifies model replies against `tool_names()`: a call to a name that was never advertised is answered with "tool 'x' is not available" before any dispatch happens (see [tool dispatch](../02-engine/04-tool-dispatch.md)).
 
-An ordering fact pinned by the [golden request bytes](../06-integration/05-testing.md) harness: `all_tools()` and `all_schemas()` both return **registration order** (a re-registered name keeps its original slot), while `tool_names()` returns **alphabetical order**. Deterministic schema order is what makes request construction byte-reproducible — don't break it.
+An ordering fact pinned by the [golden request bytes](../06-integration/05-testing.md) harness: `all_tools()` and `all_schemas()` both return **registration order** (a re-registered name keeps its original slot), while `tool_names()` returns **alphabetical order**. Deterministic schema order is what makes request construction byte-reproducible. Don't break it.
+
+### The registry is runtime-mutable (0.4.1)
+
+The tool set is no longer frozen at construction. The registry's tools live behind an interior lock, so you can register and remove while a run is in flight:
+
+```rust
+let registry = agent.tool_registry();   // Arc<ToolRegistry> — the mutation handle
+registry.register(NewTool::new());      // advertised on the very next request
+registry.remove("OldTool");             // in-flight calls to it still drain
+registry.version()                      // u64 — bumped by every mutation
+```
+
+Three contracts make mid-run mutation safe:
+
+- **Registration is advertisement-immediate.** The engine reads the registry when it builds the next turn's request, so a tool registered mid-run rides that request.
+- **Removal is execution-draining.** Dispatch holds an owned `Arc<dyn Tool>`, so an in-flight call completes against the handle it fetched. The next call to the removed name fails through the typed unknown-tool path.
+- **Every mutation bumps `version`.** The engine watches the counter: the cached overhead reservation re-measures on a move, and each turn reads the surface and its version as one registry-atomic pair (`versioned_surface()`) so a reader never pairs a new surface with an old count.
+
+Mutations surface to your observers as `on_tool_surface_changed` with a name-sorted diff ([observers](../04-extensions/01-observers.md)). The signature change from 0.4.1: `register` takes `&self` (call sites compile unchanged), `get` returns an owned `Option<Arc<dyn Tool>>`, and `all_tools`/`concurrent_safe_tools` return `Vec<Arc<dyn Tool>>`. The dominant patterns `registry.get(name)?.call(...)` compile unchanged through `Arc`'s `Deref`.
+
+### Advertising a subset (0.4.1)
+
+The registered surface and the advertised surface come apart when you install a **tool selector**: the engine consults it once per turn and threads the chosen schemas into both the request and the window estimate. Small models stop seeing fifty schemas at once, and the estimate counts what the wire carries. See [tool selection](07-tool-selection.md).
 
 ---
 
@@ -219,6 +242,7 @@ Facts worth knowing:
 - `is_read_only()` and `is_concurrency_safe()` are `true` for the read-only families by definition; the shell family gates concurrency per-command through a read-only allowlist (see the [shell family page](../07-file-reference/tool-builtin-shell.md)).
 - A missing or wrong-typed field is a `ToolError::InvalidInput` naming the field and its expected type — never a silent default.
 - Registration is the only way any of them enters a session.
+- The fs family accepts the path-key spellings models actually send (`path` where `file_path` was expected, and back), with canonical precedence and errors that name what arrived (0.4.1 — see the [fs family page](../07-file-reference/tool-builtin-fs.md)).
 
 ---
 
@@ -233,6 +257,7 @@ Facts worth knowing:
 ## Related pages
 
 - [Tool dispatch](../02-engine/04-tool-dispatch.md) — everything that wraps each call.
+- [Tool selection](07-tool-selection.md) — advertising a subset each turn.
 - [Middleware](../03-safety/01-middleware.md) — timeouts, caching, permissions as stackable layers.
 - [The derive macro](../06-integration/03-derive-macro.md) — every attribute explained.
 - [File reference: tool.rs](../07-file-reference/tool.md)

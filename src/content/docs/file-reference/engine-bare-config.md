@@ -14,6 +14,10 @@ The rest are `set_memory`, `set_pipeline` which injects your loop's registry as 
 
 Each setter has a fluent `with_*` twin you can chain instead.
 
+Since 0.4.1 you also configure your tool surface here: `set_tool_selector` / `with_tool_selector` and `set_async_tool_selector` / `with_async_tool_selector`. The engine takes a sync selector or an async one, never both, and configuring either clears the other.
+
+Attachments joined in 0.4.1: `set_attachment` / `with_attachment`, where an equal id replaces in place, plus `detach_attachment(id)` and `attachment_ids()`.
+
 `with_temp_dir(base)` and `with_managed_temp_disabled()` give you managed temp control, and `TextStreamer = Arc<dyn Fn(&str) + Send + Sync>` is your simple per-chunk text callback.
 
 `debug_assert_idle()` panics in debug builds if the machine already advanced past `Start`.
