@@ -30,6 +30,7 @@ const { head } = Astro.locals.starlightRoute;
 </script>
 <script>
   import { initMermaid } from '../scripts/mermaid';
+  import { initSidebarSync } from '../scripts/sidebar-sync';
   import { initSidebarToggle } from '../scripts/sidebar-toggle';
   import { initThemeToggle } from '../scripts/theme-toggle';
   import { initWheelPassthrough } from '../scripts/wheel-passthrough';
@@ -39,6 +40,7 @@ const { head } = Astro.locals.starlightRoute;
     document.documentElement.dataset.kb = '';
     initMermaid();
     initSidebarToggle();
+    initSidebarSync();
     initThemeToggle();
     initWheelPassthrough();
   }
