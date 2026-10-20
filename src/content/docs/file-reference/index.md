@@ -29,6 +29,7 @@ The tables below gather those pages by area, and every row links to the deep div
 | [`cancel.rs`](/file-reference/cancel/) | `CancelSignal`: cooperative cancellation. |
 | [`capabilities.rs`](/file-reference/capabilities/) | Small traits asking "does this bundle have X?" |
 | [`contributor.rs`](/file-reference/contributor/) | `ContextContributor`: per-turn message injection. |
+| [`attachment.rs`](/file-reference/attachment/) | Pinned per-turn context (file / memory / todo) that compaction cannot touch (0.4.1). |
 | [`numeric.rs`](/file-reference/numeric/) | Internal safe-math helpers (not public). |
 | [`managers.rs`](/file-reference/managers/) | `LoopManagers`: the bundle of optional components (ask resolver, clock/id seams). |
 | [`presets.rs`](/file-reference/presets/) | Constrained/Frontier profiles + `GoalReminder` (Constrained is the default wiring since 0.4.0). |
@@ -72,6 +73,7 @@ The tables below gather those pages by area, and every row links to the deep div
 | [`engine/bare/emission.rs`](/file-reference/engine-bare-emission/) | All observer/hook fan-out. |
 | [`engine/bare/config.rs`](/file-reference/engine-bare-config/) | The `set_*`/`with_*` builders, temp dir. |
 | [`engine/bare/model_switch.rs`](/file-reference/engine-bare-model-switch/) | Atomic mid-session model change. |
+| [`engine/bare/steering.rs`](/file-reference/engine-bare-steering/) | The `Steering` slot: host guidance drained at turn boundaries (0.4.1). |
 | [`engine/bare/tests.rs`](/file-reference/engine-bare-tests/) | The engine's own test suite (in-file). |
 
 ## Tools and safety
@@ -84,7 +86,8 @@ The tables below gather those pages by area, and every row links to the deep div
 | [`tool/builtin/search.rs`](/file-reference/tool-builtin-search/) | `Glob`/`Grep`/`CodeSearch`/`Tree` over a `SearchSource` [feature: search_tools]. |
 | [`tool/builtin/shell.rs`](/file-reference/tool-builtin-shell/) | `Shell` + `Jobs` over a `ShellBackend` [feature: shell_tools]. |
 | [`tool/builtin/think.rs`](/file-reference/tool-builtin-think/) | `ThinkTool`: the planning scratchpad (`Think` since 0.4.0) [feature: builtin_tools]. |
-| [`tool/registry.rs`](/file-reference/tool-registry/) | `ToolRegistry` + `FnTool`. |
+| [`tool/registry.rs`](/file-reference/tool-registry/) | `ToolRegistry` + `FnTool` (runtime-mutable since 0.4.1). |
+| [`tool/selector.rs`](/file-reference/tool-selector/) | The per-turn tool advertisement: `ToolSelector`, `KeywordSelector`, the async family (0.4.1). |
 | [`tool/permission.rs`](/file-reference/tool-permission/) | `PermissionCheck` + `GateDecision`: the decision type and its audit record. |
 | [`tool/grant.rs`](/file-reference/tool-grant/) | `GrantStore`: persisted approvals with narrow scopes [feature: file_grants]. |
 | [`tool/health.rs`](/file-reference/tool-health/) | Per-tool stats and circuit breakers. |

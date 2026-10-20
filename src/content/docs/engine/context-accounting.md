@@ -64,6 +64,8 @@ Telemetry: `loopctl.context.window` (gauge, `source=probe|declared`) on every ch
 
 The raw figure is your token counter's estimate of what the wire will carry: conversation + system prompt + tool schemas + this turn's transients.
 
+When you install a [tool selector](/core-data/tool-selection/), the schema component is the advertised subset since 0.4.1. Every figure of your upcoming payload counts what the request will carry, and a narrowed surface lets the figure fall below the prior report.
+
 Three corrections sit on top:
 
 ### 1. Suppression-aware overhead
@@ -92,7 +94,7 @@ The real number carries the figure, and the error surface shrinks from the whole
 
 - arms only on non-zero reports, so an all-zero backend you run never anchors, which is dch's local shape,
 
-- invalidates wherever your wire changes wholesale, meaning a compaction pass or any model change, because a different tokenizer breaks the pairing,
+- invalidates wherever your wire changes wholesale, meaning a compaction pass or any model change, because a different tokenizer breaks the pairing. Since 0.4.1 it also invalidates on an advertised-surface change, a steering drain that delivered guidance, or a history rewind,
 
 - ages on the session-wide turn basis, so an anchor surviving into later runs reads as aging, not fresh.
 
@@ -141,6 +143,10 @@ provider rejects: "prompt too long" (is_context_overflow)
   → a repeat rejection on the spent turn is a genuine misfit:
     Err(ContextExceeded), run-end carries unfinished_input
 ```
+
+The oversized-prompt matcher understands both phrasing families since 0.4.1. The hosted providers use spaced phrases like "context length" and "max tokens", while a self-hosted engine answers `context_length_exceeded` or `prepared prompt exceeds Engine max_context` in snake_case.
+
+Underscore forms cannot collide with the "context deadline exceeded" transient idioms the strict set excludes, so they joined verbatim. Without them, a local engine's 400 never armed your salvage and the run died with the raw error.
 
 The budget is **per run**. Your turn numbers restart and the spent retry clears at run start, so a follow-up run's salvage is never denied by the prior run's.
 

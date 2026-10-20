@@ -29,7 +29,8 @@ loopctl/
 │   │                       search.rs — Glob/Grep/CodeSearch/Tree over a SearchSource (search_tools)
 │   │                       shell.rs — the Shell + Jobs tools over a ShellBackend (shell_tools)
 │   │                       think.rs — the planning scratchpad (builtin_tools)
-│   ├── tool/registry.rs    ToolRegistry — name → tool lookup
+│   ├── tool/registry.rs    ToolRegistry — name → tool lookup, mutable at runtime
+│   ├── tool/selector.rs     which tools each turn advertises (0.4.1)
 │   ├── tool/permission.rs  PermissionCheck + GateDecision (decisions as audit data)
 │   ├── tool/grant.rs       the GrantStore — persisted approval grants (file_grants)
 │   ├── tool/health.rs      per-tool circuit breakers [feature: tool_health]
@@ -65,6 +66,7 @@ loopctl/
 │   ├── error.rs            LoopError — the one error enum for everything
 │   ├── capabilities.rs     small traits: "does this bundle have observers? memory?"
 │   ├── contributor.rs      inject a reminder message before each turn
+│   ├── attachment.rs        pinned context that compaction cannot touch (0.4.1)
 │   ├── determinism.rs      injectable clock / id / rng seams — same run, same bytes
 │   ├── manifest.rs         the loop.yaml manifest model (parse → resolve → validate) [feature: manifest]
 │   ├── manifest/           merge.rs, interpolate.rs, validate.rs, schema.rs, types.rs, error.rs
@@ -99,8 +101,9 @@ loopctl/
 | `src/engine/bare/emission.rs` | Every observer/hook notification is fanned out from here. |
 | `src/engine/bare/config.rs` | All the `set_*` / `with_*` builder methods of `BareLoop`. |
 | `src/engine/bare/model_switch.rs` | `switch_model()` — change the model atomically mid-session. |
+| `src/engine/bare/steering.rs` | The `Steering` slot — guidance you push to a running loop, drained at turn boundaries (0.4.1). |
 
-Deep dives: [state machine](/engine/state-machine/) · [driver loop](/engine/driver-loop/) · [compaction](/engine/compaction/) · [context accounting](/engine/context-accounting/)
+Deep dives: [state machine](/engine/state-machine/) · [driver loop](/engine/driver-loop/) · [compaction](/engine/compaction/) · [steering](/engine/steering/) · [history rewind](/engine/history-rewind/) · [context accounting](/engine/context-accounting/)
 
 ## Talking to models
 
@@ -132,7 +135,8 @@ Deep dives: [API client](/core-data/api-client/) · [stream events](/core-data/s
 | `src/tool/builtin/search.rs` | `Glob`/`Grep`/`CodeSearch`/`Tree` over a `SearchSource` [feature: search_tools]. |
 | `src/tool/builtin/shell.rs` | `Shell` + `Jobs` over a `ShellBackend` [feature: shell_tools]. |
 | `src/tool/builtin/think.rs` | `ThinkTool` — the planning scratchpad [feature: builtin_tools]. |
-| `src/tool/registry.rs` | `ToolRegistry` — where tools are registered and looked up; plus `FnTool`. |
+| `src/tool/registry.rs` | `ToolRegistry` — where tools are registered and looked up, mutably since 0.4.1; plus `FnTool`. |
+| `src/tool/selector.rs` | The per-turn tool advertisement: `ToolSelector`, `KeywordSelector`, the async family (0.4.1). |
 | `src/tool/permission.rs` | `PermissionCheck` + `GateDecision` — the decision type and its audit record. |
 | `src/tool/grant.rs` | `GrantStore` — persisted approvals with narrow scopes [feature: file_grants]. |
 | `src/tool/health.rs` | Per-tool failure counting and circuit breakers [feature: tool_health]. |
@@ -147,7 +151,7 @@ Deep dives: [API client](/core-data/api-client/) · [stream events](/core-data/s
 | `src/middleware/redaction.rs` | Scrub secrets from tool output [feature: redaction]. |
 | `src/middleware/shield.rs` | Wire a safety shield into the pipeline [feature: tool_shield]. |
 
-Deep dives: [tools](/core-data/tools/) · [middleware](/safety/middleware/) · [tool health](/safety/tool-health/) · [shield](/safety/tool-shield/)
+Deep dives: [tools](/core-data/tools/) · [tool selection](/core-data/tool-selection/) · [middleware](/safety/middleware/) · [tool health](/safety/tool-health/) · [shield](/safety/tool-shield/)
 
 ## Watching and steering
 
@@ -191,6 +195,7 @@ Deep dives: [loop detection](/safety/loop-detection/) · [fallback](/safety/fall
 | `src/error.rs` | `LoopError` — one enum for every failure, with "is it worth retrying?" answers. |
 | `src/capabilities.rs` | Small traits asking "does this bundle have X?" |
 | `src/contributor.rs` | Inject a message (e.g. a goal reminder) before each turn. |
+| `src/attachment.rs` | Pinned per-turn context (file / memory / todo) that compaction cannot touch (0.4.1). |
 | `src/compact.rs` | `ContextManager`, compactors, token counting — the whole shrink-the-conversation subsystem. |
 | `src/structured.rs` | Get parsed JSON answers out of the model. |
 | `src/determinism.rs` | `Clock`/`IdGen`/`Rng` seams — inject a fixed clock or seeded generator, get byte-stable runs. |

@@ -220,7 +220,7 @@ compact(messages):
 
 The pair-safety machinery behind step 3 works like a bracket-matcher for tool traffic: a forward scan keeps, per tool-call id, a stack of *unconsumed* calls; each `ToolResult` pops the most recent unconsumed preceding call with that id, and the two become a **pair**. Leftovers are classified — an unmatched call is a `LoneCall` (its result may still be in flight), an unmatched result is a `LoneResult` (a result cannot exist without its call — it's a protocol violation). The sanitizer then applies three asymmetric rules to the output: **`LoneResult`s are dropped everywhere**; **`LoneCall`s are kept *outside* the dropped region** (compaction can run before results land) but strict pairing applies *inside* it; and messages left empty by filtering are removed. Even the `unchanged()` path runs the same filtering, so a "no change" report is honest about what it would have saved.
 
-`TokenSplitter` (same file, exported) gives you the same principled split for **custom** compactors — an old/recent boundary at a real turn transition, pair-safe (it slides an orphaning cut instead of refusing it, so agent tool-loop histories never wedge the pass) — so an LLM summarizer can summarize `to_compact` and keep `preserved`.
+`TokenSplitter` (same file, exported) gives you the same principled split for **custom** compactors — an old/recent boundary at a real turn transition, pair-safe (it slides an orphaning cut instead of refusing it, so agent tool-loop histories never wedge the pass) — so an LLM summarizer can summarize `to_compact` and keep `preserved`. Its budgeted variant (`split_within_budget`, used by both LLM summarizers) takes the deepest pair-safe cut when no tail fits, never the preserve-almost-everything shape (0.4.1).
 
 ---
 
@@ -238,7 +238,24 @@ The pair-safety machinery behind step 3 works like a bracket-matcher for tool tr
 
 Two shared contracts worth knowing: every LLM compactor runs its client calls on a caller-supplied client (a dedicated cheaper model is the documented production shape), and a compactor's failure — API error, blank response, over-budget summary — fails **that stage** with the original messages intact, which is exactly the shape the `FallbackCompactor` chain consumes. The compactors' token spend is reported per pass through `loopctl.compaction.summarizer.tokens` metric events (the QA pass) and the chain emits `loopctl.compaction.passes` / `loopctl.compaction.degradations`.
 
-Both LLM compactors consume pre-compact hook guidance identically — `CompactionContext::instructions` rides as host instructions and every `additional_context` fragment as context to weave in — and both honor the **retention classes**: `Requery`-tagged results render as omission markers in the transcript (a summary physically cannot restate content it never saw), `Durable` results survive eviction.
+Both LLM compactors consume pre-compact hook guidance identically — `CompactionContext::instructions` rides as host instructions and every `additional_context` fragment as context to weave in — and both honor the **retention classes**: `Requery`-tagged results render as omission markers in the transcript (a summary physically cannot restate content it never saw), `Durable` results are carried verbatim **within the landing's budget** — `Durable` means preferred verbatim, never un-evictable (0.4.1; see [below](#the-0.4.1-hardening-round)).
+
+### The summary seam — one assistant message (0.4.1)
+
+Every LLM compactor emits its summary as an assistant-role message at the head of the preserved tail. When the tail opens with an assistant turn, the common case mid-run, a naive assembly carries two adjacent assistant messages. Some providers reject that shape outright: Z.ai's GLM API answers `HTTP 400 [1214]`, killing the run two seconds after every successful compaction.
+
+The seam now coalesces. `LoopMachine::compaction_result` folds runs of adjacent assistant messages into one message carrying the parts of every member in order: the summary's parts first, a `\n\n` separator parting two adjacent texts at the merge so the wire never glues statements, then the tail's. The assembled machine never carries two adjacent assistant messages whatever the compactor emits. A tail opening with a user or system message keeps the standalone summary assistant message. The Anthropic request build merges any adjacent assistant messages it is handed after system-folding, so a future producer of the hostile shape cannot kill a run even if a compactor changes ([Anthropic client](../05-providers/03-anthropic.md)).
+
+### The 0.4.1 hardening round
+
+A live marathon session exposed four structural killers. All four are fixed:
+
+- **The durable pull is budget-bounded.** `Durable` receipts in the to-drop region used to be exempt from eviction verbatim and unconditionally, so a session whose Edit receipts alone exceeded the landing target could never compact. The pull now walks the dropped region's durable pairs newest-first and carries them while the budget allows, skipping a pair too costly to fit. A receipt the landing cannot hold is information the summary records, not a reason the run dies.
+- **Sequenced read-only shell receipts stamp `Requery`.** The workhorse compound `cd /repo && grep -n needle file` fell through the single-command read-only check and stamped `Durable`, pinning its output for the history's lifetime. Classification is now segment-wise: `cd` admitted as a read-only prefix, every segment must pass the allowlist, and any mutating segment, redirection, or control separator (including a newline) keeps the whole receipt `Durable`.
+- **The splitter falls back to the deepest pair-safe cut.** When no pair-safe split's tail fit the budget, the old fallback returned the plain `split()` shape, so a history with sparse boundaries compacted to a no-change no-op every pass and drifted into the emergency stall. The budget is a goal: a tail over budget still shrinks the pass.
+- **A failing threshold pass defers instead of killing the run.** With a strictly selected compactor, a transient model error at the threshold used to end the run even though the payload still fit. The pass now marks the turn deferred and surfaces `on_compaction_failed` with the stage's cause; the next turn retries. Emergency-line passes still fail honestly.
+
+The structured summarizer also survives its own bad answers (0.4.1): a blank response earns exactly one rescue retry with a tighter prompt, a second over-budget response is trimmed to the budget and committed with a `[trimmed]` marker rather than discarded, and a trim that retains no substantive content fails the pass instead of committing an empty shell.
 
 ---
 
@@ -256,6 +273,8 @@ let sink = MemoryDemotionSink::new(memory_store, max_chars_per_message);
 ```
 
 `MemoryDemotionSink` renders each evicted exchange (tool name, arguments, truncated result — `render_evicted` is the same renderer the QA summarizer feeds its transcript) into a `Trajectory`-category memory entry. Combined with `SearchMemoriesTool` ([memory](../04-extensions/03-memory.md)) this closes the loop: **what compaction evicts, the model can recall on demand.** The prune pass (see [context accounting](09-context-accounting.md)) hands its cleared tool outputs to the same sink under `CompactReason::Prune`.
+
+One thing compaction can never evict: [attachments](../04-extensions/07-attachments.md) (0.4.1). Pinned data rides every request as per-turn transient context and never enters the machine-owned history, so no compactor can even see it. Zero loss by construction, not by a preservation pass.
 
 ## Writing your own compactor
 

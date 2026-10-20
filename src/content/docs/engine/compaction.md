@@ -283,6 +283,10 @@ It is pair-safe, since it slides an orphaning cut instead of refusing it, so you
 
 An LLM summarizer can then summarize `to_compact` and keep `preserved`.
 
+The budgeted variant `split_within_budget`, which both LLM summarizers use, takes the deepest pair-safe cut when no tail fits (0.4.1). It never returns the preserve-almost-everything shape, which used to turn sparse-boundary histories into no-op passes and drift into the emergency stall.
+
+Only a history with no pair-safe cut at all keeps the count-based default.
+
 ## The compactor family
 
 0.4.0 ships the real strategies alongside the truncator. All are always compiled (no feature flags, no new dependencies):
@@ -301,13 +305,47 @@ A compactor's failure, whether an API error, a blank response or an over-budget 
 
 That is exactly the shape the `FallbackCompactor` chain consumes.
 
+### The summary seam: one assistant message (0.4.1)
+
+Every LLM compactor emits its summary as an assistant-role message at the head of the preserved tail. When your tail opens with an assistant turn, the common case mid-run, a naive assembly carries two adjacent assistant messages.
+
+Some providers reject that shape outright. Z.ai's GLM API answers `HTTP 400 [1214]` and kills the run two seconds after every successful compaction.
+
+The seam now coalesces. `LoopMachine::compaction_result` folds runs of adjacent assistant messages into one message carrying the parts of every member in order. Your summary's parts come first, a `\n\n` separator parts two adjacent texts at the merge so the wire never glues statements, and the tail's follow.
+
+A tail opening with a user or system message keeps the standalone summary assistant message. The Anthropic request build also merges any adjacent assistant messages it is handed, so a future producer of the hostile shape cannot kill your run even if a compactor changes. See the [Anthropic client](/providers/anthropic/).
+
+### The 0.4.1 hardening round
+
+A live marathon session exposed four structural killers, and all four are fixed. Check this list before you blame your compactor:
+
+- The durable pull is budget-bounded. `Durable` receipts used to be exempt from eviction verbatim and unconditionally, so a session whose Edit receipts alone exceeded the landing target could never compact.
+
+  The pull now walks the dropped region's durable pairs newest-first and carries them while the budget allows, skipping a pair too costly to fit.
+
+- Sequenced read-only shell receipts stamp `Requery`. The workhorse compound `cd /repo && grep -n needle file` fell through the single-command check and stamped `Durable`, pinning its output for the history's lifetime.
+
+  Classification is now segment-wise. A `cd` prefix is admitted, every segment must pass the allowlist, and any mutating segment, redirection, or control separator keeps the whole receipt `Durable`.
+
+- **The splitter falls back to the deepest pair-safe cut**, as covered above, so sparse-boundary histories keep shrinking.
+
+- A failing threshold pass defers instead of killing your run. With a strictly selected compactor, a transient model error at the threshold used to end the run even though the payload fit.
+
+  The pass now marks your turn deferred and surfaces `on_compaction_failed` with the stage's cause, and the next turn retries. Emergency-line passes still fail honestly.
+
+The structured summarizer also survives its own bad answers. A blank response earns exactly one rescue retry with a tighter prompt. A second over-budget response is trimmed to the budget and committed with a `[trimmed]` marker rather than discarded.
+
+When your trim retains no substantive content, the pass fails instead of committing an empty shell.
+
 The compactors' token spend is reported per pass through `loopctl.compaction.summarizer.tokens` metric events for the QA pass.
 
 The chain also emits `loopctl.compaction.passes` and `loopctl.compaction.degradations`.
 
 Both LLM compactors consume your pre-compact hook guidance identically. `CompactionContext::instructions` rides as host instructions, and every `additional_context` fragment as context to weave in.
 
-Both honor the **retention classes**. `Requery`-tagged results render as omission markers in the transcript, because a summary physically cannot restate content it never saw. `Durable` results survive eviction.
+Both honor the **retention classes**. `Requery`-tagged results render as omission markers in the transcript, because a summary physically cannot restate content it never saw.
+
+`Durable` results are carried verbatim within the landing's budget since 0.4.1. The tag means preferred verbatim, never un-evictable, so a pinned receipt cannot make your run impossible to compact. See the hardening round below.
 
 ## Demotion: evicted is not destroyed
 
@@ -327,6 +365,8 @@ let sink = MemoryDemotionSink::new(memory_store, max_chars_per_message);
 Combined with `SearchMemoriesTool` ([memory](/extensions/memory/)) this closes your loop: **what compaction evicts, the model can recall on demand.**
 
 The prune pass, described in [context accounting](/engine/context-accounting/), hands its cleared tool outputs to the same sink under `CompactReason::Prune`.
+
+One thing you can never evict is an [attachment](/extensions/attachments/) (0.4.1). Pinned data rides every request as per-turn transient context and never enters the machine-owned history, so no compactor can even see it. You keep it by construction, not by a preservation pass.
 
 ## Writing your own compactor
 
@@ -377,6 +417,8 @@ Mixing the heuristic counter for your trigger with a real tokenizer for the comp
 | — | a compactor *error* surfaces as `CompactionFailed` (same payload-comparable numbers) | check the summarizer's client, or let the chain fall through to the terminal truncate |
 
 A threshold-triggered stall whose payload still fits your window no longer kills your run. The pass declines, your machine latches the deferral, and your next model call serves.
+
+Since 0.4.1 the same deferral covers a configured compactor that errors while the payload still fits. Your run defers and retries the compactor next turn instead of dying.
 
 Only a genuinely over-window stall on the emergency line still ends the run.
 

@@ -107,6 +107,11 @@ fact the page already carries, so a facts run is not clean at zero:
   they cannot be recovered at all.
 - `envelopes` and `TLS/HTTP/2` in `file-reference/client-crate.md`. One is now
   singular, the other now reads "no TLS, and no HTTP/2". Same facts, split.
+- The 0.4.1 group, facts that became false when the release shipped:
+  `mut` and `let mut registry = ToolRegistry::new` (the registry registers through
+  `&self` now), and `as-is`, `snapshot`, `snapshot-based`, `semantics`, `changes`
+  in the MCP pages (the server adapter serves its registry live instead of taking
+  a snapshot).
 
 The corpus sits at 18 flagged pages against the ported reference copy, 19 against
 the site's own pre-rewrite text. That is the pass line. Treat a run above it as a
@@ -126,4 +131,4 @@ over any scratch copy: `git archive master src/content/docs | tar -x -C
 reads as different prose, so diff against it only deliberately.
 
 Both scripts live in `scripts/`. A batch is done when both pass and
-`npm run build` reports 175 pages.
+`npm run build` reports 182 pages.

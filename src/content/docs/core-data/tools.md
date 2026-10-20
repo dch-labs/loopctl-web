@@ -211,12 +211,12 @@ Three fields deserve attention:
 The registry maps names to tools, and registration is by `name()`:
 
 ```rust
-let mut tools = ToolRegistry::new();
+let tools = ToolRegistry::new();
 tools.register(EchoTool);            // registers by name()
 tools.register(EchoTool);            // same name again? silently REPLACES (warn log),
                                      // and keeps the original position in listing order
 
-tools.get("echo")                    // Option<&dyn Tool>
+tools.get("echo")                    // Option<Arc<dyn Tool>> (owned handle, 0.4.1)
 tools.contains("echo")
 tools.tool_names()                   // sorted alphabetically
 tools.all_schemas()                  // Vec<ToolSchema> — what the model is shown
@@ -225,6 +225,31 @@ tools.concurrent_safe_tools()        // only the concurrency-safe subset
 ```
 
 Re-registering a name replaces the tool silently, apart from a warn log, and the new tool keeps the old slot in listing order.
+
+### The registry is runtime-mutable (0.4.1)
+
+Your tool set is no longer frozen at construction. The registry's tools live behind an interior lock, so you can register and remove while a run is in flight:
+
+```rust
+let registry = agent.tool_registry();   // Arc<ToolRegistry> — the mutation handle
+registry.register(NewTool::new());      // advertised on the very next request
+registry.remove("OldTool");             // in-flight calls to it still drain
+registry.version()                      // u64 — bumped by every mutation
+```
+
+Three contracts make your mid-run mutation safe:
+
+- Registration is advertisement-immediate. The engine reads the registry when it builds the next turn's request, so a tool you register mid-run rides that request.
+- Removal is execution-draining. Dispatch holds an owned `Arc<dyn Tool>`, so an in-flight call completes against the handle it fetched. The next call to the removed name fails through the typed unknown-tool path.
+- Every mutation bumps `version`, which the engine watches twice. Your cached overhead reservation re-measures on a move, and each turn reads the surface and its version as one registry-atomic pair through `versioned_surface()`. A reader never pairs a new surface with an old count.
+
+Mutations surface to your observers as `on_tool_surface_changed` with a name-sorted diff. See [observers](/extensions/observers/). The signature changes from 0.4.1: `register` takes `&self`, so your existing call sites compile unchanged. `get` returns an owned `Option<Arc<dyn Tool>>`, and `all_tools` and `concurrent_safe_tools` return `Vec<Arc<dyn Tool>>`. The pattern `registry.get(name)?.call(...)` compiles unchanged through `Arc`'s `Deref`.
+
+### Advertising a subset (0.4.1)
+
+The registered surface and the advertised surface come apart when you install a **tool selector**. The engine consults it once per turn and threads the chosen schemas into both the request you send and the window estimate.
+
+Your small models stop seeing fifty schemas at once, and the estimate counts what the wire carries. See [tool selection](/core-data/tool-selection/).
 
 The engine sends `all_schemas()` with every model request. It classifies model replies against `tool_names()`, so a call to a name that was never advertised is answered with "tool 'x' is not available" before any dispatch happens. See [tool dispatch](/engine/tool-dispatch/).
 
@@ -259,6 +284,7 @@ Three more facts about the built-ins:
 - `is_read_only()` and `is_concurrency_safe()` are `true` for the read-only families by definition. The shell family gates concurrency per command through a read-only allowlist, covered in the [shell family page](/file-reference/tool-builtin-shell/).
 - A missing field or a wrong-typed field is a `ToolError::InvalidInput` naming the field and its expected type. You never get a silent default.
 - Registration is the only way any of them enters a session.
+- The fs family accepts the path-key spellings your model actually sends, `path` where `file_path` was expected and back, with canonical precedence and errors naming what arrived (0.4.1). See the [fs family page](/file-reference/tool-builtin-fs/).
 
 ## Schema rules
 
@@ -271,6 +297,7 @@ Gotcha: under the MCP server adapter, [MCP](/integration/mcp/) validates schemas
 ## Related pages
 
 - [Tool dispatch](/engine/tool-dispatch/) is where the wrapping of each call is explained.
+- [Tool selection](/core-data/tool-selection/) covers advertising a subset each turn.
 - [Middleware](/safety/middleware/) covers timeouts, caching, and permissions as stackable layers.
 - [The derive macro](/integration/derive-macro/) explains every attribute.
 - [File reference: tool.rs](/file-reference/tool/)

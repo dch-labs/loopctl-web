@@ -5,6 +5,8 @@ Every `set_*` / `with_*` method on `BareLoop`, the temp-dir management, and the 
 **Key items**
 
 - Setters (all `debug_assert_idle` — before first run): `set_reflector`, `set_recovery_strategy`, `set_context_manager` (re-syncs window/threshold from session config), `set_token_counter` (driver fallback only — the manager's counter rules), `set_stream_handler` [streaming], `set_hook_executor` [hooks], `set_health_registry` [tool_health], `set_memory`, `set_pipeline` (injects the loop's registry as core), `register_observer`, `set_text_streamer`, `add_contributor`, `set_request_options`, `set_turn_mode` — each with a fluent `with_*` twin.
+- Tool surface (0.4.1): `set_tool_selector` / `with_tool_selector` and `set_async_tool_selector` / `with_async_tool_selector` — sync or async, never both; configuring either clears the other.
+- Attachments (0.4.1): `set_attachment` / `with_attachment` (equal id replaces in place), `detach_attachment(id)`, `attachment_ids()`.
 - `with_temp_dir(base)` / `with_managed_temp_disabled()` — managed temp control.
 - `TextStreamer = Arc<dyn Fn(&str) + Send + Sync>` — the simple per-chunk text callback.
 - `debug_assert_idle()` — debug panics if the machine advanced past `Start`.

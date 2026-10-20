@@ -28,6 +28,12 @@ A still-malformed answer degrades to raw text as the first rendered section's si
 
 Failure parity with the QA tier holds. Blank or over-budget responses fail the pass through the typed path, and an `ApiError` fails with your originals intact.
 
+Bad answers get one rescue each since 0.4.1. A blank response earns exactly one retry with a tighter prompt before your pass fails.
+
+A second over-budget response is trimmed to the budget through `trim_summary_to_budget`, which renders, measures, cuts on line boundaries, marks `[trimmed]`, and converges in three passes, then commits rather than discards.
+
+Your budget can be too small for the template's own header plus marker, and that fails the pass. So does a trim that retains no substantive content, because a marker-only or heading-only shell is not a summary.
+
 Leading system messages survive at the head and never land in the transcript, and hook guidance reaches your prompts.
 
 Telemetry emits one `loopctl.compaction.structured.sections` event per section per successful pass, tagged `state=populated|empty`. A climbing empty rate is the earliest sign that your template degraded.

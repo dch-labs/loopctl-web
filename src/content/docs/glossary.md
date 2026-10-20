@@ -81,6 +81,9 @@ The same noun often behaves differently in those two places.
 | **Observer** | A read-only watcher of engine events. |
 | **Hook** | A watcher with veto power, so it can block tool calls and compaction. |
 | **Contributor** | A per-turn message injector, such as a goal reminder, and what it adds is never persisted. |
+| **Attachment** | Pinned per-turn context, such as a file, a memory, or the todo list, that rides every request outside the history, so compaction cannot touch it (0.4.1). |
+| **Advertised surface** | The subset of registered tools riding this turn's request, which a tool selector narrows and the window estimate counts (0.4.1). |
+| **Tool selector** | The per-turn decision of which registered tools to advertise: `KeywordSelector` (vocabulary, free), `EmbeddingSelector` (meaning), `RewritingSelector` (asks a model). Fail-open: a miss serves the full surface. |
 | **Memory** | A long-term store your agent reads from and writes to across turns. |
 | **Reflector** | The analyzer of a failed tool call, asking what went wrong and whether it is recoverable. |
 | **Recovery strategy** | The decider after a failure, whether to retry, skip, ask, or fail. |
@@ -90,7 +93,10 @@ The same noun often behaves differently in those two places.
 | **Token counter** | The estimator that turns your messages into approximate token counts. |
 | **Cancellation signal** | The shared flag that stops your run cooperatively at the next checkpoint. |
 | **Cancel re-arm** | Re-setting that signal after a run, so one cancel does not kill your agent forever. |
+| **Steering** | The shared handle that lets you push guidance into a running loop, drained at the next turn boundary into committed history (0.4.1). Boundary, not interruption. |
+| **Steering leftovers** | Guidance the run never reached: sealed by the next run and never delivered, collectable via `take_leftovers()`. |
 | **Audit trail** | `session.runs`, the append-only record of every run and turn, which compaction never touches. |
+| **History rewind** | Cutting committed history back to an observed length, snapping to a turn boundary, the host-side seam for replacing a prompt that already ran (`rewind_to` / `rewind_history_to`, 0.4.1). |
 | **Trajectory record** | A whole-run snapshot captured by the built-in `TrajectoryObserver`, covering per-turn queries and responses, tool calls, durations, tokens, and the outcome. Note that `MemoryCategory::Trajectory` is a different thing, since it is a memory entry about one tool call. |
 | **Memory extraction** | Mining reusable lessons, such as strategies, error recoveries, and wasted calls, out of your recorded runs and storing them as memories, so your agent learns from experience. |
 | **Consolidation** | A curation pass over your memory store that decays stale relevance, merges near-duplicates, and prunes what is neither fresh nor useful. |
@@ -120,7 +126,7 @@ The same noun often behaves differently in those two places.
 | **Prune** | The no-LLM reclamation pass, where old tool results beyond a protected tail are replaced by a `[cleared: prior tool output]` marker and the originals are handed to the demotion sink, so you free context without a summarizer call. |
 | **Overflow salvage** | Surviving a "prompt too long" rejection, where the failed turn gets one compact-and-retry against a target strictly under the refused payload instead of your run dying. |
 | **Demotion sink** | Where your compaction's evicted messages go instead of the void, typically a memory store, so evicted content stays recallable by your model. |
-| **Retention class** | The per-tool-result tag of `Durable`, `Requery`, or the default, which decides what your pruning and compaction may clear and in what order. |
+| **Retention class** | The per-tool-result tag of `Durable`, `Requery`, or the default, which decides what your pruning and compaction may clear and in what order. `Durable` means preferred verbatim within the landing's budget, never un-evictable (0.4.1). |
 | **Rolling compactor** | A compactor that re-processes only the messages since the last pass, so compaction becomes a maintenance cadence rather than one big rewrite. |
 | **QA summarizer** | The three-step LLM compactor that summarizes the about-to-drop slice, questions what is missing, and answers from the transcript before it is discarded. |
 | **Structured summarizer** | The LLM compactor that emits sectioned summaries for facts, decisions, pending work, and questions, with contractually stable headings. |
@@ -141,6 +147,8 @@ The same noun often behaves differently in those two places.
 | **Golden request bytes** | Committed canonical-JSON files that pin exactly what the engine builds per scenario, so a red golden can only mean your own construction drifted. |
 | **ContentSource** | The read seam, where `ReadTool` reads through any source you define, whether files or remote trees, and `FileSource` ships as the filesystem implementation. |
 | **SearchSource** | The search seam, which is a `ContentSource` that can also walk entries, sniff binaries, and bound reads, so one trait serves your `Glob`, `Grep`, `CodeSearch`, and `Tree`. |
+| **MCP sync** | `McpToolProvider::sync_into`, which re-lists a server and mirrors the diff into a live registry: added register, dropped remove, identical survivors untouched, changed survivors refreshed in place (0.4.1). |
+| **Structured content** | The MCP `structuredContent` lane: a server's JSON payload validated against its declared `outputSchema` on the client side, emitted for `DisplayHint::Json` results on the server side (0.4.1). |
 
 ## Design and pattern words
 

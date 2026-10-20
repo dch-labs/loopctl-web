@@ -4,7 +4,7 @@ Request construction and the two turn paths.
 
 **Key items**
 
-- `build_turn_request(transient)` — extras first, then `machine.full_history()`; system prompt; tool schemas (`None` when the registry is empty).
+- `build_turn_request(transient)` — extras first, then `machine.full_history()`; system prompt; tool schemas (`None` when the registry is empty). Since 0.4.1 the schema set is the **selection**: `turn_tool_schemas` consults the configured selector (sync or async) exactly once per turn, ahead of the payload estimate, so the request and the estimate share one selection. A `response_format` turn suppresses the schemas entirely, as before.
 - `turn_request_options()` — your `request_options` + the fallback `routed_model()` override (which wins over your model field when routing is active).
 - `do_turn` — the cancel guard, then `do_create_message` (biased select vs cancel + turn timeout) or `do_stream` (through the `StreamHandler`; `AttemptReset` wipes the accumulator; `Fallback` adopted wholesale).
 - `routed_model()` / `routed_or_client_model()` — which model serves this turn.

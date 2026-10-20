@@ -25,8 +25,9 @@ let client = McpClient::stdio(CommandSpec {              // spawn a subprocess
 let mut provider = McpToolProvider::connect(client, Some("fs".into()))?;
 
 // 3. Register them like any other tools:
-let mut registry = ToolRegistry::new();
-provider.register_into(&mut registry);
+let registry = ToolRegistry::new();
+provider.register_into(&registry);          // &ToolRegistry since 0.4.1
+// or, when the registry is live: provider.sync_into(&registry).await?
 
 let mut agent = BareLoop::new(my_client, registry, config);
 ```
@@ -39,6 +40,7 @@ Behavior worth knowing:
 - **Imported tools declare `is_concurrency_safe: false`** — conservative: the protocol carries no concurrency hint. `readOnlyHint` maps to `is_read_only` when the server annotates it.
 - **Errors:** protocol/transport failures become `ToolError::Execution` (soft, visible to the model); a server-reported tool error becomes a soft `is_error` result with the server's content.
 - **Refresh:** `provider.refresh()` re-reads `tools/list` (servers change their tools). It does not retro-update tools already registered under stale names — you decide when to rebuild.
+- **Live registries sync (0.4.1):** `provider.sync_into(&registry).await` re-lists the server and mirrors the diff into a live [`ToolRegistry`](../01-core-data/02-tools.md) — added names register, dropped names are removed (only while the target still holds this provider's registration), an identical survivor is not touched at all, and a survivor whose contract moved (schema, description, or the read-only/destructive annotations) refreshes in place. The returned `McpSyncReport { added, removed, untouched }` carries the sorted diff. A foreign tool that overwrote a shared name is left alone with a warning. Syncing one provider into several registries populates each target.
 - **Reconnect:** `client.reconnect(&retry_config)` re-establishes a dropped stdio/HTTP connection with the same backoff strategy the stream handler uses. In-process clients can't reconnect (nothing to re-dial).
 - **Stdio lifecycle:** the child process dies with the client handle (the transport kills it; force-kill after a 3s grace). Don't fight it with your own `kill_on_drop`.
 
@@ -58,7 +60,7 @@ Corners of the conversion that aren't visible from the happy path:
 use loopctl::mcp::McpServerAdapter;
 
 let adapter = McpServerAdapter::new(
-    registry,                          // your ToolRegistry (moved in — snapshot semantics)
+    registry,                          // your ToolRegistry (served live since 0.4.1)
     ToolContext::default(),
     "my-agent-tools".into(),           // server name
     "1.0.0".into(),                    // server version
@@ -71,14 +73,33 @@ service.waiting().await;               // until stdin closes or you cancel
 Any MCP client that spawns your process now sees your tools. Key behaviors:
 
 - **Schemas are validated before being advertised** — with a real JSON Schema validator; **external `$ref`s are refused** (never fetched — a schema that would make your server do IO during `tools/list` is dropped instead), and non-object roots are skipped. A tool that can't be represented safely is omitted with a warning rather than breaking the listing.
+- **The registry is served live (0.4.1)** — the adapter reads its registry on every `tools/list` and every call, and `adapter.registry()` hands you the shared handle so mutations surface on the next request. Serving a changing tool set no longer means rebuilding the adapter. (Still no `listChanged` notifications: clients re-list.)
 - **Unknown tool calls** return a proper MCP `METHOD_NOT_FOUND` error naming the requested tool and what *is* registered.
 - **Everything the tool reports is a tool-level result** — soft errors, hard failures, cancellations all come back as `is_error: true` content the remote model can read (protocol errors are reserved for routing problems).
 - **Cancellation is honored mid-call:** a cancelled request drops the in-flight tool future — served tools must be cancellation-safe, same as engine-dispatched tools.
-- **Snapshot semantics:** the adapter takes the registry as-is; serving a different tool set means building a new adapter. (No `listChanged` notifications.)
+- **Structured content is emitted (0.4.1)** — see the next section.
+
+## `structuredContent` — both lanes of the spec's structured contract (0.4.1)
+
+The protocol lets a server attach a `structuredContent` JSON object beside the text of a tool result, validated against the tool's declared `outputSchema`. loopctl now speaks both sides.
+
+**Client side (imported tools).** A tool whose server declared a compilable `outputSchema` has every call's `structuredContent` validated:
+
+| Outcome | What you get |
+|---|---|
+| valid payload | a pretty-printed JSON part beside the text lane, whole output `DisplayHint::Json` |
+| invalid payload | a **soft tool error** naming the violated schema keyword, raw payload preserved (bounded 2 KiB) — the model adapts, the loop continues |
+| `Lenient` policy | warn and pass through, for hosts that trust their servers |
+| schema declared, no structured content | text lane alone |
+| uncompilable `outputSchema` | omitted at discovery with a warning; the tool stays listed, unvalidated |
+
+The default policy is `StructuredContentPolicy::Error`; switch with `provider.with_structured_policy(StructuredContentPolicy::Lenient)`. The policy is compared on sync, so a change reaches already-registered tools through the next `sync_into`.
+
+**Server side (your tools).** A host tool whose result carries `DisplayHint::Json` has its parseable-object payload emitted as `structuredContent` beside the text lane. The emission parses the payload's last text part, so a prose-plus-JSON multipart round-trips its structured lane. A hint that lies (prose, or a non-object) keeps the text lane with a warning.
 
 ## The conversion layer, briefly
 
-Foreign content blocks map onto loopctl types: text → text parts; images → base64 image sources; embedded resources → text notes (never silently dropped); `structuredContent` → carried as a JSON-stringified text part. Outbound, your `ToolSchema` becomes an MCP tool (the `tool` field maps to `name`), `is_read_only` becomes `readOnlyHint: true` **plus** `destructiveHint: false` (consistent with the spec's defaults), and `DisplayHint`/loopctl-specific details stay home.
+Foreign content blocks map onto loopctl types: text → text parts; images → base64 image sources; embedded resources → text notes (never silently dropped); `structuredContent` → validated JSON part or JSON-stringified text part (schema-less tools keep the stringified lane byte-for-byte). Outbound, your `ToolSchema` becomes an MCP tool (the `tool` field maps to `name`), `is_read_only` becomes `readOnlyHint: true` **plus** `destructiveHint: false` (consistent with the spec's defaults), and `DisplayHint`/loopctl-specific details stay home.
 
 ---
 

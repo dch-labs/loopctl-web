@@ -24,6 +24,16 @@ The `Jobs` tool lists, polls, and clears, where `operation` is `jobs`, `job_stat
 
 Concurrency is decided dynamically by `is_safe_for_concurrent_execution`. A read-only-prefix allowlist approves `cargo check` and refuses `cargo checkout`, and compound or redirection forms are disqualified.
 
+Retention classification joined in 0.4.1. Sequenced and piped read-only compounds, such as `cd /repo && grep -n needle file`, stamp `Requery`, decided segment-wise. A `cd` prefix is admitted, and every segment must pass the allowlist.
+
+Any mutating segment, redirection, or control separator, including a newline, keeps the whole receipt `Durable`. A failed read-only compound stays unclassed.
+
+A missing `command` rejects with the shared teaching shape since 0.4.1:
+
+```text
+Missing command (got top-level keys: no keys; expected key 'command')
+```
+
 A denylist of mutating substrings follows, and expansion disqualifiers reject any `$` or `{`, because your shell expands `${IFS}`, `$'…'`, and `{a,b}` into words the checked text never shows.
 
 ## Behavior notes

@@ -48,10 +48,13 @@ let embedder = OpenAiEmbedder::from_env()?;   // OPENAI_API_KEY (required)
 
 A `k` of `0` returns empty on every index tier; and on the external tiers ([`loopctl-vector`](../04-extensions/03-memory.md#the-semantic-tier--shipped-040)) non-finite and zero-norm vectors reject loudly at `add`/`search` — cosine over a degenerate vector is undefined.
 
+Both backends also feed a consumer outside memory: `EmbeddingSelector` (0.4.1) embeds a registry's tool corpus and each turn's query to advertise the top-k nearest tools. See [tool selection](../01-core-data/07-tool-selection.md).
+
 ---
 
 ## Related pages
 
 - [Memory](../04-extensions/03-memory.md) — what these backends feed: `VectorMemoryStore`, the golden-set bar, the tier table.
+- [Tool selection](../01-core-data/07-tool-selection.md) — `EmbeddingSelector`, the non-memory consumer.
 - [API client](../01-core-data/03-api-client.md) — the shared HTTP discipline underneath.
 - [File reference: provider/embeddings.rs](../07-file-reference/provider-embeddings.md)

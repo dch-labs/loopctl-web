@@ -16,6 +16,7 @@ Everything the model ever sees is built from these types: `Message`, `Role`, `Me
 - `ToolCall.id` ↔ `ToolResult.call_id` pairing is the load-bearing link; the engine stamps ids authoritatively.
 - Everything serializes with serde — this is what makes machine checkpointing work. `signature`/`redacted`/`retention` ride `skip_serializing_if`, so old saved conversations load unchanged.
 - **Thinking rides the conversation verbatim since 0.4.0** — no turn-boundary strip; a compaction pass ages it out. The prefix stays byte-stable so provider prompt caches keep hitting.
+- **Adjacent assistant runs fold since 0.4.1** — `coalesce_adjacent_assistants` (the compaction seam's coalescer, also the Anthropic request build's safety net) merges runs of assistant messages into one, parts in order, a `\n\n` separator when two texts would glue. Some providers (Z.ai's GLM) reject the adjacent shape with `HTTP 400 [1214]`.
 - `ToolResult.name` defaults to `""` when deserializing old data (the field came later).
 
 Deep dive: [Messages](../01-core-data/01-messages.md).

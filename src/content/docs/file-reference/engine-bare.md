@@ -38,6 +38,12 @@ The internals are `machine_policy()`, `count_context`, `overhead_tokens`, which 
 
 Your accessors are `conversation`, `session`, `run_config`, `tools`, `machine`, `cancel_signal`, `is_cancelled`, and `turn_mode`.
 
+Three host seams joined in 0.4.1: `steering()` hands you the shared guidance slot, `tool_registry()` hands you the `Arc<ToolRegistry>` mutation handle, and `rewind_history_to(len)` cuts committed history at a turn boundary.
+
+The steering drain also lives here. Your loop drains the slot at each turn boundary through `machine.inject`, and a drain that takes anything invalidates the prepared turn and the usage anchor, exactly as a rewind does.
+
+A `SteeringCloseGuard` closes the slot when the `run()` future is dropped, through abort, timeout, or `select!`.
+
 ## Behavior notes
 
 Watch the deferral dance. A turn whose fuller payload with transients crosses the compaction line defers silently, with no turn events, and reserves `deferred_transient_tokens` so the retried turn fits.
