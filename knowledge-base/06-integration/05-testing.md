@@ -131,10 +131,16 @@ Both live in the crate's `tests/` (`cassettes/`, `golden/`) — see `TESTING.md`
 
 ---
 
+### The conformance battery — the contract is the oracle (0.5.0)
+
+One behavioral contract now runs per provider over the recorded cassettes: `tests/common/conformance.rs` is written once, and per-provider instantiation is configuration (a profile names a client builder and dialect; the battery never changes). Five families — `stream_lifecycle` (exactly one terminal, nothing after it, no synthetic stop on a truncated stream), `usage_reporting` (recorded numbers reach the terminal, repeated reports merge field-wise by max, unreported never becomes a fabricated number), `stop_reason_routing` (tool vs text route identically, tool lanes carry the requested identity), `error_taxonomy` (401/403 → `Auth`; 429/503/529 → `RateLimit` carrying the recorded `Retry-After` exactly; else typed `Http`), and `options_honoring` (the model override reaches the wire bytes; `include_usage` agrees with the scenario). The fixture is the oracle — expected values parsed from the recorded bytes, never hardcoded — and silence is not a verdict: a family counts as exercised only where a check actually adjudicated a fixture, and `n/r` cells in the generated matrix name what closes them. `make conformance` runs it; `TESTING.md` states the rule: **a new provider ships with a green conformance run**.
+
+Two determinism fixtures also joined `testing` in 0.5.0: `StepClock` (a `Clock` whose monotonic half advances a fixed step per read, so every measured duration is an exact multiple of the step; the wall half frozen at the Unix epoch) and `CapturingObserver` (records every lifecycle callback into a comparable, ordered `Vec<CapturedEvent>` read with `snapshot()`), so two engines built from the same seeds assert equal event for event.
+
 ## Gotchas
 
 1. The mock **ignores request content** — it plays its script regardless of what you send. Tests of "the model should have seen X" belong to [observers](../04-extensions/01-observers.md) or the audit trail, not the mock.
-2. Fixed usage numbers (50/25) leak into assertions — don't bake them into app logic.
+2. A mock with no staged usage serves the fixed pair 50/25; since 0.5.0 you stage your own with `MockApiClient::with_usage(Usage)` (cache and reasoning detail scriptable per fixture — `with_usage` × `without_usage` together serve no usage). Don't bake the defaults into app logic.
 3. `with_responses(vec![])` is a no-op (keeps the default script) — an easy silent mistake.
 4. Derived tools make better test tools than `MockTool` when you care about input handling — the derive works in dev-dependencies like anywhere else.
 

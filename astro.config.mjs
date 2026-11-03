@@ -78,6 +78,7 @@ export default defineConfig({
         { label: 'Extensions', items: [{ autogenerate: { directory: 'extensions' } }] },
         { label: 'Providers', items: [{ autogenerate: { directory: 'providers' } }] },
         { label: 'Integration', items: [{ autogenerate: { directory: 'integration' } }] },
+        { label: 'Telemetry', items: [{ autogenerate: { directory: 'telemetry' } }] },
         { label: 'File reference', items: [{ autogenerate: { directory: 'file-reference', collapsed: true } }] },
         { label: 'Cookbook', items: [{ autogenerate: { directory: 'cookbook' } }] },
         { label: 'Principles', items: [{ autogenerate: { directory: 'principles' } }] },

@@ -128,9 +128,17 @@ Use this when you're *in the code* and want to know what the file in front of yo
 | [`mcp/server.rs`](mcp-server.md) | MCP server side (serve your registry). |
 | [`mcp/convert.rs`](mcp-convert.md) | The type conversion layer between worlds. |
 | [`testing.rs`](testing.md) | Mocks and fixtures. |
+| [`testing/determinism.rs`](testing-determinism.md) | `StepClock` + `CapturingObserver` — the determinism fixtures (0.5.0). |
 | [`crates/derive/src/*`](derive-lib.md) | The `#[derive(Tool)]` macro crate. |
 | [`crates/sqlite/`](sqlite-crate.md) | `loopctl-sqlite` — durable SQLite `LoopMemory` (WAL, FTS5, ranking parity). |
 | [`crates/client/`](client-crate.md) | `loopctl-client` — the shared daemon client (UDS REST + SSE, both modes). |
 | [`crates/hnsw/`](hnsw-crate.md) | `loopctl-hnsw` — the HNSW `VectorIndex` companion. |
 | [`crates/vector/`](vector-crate.md) | `loopctl-vector` — Qdrant + pgvector backends (side workspace). |
+| [`crates/otel/`](otel-crate.md) | `loopctl-otel` — OTLP export for the span tree and metrics (0.5.0). |
+| [`crates/langfuse/`](langfuse-crate.md) | `loopctl-langfuse` — Langfuse traces, observations, and scores (0.5.0). |
+| [`tracing_spans.rs`](tracing-spans.md) | The span tree + signal events (0.5.0). |
+| [`metrics.rs`](metrics.md) + [`metrics/*`](metrics-registry.md) | The metric catalog, snapshot, store, and collectors (0.5.0) [feature: metrics]. |
+| [`pricing.rs`](pricing.md) | The vendored price table + micro-dollar cost math (0.5.0). |
+| [`api/probe.rs`](api-probe.md) | Model-probe types: `ModelInfo`, `ModelMetadata`, `PingReport`, `ProbeClass` (0.5.0). |
+| [`provider/forensics.rs`](provider-forensics.md) | Request ids + rate-limit snapshots captured at HTTP time (0.5.0). |
 | [`examples & tests`](examples-tests.md) | The runnable tour. |

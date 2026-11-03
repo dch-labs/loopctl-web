@@ -32,6 +32,8 @@ flowchart LR
 
 **Validation** runs semantic checks over the resolved result with span-bearing errors. Each message names the field and where it came from, meaning which file section and which profile layer, rather than only saying "invalid."
 
+One name is reserved. Since 0.5.0, `parse` refuses a profile named `(none)`, with `ManifestError::OverlayRule` naming `profiles.(none)`. The label carries the `loopctl.profile.active` metric's no-overlay reading, so a document free to declare it would land two different facts on one series. Rename such a profile. Every other name is unconstrained.
+
 **Schema export** gives you a JSON Schema for the manifest's own shape from `manifest/schema.rs`, backed by `schemars`, so your editors and validators can check `loop.yaml` before loopctl ever sees it.
 
 **`config_hash()`** returns a stable hash over the resolved manifest's canonical form. That is the identity your daemon or cache keys on for "this loop, exactly this configuration."

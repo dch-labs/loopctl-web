@@ -38,7 +38,7 @@ let embedder = OpenAiEmbedder::from_env()?;   // OPENAI_API_KEY (required)
 
 ## Shared contracts — both backends
 
-- **Batching** — `embed_texts` splits at 256 inputs or an estimated 250,000-token sum per request, whichever closes first, over the shared error-classification path; per-batch `loopctl.embed.batch` metric events carry the usage pair when reported.
+- **Batching** — `embed_texts` splits at 256 inputs or an estimated 250,000-token sum per request, whichever closes first, over the shared error-classification path; per-batch `loopctl.embed.batch.duration_ms` metric events (the name gained its unit suffix in 0.5.0; a 0.4.0 dashboard moves its filter) carry the wall-clock duration of one batch.
 - **Bounded reads** — dimension-derived response budgets (clamped 1–64 MiB) so a hostile stream cannot balloon memory; refused up front on an over-declared content-length.
 - **Dimension honesty** — a server answer whose length differs from the configured `dim()` fails as a config-validation error **naming both numbers** (after a WARN metric event). Embedding models are not interchangeable across a store's lifetime — a silent mismatch is index corruption.
 - **OpenAI reassembly by `data[].index`** — never array position; row-count and permutation both verified, duplicate or out-of-range indices refused.

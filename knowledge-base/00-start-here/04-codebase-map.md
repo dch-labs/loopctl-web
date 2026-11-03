@@ -78,6 +78,8 @@ loopctl/
 
 ---
 
+0.5.0 added three always-compiled modules and one feature-gated family: `tracing_spans.rs` (the span tree + signal events), `pricing.rs` (the vendored price table + cost math), `api/probe.rs` (model-probe types), `provider/forensics.rs` (wire forensics capture), `testing/determinism.rs` (`StepClock`, `CapturingObserver`), `metrics.rs` + `metrics/` behind the `metrics` feature, and the companion crates `otel/` (`loopctl-otel`) and `langfuse/` (`loopctl-langfuse`). Deep dives: [run metrics](../06b-telemetry/01-metrics.md) · [the span tree](../06b-telemetry/02-spans.md) · [exporters](../06b-telemetry/03-exporters.md) · [prices and cost](../06b-telemetry/04-pricing.md).
+
 ## The engine — where the loop lives
 
 | File | What it is |
@@ -205,7 +207,7 @@ Deep dives: [messages](../01-core-data/01-messages.md) · [errors](../01-core-da
 | `crates/hnsw/` | The `loopctl-hnsw` crate: an HNSW `VectorIndex` — approximate nearest-neighbour search at scale. |
 | `crates/client/` | The `loopctl-client` crate: the family's shared daemon client (UDS REST + SSE, one interface for in-process and daemon modes). |
 | `crates/vector/` | The `loopctl-vector` crate (side workspace): external vector stores — Qdrant and pgvector backends for `VectorIndex`. |
-| `examples/` | Eleven runnable examples, from hello-world to vector memory. |
+| `examples/` | Thirteen runnable examples, from hello-world to telemetry. |
 | `tests/` | Integration tests — good reading for "how is X supposed to behave?" — plus the `cassettes/` corpus and `golden/` request bytes. |
 | `Makefile` | `make ci`, `make test`, `make lint`, `make e2e` and friends. |
 | `TESTING.md` | The project's testing philosophy (written, but useful to users too). |

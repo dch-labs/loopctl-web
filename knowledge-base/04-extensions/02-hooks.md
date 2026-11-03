@@ -15,6 +15,7 @@ pub trait Hook: Send + Sync {
     fn on_post_compact(&self, ctx: &PostCompactContext) {}
     fn on_run_start(&self, ctx: &RunStartContext) {}
     fn on_run_end(&self, ctx: &RunEndContext) {}
+    fn on_run_followup(&self, ctx: &RunEndContext) -> Option<PostRunAction> { None }
 }
 ```
 
@@ -50,6 +51,10 @@ The semantics have three precise corners worth knowing:
 - **`Some(Allow)` is skipped, not short-circuited.** The walk continues past an explicit Allow so later safety hooks still get their say; only a `Block`/`Ask` result stops it. ("First non-Allow **decision** wins" — an Allow isn't a decision.)
 - **No timeout is enforced — anywhere.** The executor never wraps your hook in a deadline; the contract *is* the guarantee. (The one number that looks like one — `AutoCommitHook`'s 30 s — is a subprocess kill deadline for `git` itself, not a hook timeout: a hung `git` is killed at 30 s, which is why a failing run-end hook can cost up to that much.)
 - **The async wrappers are eager.** Internally the executor's async-facing methods run the synchronous body immediately and wrap the finished value in a future — there is no deferred, lazy execution to race against the engine.
+
+## Run follow-ups — one extra turn after a clean run (0.5.0)
+
+A run that completes without error may be extended by exactly one more turn, offered through the hook executor: each hook's `on_run_followup` sees the run-end context, the first `Some` wins (a `None` is a pass to the next hook, not a veto — the same short-circuit the pre-tool consult applies), and the winning `PostRunAction::FollowUp { prompt, origin }` drives its prompt as the run's next turn — same run record, same session, one `on_run_start`/`on_run_end` pair. The injected turn spends from the run's own `max_turns` budget and continues its turn sequence; the consult is offered only when the budget still has room. The `origin` is a hook-declared id (conventionally `"hook:<name>"`) and rides the `loopctl.hook_followup` signal event — never prompt content. Exactly one follow-up per run, and only after a clean end: a failed or cancelled run consults nobody.
 
 ## The contexts
 

@@ -27,7 +27,7 @@ let client = GeminiClient::builder()
 
 - **System prompts:** Gemini rejects inline `system` roles — folded into the top-level `systemInstruction` field (omitted entirely when empty).
 - **Tool calls:** `functionCall` parts; your results become `functionResponse` parts carrying **both name and id** — Gemini correlates by function name, which is why loopctl's tool results always carry the name. `is_error` has no wire form on Gemini; error text conveys it.
-- **Usage:** `promptTokenCount` → input; `candidatesTokenCount + thoughtsTokenCount` → output.
+- **Usage:** `promptTokenCount` → input; `candidatesTokenCount + thoughtsTokenCount` → output; `cachedContentTokenCount` → `Usage::cached_input_tokens` and `thoughtsTokenCount` → `reasoning_tokens` (a subset of the output), both parsed since 0.5.0 — a final report omitting the detail keys cannot zero a latched share, the latch max-merges per field.
 - **Finish reasons:** `MAX_TOKENS` → MaxTokens; everything else (STOP, SAFETY, ...) → EndTurn.
 
 ## Structured output

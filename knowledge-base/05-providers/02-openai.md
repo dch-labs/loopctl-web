@@ -71,6 +71,10 @@ An SSE error object is classified: rate-limit family (`rate_limit_error`, codes 
 
 ---
 
+## The model listing (0.5.0)
+
+`list_models()` tries `GET {base}/models` first; a genuine 404 (no OpenAI-style route) falls back to Ollama's `GET /api/tags` (names, modification stamps, weight sizes), surfacing the **original** refusal when the fallback fails too. `ping()` shares the route set, so a tags-only server pings as live rather than reading as a wrong URL. Both verbs ride the shared checked-transport helper with a 5-second total deadline and the same failure forensics a completion carries — see [model probes](09-probes.md).
+
 ## Gotchas
 
 1. **`is_error` on tool results is not forwarded** — Chat Completions has no error flag; error text is conveyed as the tool message's content. The model still reads what happened, just without the formal flag.

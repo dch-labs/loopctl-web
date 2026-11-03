@@ -25,7 +25,9 @@ Session-history mining showed 45% of failed fs calls were pure key-spelling drif
 - A present-but-mistyped canonical key refuses with its type (`file_path must be a string, not number`) instead of silently serving the alias.
 - A still-missing path names the expected key, the accepted spellings, and the keys the input actually carried: `Missing file_path for Write (got top-level keys: path; accepted: file_path, or path)`. The received-keys echo is bounded at 512 bytes. The shell's missing-`command` error carries the same shape.
 
-**Edit miss repair (0.4.1)**
+**Edit miss repair (0.4.1)** — and since 0.5.0 an ambiguous normalized match refuses by naming the count (`appears N times`), never by echoing the file.
+
+**Receipts (0.5.0)** — edit results stopped echoing files: a receipt is a `Changed:`/`Created:` header, a `│`-prefixed change summary, and `@@ -old,count +new,count @@` hunks (three context lines), so the diff is bounded by the change rather than by the file; the Before/After preview survives only where no hunks can be produced, capped at 1,000 lines per side. The read-before-write guard is decided on the anchor, not session bookkeeping: a resumed session can edit a file it last read before the restart as long as the anchor text is intact on disk (the whitespace-normalized rescue is declined on bytes this session never saw, with the refusal saying why).
 
 An `old_text` miss classifies and teaches, instead of a bare "not found":
 

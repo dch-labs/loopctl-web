@@ -6,7 +6,7 @@ The two `EmbeddingProvider` backends a real semantic-memory consumer needs — o
 
 - `OllamaEmbedder` — Ollama's *native* `/api/embed` endpoint (a chat-profile `/v1` suffix normalized away); defaults to `nomic-embed-text` (768 dims), key-free; `from_env()` requires `OLLAMA_EMBEDDING_MODEL` and deliberately refuses `OLLAMA_MODEL`; `OLLAMA_EMBEDDING_DIM` optionally pins the geometry.
 - `OpenAiEmbedder` — `/v1/embeddings`; defaults `text-embedding-3-small` (1536 dims); `with_dimensions(256..=3072)` rides the 3-series' Matryoshka truncation only when set; the key is redacted in `Debug`.
-- Both: validated builders with the family's shared HTTP config, `embed_texts` batching (256 inputs or ~250k estimated tokens per request), dimension-derived bounded response reads, optional `normalized()` (exact L2 in place), per-batch `loopctl.embed.batch` metric events.
+- Both: validated builders with the family's shared HTTP config, `embed_texts` batching (256 inputs or ~250k estimated tokens per request), dimension-derived bounded response reads, optional `normalized()` (exact L2 in place), per-batch `loopctl.embed.batch.duration_ms` metric events (unit suffix added in 0.5.0).
 
 **Behavior notes**
 

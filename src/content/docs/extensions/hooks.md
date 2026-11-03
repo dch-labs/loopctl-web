@@ -17,8 +17,11 @@ pub trait Hook: Send + Sync {
     fn on_post_compact(&self, ctx: &PostCompactContext) {}
     fn on_run_start(&self, ctx: &RunStartContext) {}
     fn on_run_end(&self, ctx: &RunEndContext) {}
+    fn on_run_followup(&self, ctx: &RunEndContext) -> Option<PostRunAction> { None }
 }
 ```
+
+The `on_run_followup` slot is new in 0.5.0. It can extend a clean run by exactly one turn.
 
 Returning `None` means your hook has no opinion. Here is what a `HookAction` can say:
 
@@ -54,6 +57,20 @@ CompactResult {
 The first `abort` wins. `new_instructions` is last-writer-wins, and each hook sees earlier hooks' instructions accumulated in its context. `additional_context` accumulates from every hook.
 
 The merged guidance genuinely reaches the compactor through `CompactionContext`, so your LLM summarizer can consume it.
+
+## Run follow-ups: one extra turn after a clean run
+
+A run that completes without error may be extended by exactly one more turn, offered through the hook executor. Each hook's `on_run_followup` sees the run-end context. The first `Some` wins, and a `None` is a pass to the next hook, not a veto, the same short-circuit the pre-tool consult applies.
+
+The winning `PostRunAction::FollowUp { prompt, origin }` drives its prompt as the run's next turn. Same run record, same session, one `on_run_start` and one `on_run_end` for the whole extended run.
+
+The injected turn spends from the run's own `max_turns` budget and continues its turn sequence, and the consult is offered only when the budget still has room.
+
+The `origin` is a hook-declared id. It rides the `loopctl.hook_followup` signal event so a trace names the hook that extended the run, never the prompt content.
+
+Exactly one follow-up per run, and only after a clean end. A failed or cancelled run consults nobody.
+
+Added in 0.5.0.
 
 ## Hooks are synchronous by contract
 

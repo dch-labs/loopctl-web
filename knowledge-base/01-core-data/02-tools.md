@@ -188,6 +188,8 @@ tools.get("echo")                    // Option<Arc<dyn Tool>> — an owned handl
 tools.contains("echo")
 tools.tool_names()                   // sorted alphabetically
 tools.all_schemas()                  // Vec<ToolSchema> — what the model is shown
+
+ToolSchema::estimate_tokens(&schemas) // rendered chars over the shared divisor (0.5.0)
 tools.all_tools()                    // everything, in registration order
 tools.concurrent_safe_tools()        // only the concurrency-safe subset
 ```
@@ -195,6 +197,8 @@ tools.concurrent_safe_tools()        // only the concurrency-safe subset
 The engine sends the advertised schemas with every model request, and classifies model replies against `tool_names()`: a call to a name that was never advertised is answered with "tool 'x' is not available" before any dispatch happens (see [tool dispatch](../02-engine/04-tool-dispatch.md)).
 
 An ordering fact pinned by the [golden request bytes](../06-integration/05-testing.md) harness: `all_tools()` and `all_schemas()` both return **registration order** (a re-registered name keeps its original slot), while `tool_names()` returns **alphabetical order**. Deterministic schema order is what makes request construction byte-reproducible. Don't break it.
+
+`ToolSchema::estimate_tokens` (0.5.0) sizes an advertised surface against the window: schemas are not messages, so a `TokenCounter` cannot read them — the estimate applies the default heuristic's convention (rendered characters over `compact::CHARS_PER_TOKEN`, now a public const) to the JSON the wire carries, so your figure matches the crate's own telemetry. It is a hint in the same sense the message estimate is; only a provider's usage figures are authoritative.
 
 ### The registry is runtime-mutable (0.4.1)
 

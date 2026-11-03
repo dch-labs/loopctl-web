@@ -19,6 +19,8 @@ These two directories are executable knowledge. The examples show you how, and t
 | `mcp-adapter` | mcp | Importing an in-process MCP server's tools and calling them |
 | `mcp-stdio-server` | mcp | A minimal stdio MCP server subprocess |
 | `mcp_server` | mcp | Serving a loopctl registry over MCP stdio, with a deliberately failing tool |
+| `telemetry` | metrics, testing | One mock-backed run printed through both collectors: `MetricsLayer` and `MetricsObserver` (0.5.0) |
+| `import_openrouter_prices` | none | Convert an OpenRouter models listing into a price table, or probe drift with `--check` (0.5.0) |
 
 The `crates/sqlite/` companion crate adds `sqlite-memory-cli`, which you run with `cargo run -p loopctl-sqlite --example sqlite-memory-cli`. It is the same restart-survival demo over a WAL-mode database.
 
@@ -38,6 +40,14 @@ MCP is covered by `mcp_tool_provider` and `mcp_transports`, and lifecycle by `te
 
 Since 0.4.0 the corpus also carries the harness suites. Cassette replay lives in `cassettes/` and is your hermetic wire oracle, plus the `committed_cassettes_carry_no_secrets` meta-test. Golden request bytes live in `golden_requests` and are your engine-construction oracle.
 
+0.5.0 added the behavioral and telemetry contracts. `provider_conformance` runs the five-family battery you care about per provider over the cassettes, with `tests/common/conformance.rs` as the one contract.
+
+`registry_emission_audit` fails the build when a declared metric row has no emission site, and `emission_catalog_contract` pins the emission-side shape. `tracing_spans` pins the span tree and every signal event's names, fields, and levels.
+
+The rest pin their own surfaces. You get `metrics`, `metrics_observer`, and `metrics_layer_e2e` for the collectors, `provider_forensics` and `provider_probes` for capture and probes, `low_water_events` for the quota warning, and `run_followup_hook` for the hook follow-up.
+
+`doctest_census` keeps the doctest count honest for you.
+
 The release also added a wave of subsystem suites. These are `gate_decisions`, `external_approver`, `budget_gate`, `search_tools`, `shell_tools`, and `fs_tools`.
 
 The compaction trio `qa_summarizer`, `structured_summarizer`, and `fallback_compactor` arrived with their metrics binaries, and so did `search_memories_tool` and `embeddings_wire`.
@@ -48,7 +58,7 @@ The `loopctl-sqlite` crate carries its own suite for restart survival, ranking p
 
 ## Makefile targets
 
-Run `make ci` for everything, `make test` for default plus all-features plus doctests, `make lint` for format, `make examples` for the examples, and `make e2e` for the live provider suites.
+Run `make ci` for everything, `make test` for default plus all-features plus doctests, and `make lint` for format. Use `make examples` for the examples, `make conformance` for the provider battery (0.5.0), and `make e2e` for the live provider suites.
 
 ## Behavior notes
 

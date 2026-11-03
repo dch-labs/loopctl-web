@@ -27,6 +27,8 @@ Every abbreviation, jargon word, and loopctl-specific term used in this knowledg
 | **PEM** | Privacy-Enhanced Mail (format) | The `-----BEGIN PRIVATE KEY-----` block format — redacted by the redaction layer. |
 | **vLLM** | — | A popular local model inference server; supports *grammar-constrained* decoding via `guided_json`. |
 | **GBNF** | GGML BNF | A grammar format for llama.cpp-family samplers (a dialect you could target with `ToolGrammarProvider`). |
+| **OTLP** | OpenTelemetry Line Protocol | The export protocol `loopctl-otel` ships your spans and metrics over, to a collector such as Jaeger, Tempo, or Honeycomb. |
+| **OTel GenAI** | Generative AI semantic conventions | The agreed attribute names, such as `gen_ai.request.model`, that the engine's span fields carry from emission. |
 
 ## Agent words
 
@@ -140,6 +142,13 @@ Every abbreviation, jargon word, and loopctl-specific term used in this knowledg
 | **SearchSource** | The search seam: a `ContentSource` that can also walk entries, sniff binaries, and bound reads — one trait serves `Glob`/`Grep`/`CodeSearch`/`Tree`. |
 | **MCP sync** | `McpToolProvider::sync_into` — re-list a server and mirror the diff into a live registry: added register, dropped remove, identical survivors untouched, changed survivors refreshed in place (0.4.1). |
 | **Structured content** | The MCP `structuredContent` lane: a server's JSON payload validated against its declared `outputSchema` (client side) and emitted for `DisplayHint::Json` results (server side, 0.4.1). |
+| **Length-cut salvage** | The mirror of overflow salvage for the truncation the provider never reports: a completion ending at `max_tokens` with no text and no tool calls compacts and retries once (0.5.0). |
+| **Manual compaction** | The host seam `BareLoop::compact_manual()`, running the engine's own compaction ceremony on demand for a `/compact` command or a headless schedule (0.5.0). |
+| **Span tree** | The `agent.run`/`agent.turn`/`agent.tool` DEBUG spans a run emits, so one run renders as a trace (0.5.0). |
+| **Signal event** | One of the seven named DEBUG events (`loopctl.compaction`, `steering_drain`, `model_switch`, `transport_fallback`, `salvage`, `cancelled`, `hook_followup`) where the engine narrates a decision with a fixed field set (0.5.0). |
+| **Metric registry** | The 65-row catalog of every metric name, kind, and closed label set under the `metrics` feature, with a build gate keeping catalog and emitters together (0.5.0). |
+| **Shape drift** | The counted mismatch when a metric event carries a name or labels its declared row does not (0.5.0). |
+| **Follow-up turn** | The one engine-injected turn a hook's `on_run_followup` may add after a clean run (`PostRunAction::FollowUp`, 0.5.0). |
 
 ## Design & pattern words
 
@@ -193,9 +202,19 @@ Terms from the [Principles](09-principles/01-sans-io.md) pages — the patterns 
 | **Guided JSON** | vLLM's field for grammar-constrained output. |
 | **Prompt-cache breakpoint** | A `cache_control` marker on the Anthropic wire asking the provider to cache the request prefix — loopctl marks the last tool definition, the system prompt, and the tail blocks. |
 | **Cached input tokens** | The share of the input count the provider served from its prompt cache (`Usage::cached_input_tokens`) — the hit-rate number a cache actually pays for. |
-| **Thinking effort** | The off/low/medium/high/max knob (`RequestOptions::effort`) telling a reasoning model how much thinking to spend. |
+| **Thinking effort** | The none/minimal/low/medium/high/xhigh/max knob (`RequestOptions::effort`) telling a reasoning model how much thinking to spend — `None` the explicit off; seven rungs since 0.5.0. |
 | **Session-scoped reasoning retention** | Prior turns' thinking blocks ride the conversation verbatim (until compaction ages them out) so the request prefix stays byte-stable and provider prompt caches keep hitting. |
 | **Embedder** | A real `EmbeddingProvider` backend — `OllamaEmbedder` (local, `/api/embed`) or `OpenAiEmbedder` (`/v1/embeddings`). |
+| **Model probe** | One of the three before-the-turn verbs — `list_models`, `ping`, `model_metadata` — answering what the endpoint serves, whether it is alive, and what a model can do (0.5.0). |
+| **`ProbeClass`** | The failure vocabulary every probe lands in (`Auth`…`Other`), derived mechanically from the wire's own variant and status. |
+| **`MetadataSource`** | The provenance marker on a model fact (`Unreported`/`Curated`/`Disclosed`/`DisclosedAndCurated`) — a number the provider served and a published opinion are different kinds of fact. |
+| **Wire forensics** | Request ids and rate-limit snapshots captured at HTTP time and ridden on the typed errors, read through `ApiError::provider_meta()` (0.5.0). |
+| **Rate-limit snapshot** | The `x-ratelimit-*` header family as verbatim strings, never interpreted — units differ per provider. |
+| **Low-water warning** | The once-per-window WARN when a response reports under 10% of its rate limit remaining, latched and re-armed by recovery or silence. |
+| **Capability probe** | The Anthropic client's per-model read of `GET /v1/models/{model}` deciding the thinking-control spelling the model accepts (0.5.0). |
+| **Conformance suite** | The one behavioral contract (five families) every provider client runs over its recorded cassettes — the fixture is the oracle (0.5.0). |
+| **Price table** | The vendored, dated per-family rates in `curated_prices.json` — the one source every cost estimate and USD budget line reads (0.5.0). |
+| **Micro-dollar** | The millionth-of-a-dollar integer unit all cost math runs in, so a total never floats. |
 
 ## Rust words used here
 

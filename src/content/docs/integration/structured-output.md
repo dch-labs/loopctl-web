@@ -114,7 +114,27 @@ OpenAI and Gemini drop `tools` outright, while Anthropic swaps in one synthesize
 
 ## Thinking effort: how hard the model thinks
 
-Reasoning models take a budget knob. Set `RequestOptions::effort(ThinkingEffort::…)` to `Off`, `Low`, `Medium`, `High`, or `Max`, and the three built-in clients can pin a default for every request through `thinking_effort(...)` on their builders.
+Reasoning models take a budget knob. Set `RequestOptions::effort(ThinkingEffort::…)` to `None`, `Minimal`, `Low`, `Medium`, `High`, `Xhigh`, or `Max`, and the three built-in clients can pin a default for every request through `thinking_effort(...)` on their builders.
+
+The ladder widened to the wire's seven rungs in 0.5.0, and each level's label rides verbatim:
+
+| Rung | OpenAI label | Anthropic budget | Gemini budget |
+|---|---|---|---|
+| `None` | `"none"` | `thinking: {"type": "disabled"}` | `0`, the provider's off sentinel |
+| `Minimal` | `"minimal"` | `1024`, the API's floor | `512` |
+| `Low` | `"low"` | `2048` | `1024` |
+| `Medium` | `"medium"` | `8192` | `8192` |
+| `High` | `"high"` | `16384` | `16384` |
+| `Xhigh` | `"xhigh"` | `24576` | `20480` |
+| `Max` | `"max"` | `32768` | `24576` |
+
+A provider whose parameter tops out lower answers with its own error, which surfaces the mismatch instead of quietly downgrading the run. The old `Max` to `"high"` clamp is gone.
+
+`None` is the explicit off. OpenAI carries `"none"`, the Messages API is told `thinking: {"type": "disabled"}`, and Gemini carries `thinkingBudget: 0`. A model with no off level answers the sentinel with its own error, the client mapping the level and leaving support to the provider.
+
+A per-request level still wins over a client default, `Some(None)` included, so the off rung disables a configured default for one call. Unset stays unset, and no default-request byte changes. The off rung's other legs are unchanged: no budget, no `max_tokens` headroom raise.
+
+On the Anthropic wire, the off is stated rather than omitted, because an omitted `thinking` block selects the model's own adaptive thinking on models that think by default. The [capability probe](/providers/anthropic/) reads what the model accepts and writes that spelling.
 
 Effort rides the wire where your provider supports it, and an unsupported combination is rejected loudly, like every other option.
 

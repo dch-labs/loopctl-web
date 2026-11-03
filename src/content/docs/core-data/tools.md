@@ -222,7 +222,15 @@ tools.tool_names()                   // sorted alphabetically
 tools.all_schemas()                  // Vec<ToolSchema> — what the model is shown
 tools.all_tools()                    // everything, in registration order
 tools.concurrent_safe_tools()        // only the concurrency-safe subset
+
+ToolSchema::estimate_tokens(&schemas) // rendered chars over the shared divisor (0.5.0)
 ```
+
+`ToolSchema::estimate_tokens` sizes an advertised surface against the window. Schemas are not messages, so a `TokenCounter` cannot read them.
+
+The estimate applies the default heuristic's convention, rendered characters over `compact::CHARS_PER_TOKEN`, to the JSON the wire carries. Your figure matches the crate's own telemetry rather than drifting from it.
+
+It is a hint in the same sense the message estimate is. Only a provider's usage figures are authoritative.
 
 Re-registering a name replaces the tool silently, apart from a warn log, and the new tool keeps the old slot in listing order.
 

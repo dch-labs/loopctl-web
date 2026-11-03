@@ -43,7 +43,7 @@ The response parser routes thought parts correctly either way.
 
 - **System prompts.** Gemini rejects inline `system` roles, so they are folded into the top-level `systemInstruction` field, which is omitted entirely when empty.
 - **Tool calls.** These become `functionCall` parts, and your results become `functionResponse` parts carrying both name and id. Gemini correlates by function name, which is why your tool results always carry the name. `is_error` has no wire form here, so error text conveys it.
-- **Usage.** `promptTokenCount` becomes your input, and `candidatesTokenCount + thoughtsTokenCount` becomes your output.
+- **Usage.** `promptTokenCount` becomes your input, and `candidatesTokenCount + thoughtsTokenCount` becomes your output. `cachedContentTokenCount` fills `Usage::cached_input_tokens` and `thoughtsTokenCount` fills `reasoning_tokens` as a subset of that output, both parsed since 0.5.0. A final report that omits the detail keys cannot zero a latched share, because the latch max-merges per field.
 - **Finish reasons.** `MAX_TOKENS` becomes MaxTokens, and everything else, including STOP and SAFETY, becomes EndTurn.
 
 ## Structured output

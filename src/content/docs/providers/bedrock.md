@@ -78,6 +78,14 @@ Four rules cover the frames:
 
 Converse's `cacheReadInputTokens` fills `Usage::cached_input_tokens`. The Anthropic-shape responses get the same input normalization as the direct client, meaning raw plus cache reads plus cache-creation spend.
 
+That normalization also covers Converse's own input total, fixed in 0.5.0. The Converse wire reports `cacheReadInputTokens` and `cacheWriteInputTokens` outside `inputTokens`, and the client used to pass the raw figure through, so a 900-token cached share read as a 100-token prompt.
+
+The arm now sums raw plus read plus write like its siblings, so the budget gate and any window reading you keep charge what the request actually spent.
+
+The listing verb answers from the control plane. `list_models()` SigV4-signs a `GET /foundation-models` and resolves provider-prefixed ids such as `anthropic.claude-…` and `meta.llama…` to their curated families under both dot and dash spellings.
+
+It is catalog truth rather than account entitlement, and the page-one bound is documented rather than flagged. See [model probes](/providers/probes/).
+
 ### The frame format
 
 This is what the decoder walks when you are reading packet captures:

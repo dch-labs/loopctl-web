@@ -29,8 +29,13 @@ pub trait ApiClient: Send + Sync {
     fn extract_structured(&self, message: &Message) -> Value;  // default: tool input or JSON-ish text
     fn supports_tool_constraints(&self) -> bool;   // default: false — "I enforce tool schemas"
     fn model_context_window(&self) -> Future<Option<u64>>;   // default: None — disclose the window
+    fn list_models(&self) -> Future<Result<Vec<ModelInfo>, ApiError>>;  // default: refuses (0.5.0)
+    fn ping(&self) -> Future<Result<PingReport, ApiError>>;   // default: one minimal completion (0.5.0)
+    fn model_metadata(&self, model: &str) -> Future<Result<ModelMetadata, ApiError>>; // curated (0.5.0)
 }
 ```
+
+The three probe verbs all have working defaults, so your own clients compile unchanged and are immediately probeable. [Model probes](/providers/probes/) covers what each answers and what it costs.
 
 You have two ways to get a reply, and the turn mode picks one:
 
@@ -64,7 +69,7 @@ Three rules separate a working client from one that corrupts runs:
 | Model override | A per-request model, used by [fallback](/safety/fallback/). |
 | Response format | Forced JSON output. |
 | Tool constraint | Strict tool schemas. |
-| Thinking effort | `ThinkingEffort`: off, low, medium, high, max. See [structured output](/integration/structured-output/). |
+| Thinking effort | `ThinkingEffort`: none, minimal, low, medium, high, xhigh, max. See [structured output](/integration/structured-output/). |
 
 If your client cannot honor one of these, say so loudly. The default `*_with_options` implementations reject the request with an `ApiError` rather than silently dropping the option.
 
@@ -81,15 +86,18 @@ A `None` never errors your run, because the declared `SessionConfig::context_win
 
 ```rust
 pub enum ApiError {
-    Api(String),                        // generic API failure
-    RateLimit { retry_after: Option<Duration>, message: String },  // 429 / 503 / 529
-    Auth(String),                       // bad key / no permission
-    Http(String),                       // HTTP status errors ("HTTP 429: ...")
-    Json(serde_json::Error),            // unparseable response
-    Io(std::io::Error),                 // local IO failure
+    Api(String, Option<Box<ProviderMeta>>),   // generic API failure (meta since 0.5.0)
+    RateLimit { retry_after: Option<Duration>, message: String, .. },
+                                              // 429 / 503 / 529, #[non_exhaustive] since 0.5.0
+    Auth(String, Option<Box<ProviderMeta>>),  // bad key / no permission
+    Http(String, Option<Box<ProviderMeta>>),  // HTTP status errors ("HTTP 429: ...")
+    Json(serde_json::Error),                  // unparseable response
+    Io(std::io::Error),                       // local IO failure
     Tool(String), Config(String), Interrupted, Other(String),
 }
 ```
+
+The `ProviderMeta` elements are wire forensics, request ids and rate-limit snapshots captured at HTTP time. Read them through `provider_meta()`, covered in [wire forensics](/providers/forensics/). Build the meta-free shape with the constructors `ApiError::api`, `auth`, and `http`, and match the variants with `..` so your code survives future widening.
 
 The shapes matter less than the three questions every error can answer:
 
@@ -98,22 +106,27 @@ The shapes matter less than the three questions every error can answer:
 | Worth retrying? | `is_retryable()` | rate limits, timeouts, 5xx server errors, connection errors. False for auth failures and other 4xx, so you fail fast and do not burn retries on a bad key. |
 | Are we being throttled? | `is_rate_limited()` | 429/503/529 in any shape, and messages mentioning "rate limit" |
 | Is the request too big for the window? | `is_context_overflow()` | messages mentioning "context", "too many tokens", "exceeds maximum", "max tokens" |
+| What status did the wire answer? | `http_status()` | The typed status when the endpoint answered, `None` when it never did (0.5.0) |
 
 Each error also carries a stable numeric `ErrorCode`, such as 1002 for rate-limited and 1101 for auth failed. Use those codes in your logs and dashboards instead of matching on message text.
 
-`RateLimit.retry_after` is the provider's parsed "wait this long" hint from the `Retry-After` header, so nothing downstream has to re-parse it.
+`RateLimit.retry_after` is the provider's parsed "wait this long" hint from the `Retry-After` header, so nothing downstream has to re-parse it. The parser behind it, `api::error::parse_retry_after`, is public since 0.5.0: it reads RFC 9110 delta-seconds or an HTTP-date, and a past or unparseable value reads as no delay.
 
-### Cached input tokens
+### Usage detail
 
-`Usage` gained a fourth field: `cached_input_tokens`. It is the share of the input the provider served from its prompt cache, and it is a subset of the input count rather than extra input. Every shipped provider fills it from its native report:
+`Usage` gained two more classes in 0.5.0: `cache_write_tokens` and `reasoning_tokens`. A `0` means not reported, never a measured zero, and the builders `with_cache_write` and `with_reasoning` attach them:
 
-| Provider | Native field |
+| Class | Provider native field |
 |---|---|
-| Anthropic | `cache_read_input_tokens` |
-| OpenAI | `usage.prompt_tokens_details.cached_tokens` |
-| Bedrock Converse | `cacheReadInputTokens` |
+| Cached read | Anthropic `cache_read_input_tokens`, OpenAI `prompt_tokens_details.cached_tokens`, Bedrock `cacheReadInputTokens`, Gemini `cachedContentTokenCount` (parsed since 0.5.0) |
+| Cache write | Anthropic `cache_creation_input_tokens`, Bedrock's matching classes |
+| Reasoning | OpenAI `completion_tokens_details.reasoning_tokens`, Gemini `thoughtsTokenCount` (a subset of output) |
 
-`Usage::new` leaves the count at zero, and `with_cached_input(n)` attaches it. Anthropic's raw `input_tokens` excludes cache traffic, so loopctl adds raw input, cache reads, and cache-creation spend to keep the cached share the documented subset.
+Never sum the detail fields on top of the input. The totals compose without double counting, pinned per family: Anthropic's conversation total is raw plus read plus creation, and OpenAI's total is the prompt count itself.
+
+`Usage::new` leaves the detail counts at zero, and the `with_*` builders attach them. The cached-read share is a subset of the input count rather than extra input.
+
+Anthropic's raw `input_tokens` excludes cache traffic. loopctl adds raw input, cache reads, and cache-creation spend for you, keeping the cached share the documented subset.
 
 ## Ready-made clients
 

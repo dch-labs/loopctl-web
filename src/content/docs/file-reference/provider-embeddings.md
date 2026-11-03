@@ -18,7 +18,7 @@ It defaults to `nomic-embed-text` at 768 dims and is key-free. `from_env()` requ
 
 Both give you validated builders with the family's shared HTTP config and `embed_texts` batching at 256 inputs or about 250k estimated tokens per request.
 
-Both read responses with a bound derived from your dimension, offer optional `normalized()` for exact L2 in place, and emit per-batch `loopctl.embed.batch` metric events.
+Both read responses with a bound derived from your dimension and offer optional `normalized()` for exact L2 in place. Each batch emits `loopctl.embed.batch.duration_ms` metric events, a name that gained its unit suffix in 0.5.0.
 
 ## Behavior notes
 

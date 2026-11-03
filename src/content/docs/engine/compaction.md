@@ -305,15 +305,17 @@ A compactor's failure, whether an API error, a blank response or an over-budget 
 
 That is exactly the shape the `FallbackCompactor` chain consumes.
 
-### The summary seam: one assistant message (0.4.1)
+### The summary seam: one user-role message (0.5.0)
 
-Every LLM compactor emits its summary as an assistant-role message at the head of the preserved tail. When your tail opens with an assistant turn, the common case mid-run, a naive assembly carries two adjacent assistant messages.
+Every LLM compactor emits its summary as a user-role message at the head of the preserved tail. Before 0.5.0 the summary wore the assistant role, and a tail opening with a tool turn folded the summary into an assistant carrying a tool use.
 
-Some providers reject that shape outright. Z.ai's GLM API answers `HTTP 400 [1214]` and kills the run two seconds after every successful compaction.
+Z.ai's Anthropic-compatible endpoint rejects that opening shape with `400 [1214]`, so the change is not cosmetic.
 
-The seam now coalesces. `LoopMachine::compaction_result` folds runs of adjacent assistant messages into one message carrying the parts of every member in order. Your summary's parts come first, a `\n\n` separator parts two adjacent texts at the merge so the wire never glues statements, and the tail's follow.
+A user-role head is always legal. `[user, …]` opens cleanly on every shipped provider, and the summary can never glue onto the tail's first assistant turn again.
 
-A tail opening with a user or system message keeps the standalone summary assistant message. The Anthropic request build also merges any adjacent assistant messages it is handed, so a future producer of the hostile shape cannot kill your run even if a compactor changes. See the [Anthropic client](/providers/anthropic/).
+The machine still folds runs of adjacent assistant messages at the adoption seams, so a summary and a preserved tail can never produce two adjacent assistants on the wire. Your summary's parts come first, a `\n\n` separator parts two adjacent texts at the merge, and the tail's follow.
+
+The Anthropic request build also merges any adjacent assistant messages it is handed, so a future producer of the hostile shape cannot kill your run even if a compactor changes. See the [Anthropic client](/providers/anthropic/).
 
 ### The 0.4.1 hardening round
 
@@ -346,6 +348,42 @@ Both LLM compactors consume your pre-compact hook guidance identically. `Compact
 Both honor the **retention classes**. `Requery`-tagged results render as omission markers in the transcript, because a summary physically cannot restate content it never saw.
 
 `Durable` results are carried verbatim within the landing's budget since 0.4.1. The tag means preferred verbatim, never un-evictable, so a pinned receipt cannot make your run impossible to compact. See the hardening round below.
+
+## Manual compaction: the host seam
+
+A host that shows the user a `/compact` command, or runs compaction on a headless schedule, had nothing to call. `BareLoop::compact_manual()` is that call, added in 0.5.0. It runs the engine's own compaction ceremony over the loop's installed `ContextManager` and installs what the pass won.
+
+```rust
+use loopctl::compact::types::EnsureContextResult;
+
+match agent.compact_manual().await {
+    Ok(EnsureContextResult::Compacted(outcome)) => {
+        // history replaced, figures recounted, eviction list in outcome
+    }
+    Ok(EnsureContextResult::NoAction(history)) => {
+        // below threshold, hook veto, or no manager: nothing changed
+    }
+    Err(e) => { /* the same errors an automatic pass propagates */ }
+}
+```
+
+The guard comes first. A turn in flight, or input staged but never run, refuses with `LoopError::InvalidInput` naming the state, with text written to display to the user who asked.
+
+A machine at rest between runs, including a `Terminal` one, is where a long-lived host's `/compact` actually finds it. That state is admitted.
+
+The ceremony is the engine's own. You get the opening observer event, the pre-compact hook veto, demotion of everything the pass evicted, and the pass telemetry. Then `on_compaction`, the post-compact hook, and the `loopctl.compaction` signal event with reason `manual`. Hooks see the manual trigger.
+
+The install is guarded too. It folds runs of adjacent assistant messages the way the in-run adoption does, and it keeps the pending split intact. It recounts tokens in the same breath, and it invalidates the usage anchor and any prepared turn exactly as a rewind does.
+
+Your host reads the compacted figures before the next run, and the next run's threshold sees them too.
+
+`NoAction` is the honest decline. The conversation sat below the threshold, a hook vetoed the pass, or no manager was installed. History, figures, and anchor are byte-identical, and the signal event narrates a noop.
+
+Errors ride the engine's existing mapping. `CompactionFailed` means the compactor ran and errored. `ContextExceeded` means a successful pass still does not fit.
+
+`CompactionStalled` means the pass rewrote the feed but did not shrink it, or grew it past the committed history. The no-progress rule applies inside the shared pass, before anything is demoted, recorded, or narrated, so a refused rewrite leaves your conversation exactly as it was.
+
+Added in 0.5.0.
 
 ## Demotion: evicted is not destroyed
 
