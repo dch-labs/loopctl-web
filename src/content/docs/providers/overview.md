@@ -34,6 +34,7 @@ Beyond providers, features also cover whole subsystems. The full table with depe
 - `file_grants` for your persisted approvals.
 - `manifest` for your loop.yaml model.
 - `mcp`, `redaction`, `tool_health`, `tool_shield`, `hooks`, `testing`, and `derive`.
+- `metrics` for the run-metrics catalog and collectors, and `self_hosted` for the self-hosted preset builder (both 0.5.0).
 
 Two provider features grow an extra surface when you also enable `vector_index`. `openai` gains `OpenAiEmbedder` and `ollama` gains `OllamaEmbedder`, covered in [embeddings](/providers/embeddings/).
 
@@ -72,6 +73,12 @@ Base-URL setters trim trailing slashes, so `…/v1/` and `…/v1` are the same t
 
 Between the one-line constructors and the bare client builders sits a middle tier added in 0.3.1: the profile builders. There is `deepseek_builder()`, `grok_builder()`, `moonshot_builder()`, `ollama_builder(model)`, and `azure_builder(resource)`, each returning an `OpenAiClientBuilder`, plus `zai_builder()`, which returns an `AnthropicClientBuilder`.
 
+The self-hosted tier joined them in 0.5.0 behind the `self_hosted` feature. `self_hosted_builder(model)` seeds `http://localhost:8080/v1`, overridable with the `SELF_HOSTED_BASE_URL` environment variable or `with_base_url`.
+
+It always sends the placeholder key `"self-hosted"` and never reads `OPENAI_API_KEY`, so a credential for another host never rides to an endpoint you pointed it at.
+
+Streaming usage is off by default, and `with_stream_usage(true)` flips it back on for a server that reports usage. You get the exact shape of `ollama_builder`, its sibling.
+
 Each one returns the underlying client builder with the provider's facts pre-seeded. That means the endpoint, the credential environment variable with its alias fallbacks preserved, and the default model.
 
 ```rust
@@ -102,6 +109,12 @@ Two consequences are worth having. You never need to duplicate a provider fact o
 
 - **Cached-token accounting.** Every shipped provider fills `Usage::cached_input_tokens` from its native cache report, so you can see cached tokens in your usage totals.
 
+- **Usage detail (0.5.0).** Cache-write and reasoning classes ride `Usage` beside the cached read, parsed by every shipped provider that reports them.
+
+- **Model probes (0.5.0).** `list_models`, `ping`, and `model_metadata` answer before the first turn, covered in [model probes](/providers/probes/).
+
+- **Wire forensics (0.5.0).** Request ids and rate-limit snapshots ride the typed errors, covered in [wire forensics](/providers/forensics/).
+
 ## Provider conventions worth knowing once
 
 | Topic | Behavior |
@@ -122,6 +135,8 @@ Two consequences are worth having. You never need to duplicate a provider fact o
 - [SSE under the hood](/providers/sse/) covers how streaming bytes become events.
 - [Grammar constraints](/providers/grammar/) covers vLLM `guided_json` for local models.
 - [Embeddings](/providers/embeddings/) covers the `EmbeddingProvider` backends for semantic memory.
+- [Model probes](/providers/probes/) covers discovery, liveness, and metadata before the first turn (0.5.0).
+- [Wire forensics](/providers/forensics/) covers request ids and rate-limit state on failures (0.5.0).
 
 ## Picking for local development
 

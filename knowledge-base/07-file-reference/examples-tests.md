@@ -17,6 +17,8 @@ Two directories of executable knowledge: examples show *how*, integration tests 
 | `mcp-adapter` | mcp | import an in-process MCP server's tools, call them |
 | `mcp-stdio-server` | mcp | a minimal stdio MCP server subprocess |
 | `mcp_server` | mcp | serve a loopctl registry over MCP stdio (with a deliberately failing tool) |
+| `telemetry` | metrics, testing | one mock-backed run printed through both collectors — `MetricsLayer` and `MetricsObserver` (0.5.0) |
+| `import_openrouter_prices` | — | convert an OpenRouter models listing into a price table, or probe drift with `--check` (exit 0/3/1) |
 
 The `crates/sqlite/` companion crate adds `sqlite-memory-cli` (`cargo run -p loopctl-sqlite --example sqlite-memory-cli`) — the same restart-survival demo over a WAL-mode database.
 
@@ -26,7 +28,9 @@ The `crates/sqlite/` companion crate adds `sqlite-memory-cli` (`cargo run -p loo
 
 ## Makefile targets
 
-`make ci` (everything), `make test` (default + all-features + doctests), `make lint` (format), `make examples`, `make e2e` (live provider suites).
+`make ci` (everything), `make test` (default + all-features + doctests), `make lint` (format), `make examples`, `make conformance` (the provider battery, 0.5.0), `make e2e` (live provider suites).
+
+0.5.0 added the contract suites: `provider_conformance` (the five-family battery), `registry_emission_audit` (a declared metric row with no emission site fails the build), `emission_catalog_contract`, `tracing_spans` (the span tree and every signal event's names/fields/levels), `metrics` / `metrics_observer` / `metrics_layer_e2e`, `provider_forensics`, `provider_probes`, `low_water_events`, `run_followup_hook`, and `doctest_census`.
 
 **Behavior notes**
 

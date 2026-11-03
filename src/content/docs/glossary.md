@@ -36,6 +36,8 @@ The same noun often behaves differently in those two places.
 | **PEM** | Privacy-Enhanced Mail format | The `-----BEGIN PRIVATE KEY-----` block format, which the redaction layer scrubs. |
 | **vLLM** | Not an abbreviation | A popular local model inference server. It supports *grammar-constrained* decoding through `guided_json`. |
 | **GBNF** | GGML BNF | A grammar format for llama.cpp-family samplers, and it is a dialect you could target with `ToolGrammarProvider`. |
+| **OTLP** | OpenTelemetry Line Protocol | The export protocol `loopctl-otel` ships your spans and metrics over, to a collector such as Jaeger, Tempo, or Honeycomb. |
+| **OTel GenAI** | Generative AI semantic conventions | The agreed attribute names, such as `gen_ai.request.model`, that the engine's span fields carry from emission. |
 
 ## Agent words
 
@@ -125,6 +127,12 @@ The same noun often behaves differently in those two places.
 | **Context figure** | The engine's current context-size number, either anchored on a real reported `input_tokens` plus an estimated tail, or a pure estimate. `RunEndContext.context_figure` tells you which one drove your last trigger. |
 | **Prune** | The no-LLM reclamation pass, where old tool results beyond a protected tail are replaced by a `[cleared: prior tool output]` marker and the originals are handed to the demotion sink, so you free context without a summarizer call. |
 | **Overflow salvage** | Surviving a "prompt too long" rejection, where the failed turn gets one compact-and-retry against a target strictly under the refused payload instead of your run dying. |
+| **Length-cut salvage** | The mirror of overflow salvage for the truncation the provider never reports: a completion ending at `max_tokens` with no text and no tool calls compacts and retries once (0.5.0). |
+| **Manual compaction** | The host seam `BareLoop::compact_manual()`, which runs the engine's own compaction ceremony on demand for a `/compact` command or a headless schedule (0.5.0). |
+| **Span tree** | The `agent.run`/`agent.turn`/`agent.tool` DEBUG spans a run emits, so one run renders as a trace (0.5.0). |
+| **Signal event** | One of the seven named DEBUG events, such as `loopctl.compaction` or `loopctl.salvage`, where the engine narrates a decision with a fixed field set (0.5.0). |
+| **Metric registry** | The 65-row catalog of every metric name, kind, and closed label set under the `metrics` feature, with a build gate keeping catalog and emitters together (0.5.0). |
+| **Shape drift** | The counted mismatch when a metric event carries a name or labels its declared row does not, so a dashboard and the crate cannot silently disagree (0.5.0). |
 | **Demotion sink** | Where your compaction's evicted messages go instead of the void, typically a memory store, so evicted content stays recallable by your model. |
 | **Retention class** | The per-tool-result tag of `Durable`, `Requery`, or the default, which decides what your pruning and compaction may clear and in what order. `Durable` means preferred verbatim within the landing's budget, never un-evictable (0.4.1). |
 | **Rolling compactor** | A compactor that re-processes only the messages since the last pass, so compaction becomes a maintenance cadence rather than one big rewrite. |
@@ -202,9 +210,19 @@ These terms come from the [Principles](/principles/sans-io/) pages, which cover 
 | **Guided JSON** | vLLM's field for grammar-constrained output. |
 | **Prompt-cache breakpoint** | A `cache_control` marker on the Anthropic wire asking the provider to cache your request prefix, and loopctl marks the last tool definition, the system prompt, and the tail blocks. |
 | **Cached input tokens** | The share of your input count the provider served from its prompt cache, reported as `Usage::cached_input_tokens`, and it is the hit-rate number your cache actually pays for. |
-| **Thinking effort** | The off, low, medium, high, or max knob at `RequestOptions::effort` that tells a reasoning model how much thinking to spend. |
+| **Thinking effort** | The none, minimal, low, medium, high, xhigh, or max knob at `RequestOptions::effort` that tells a reasoning model how much thinking to spend, with `None` the explicit off (seven rungs since 0.5.0). |
 | **Session-scoped reasoning retention** | Prior turns' thinking blocks ride the conversation verbatim until compaction ages them out, so your request prefix stays byte-stable and provider prompt caches keep hitting. |
 | **Embedder** | A real `EmbeddingProvider` backend, whether `OllamaEmbedder` for local `/api/embed` or `OpenAiEmbedder` for `/v1/embeddings`. |
+| **Model probe** | One of the three before-the-turn verbs, `list_models`, `ping`, or `model_metadata`, which answer what the endpoint serves, whether it is alive, and what a model can do (0.5.0). |
+| **`ProbeClass`** | The failure vocabulary every probe lands in, from `Auth` to `Other`, derived mechanically from the wire's own variant and status. |
+| **`MetadataSource`** | The provenance marker on a model fact, `Unreported`, `Curated`, `Disclosed`, or `DisclosedAndCurated`, because a number the provider served and a published opinion are different kinds of fact. |
+| **Wire forensics** | Request ids and rate-limit snapshots captured at HTTP time and ridden on the typed errors, read through `ApiError::provider_meta()` (0.5.0). |
+| **Rate-limit snapshot** | The `x-ratelimit-*` header family as verbatim strings, never interpreted, because units differ per provider. |
+| **Low-water warning** | The once-per-window WARN when a response reports under 10% of its rate limit remaining, latched and re-armed by recovery or silence. |
+| **Capability probe** | The Anthropic client's per-model read of `GET /v1/models/{model}`, which decides the thinking control spelling the model accepts (0.5.0). |
+| **Conformance suite** | The one behavioral contract, five families, that every provider client runs over its recorded cassettes, where the fixture is the oracle (0.5.0). |
+| **Price table** | The vendored, dated set of per-family rates in `curated_prices.json`, the one source every cost estimate and USD budget line reads (0.5.0). |
+| **Micro-dollar** | The millionth-of-a-dollar integer unit all cost math runs in, so a total never floats. |
 
 ## Rust words used here
 

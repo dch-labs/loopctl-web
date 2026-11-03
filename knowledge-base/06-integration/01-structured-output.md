@@ -86,9 +86,21 @@ Now every model request carries the format. What happens per provider:
 
 Universal rule: **a response format suppresses `tools`** for that request — the format occupies the same slot. A turn under a format is a Q&A turn, not a tool-using turn. Since 0.4.0 the engine's estimate is honest about that: the suppressed tool schemas are no longer reserved (OpenAI/Gemini drop `tools` outright; Anthropic swaps in one synthesized forced tool, uncounted — a bounded under-reserve).
 
-## Thinking effort (0.4.0) — how hard the model thinks
+## Thinking effort — how hard the model thinks
 
-Reasoning models take a budget knob: `RequestOptions::effort(ThinkingEffort::…)` — `Off`, `Low`, `Medium`, `High`, `Max` — and the three built-in clients (`thinking_effort(...)` on their builders) can pin a default for every request. Effort rides the wire where the provider supports it; an unsupported combination is rejected loudly, like every other option.
+Reasoning models take a budget knob: `RequestOptions::effort(ThinkingEffort::…)`, and the three built-in clients (`thinking_effort(...)` on their builders) can pin a default for every request. The ladder widened to the wire's seven rungs in 0.5.0 and each level's label rides verbatim:
+
+| Rung | OpenAI label | Anthropic | Gemini |
+|---|---|---|---|
+| `None` | `"none"` | `thinking: {"type": "disabled"}` | `0` (the off sentinel) |
+| `Minimal` | `"minimal"` | `1024` (the API's floor) | `512` |
+| `Low` | `"low"` | `2048` | `1024` |
+| `Medium` | `"medium"` | `8192` | `8192` |
+| `High` | `"high"` | `16384` | `16384` |
+| `Xhigh` | `"xhigh"` | `24576` | `20480` |
+| `Max` | `"max"` | `32768` | `24576` |
+
+A provider whose parameter tops out lower answers with its own error — the honest 400 beats the quiet substitution, and the old `Max` → `"high"` clamp is gone. `None` is the explicit off: OpenAI carries `"none"`, the Messages API is told `thinking: {"type": "disabled"}` (stated, never omitted, because an omitted block selects the model's own adaptive thinking), and Gemini carries `thinkingBudget: 0` — a model with no off level answers the sentinel with its own error. A per-request level still wins over a client default (`Some(None)` included); unset stays unset. The Anthropic client additionally probes what the model accepts ([capability probe](../05-providers/03-anthropic.md)). Effort rides the wire where the provider supports it; an unsupported combination is rejected loudly, like every other option.
 
 ## The three `ToolConstraint` modes — for tool-*calling* turns
 

@@ -23,6 +23,7 @@ Write one method:
 pub trait ToolSelector: Send + Sync {
     fn select(&self, ctx: &SelectionContext<'_>, all: &[ToolSchema])
         -> Vec<ToolSchema>;
+    fn name(&self) -> &'static str { "custom" }   // default since 0.5.0
 }
 
 pub struct SelectionContext<'a> {
@@ -31,6 +32,12 @@ pub struct SelectionContext<'a> {
     pub conversation: &'a [Message],          // what the request carries
 }
 ```
+
+`name()` answers who selected, so the `loopctl.tools.selected` and `loopctl.tools.advertised_count` metrics carry a `selector` label the crate can fill honestly.
+
+The four built-ins say `keyword`, `static`, `embedding`, and `rewriting`. Your own implementation keeps the default `custom`, so a dashboard never attributes your hand-rolled selection to one of the crate's strategies.
+
+An unconfigured loop reports `none`, which is a different fact from a selector that chose nothing. Added in 0.5.0, with a default, so every existing implementation you wrote compiles unchanged.
 
 The engine consults your selector exactly once per turn, at the request-build step. Whatever you return is threaded into two places as one selection: the outbound request, and the window estimate. The figure counts what the wire carries, never the whole registry.
 

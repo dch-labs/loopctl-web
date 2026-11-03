@@ -44,11 +44,13 @@ The tables below gather those pages by area, and every row links to the deep div
 |---|---|
 | [`api.rs`](/file-reference/api/) | The `ApiClient` trait and request/response carriers. |
 | [`api/error.rs`](/file-reference/api-error/) | `ApiError` + `ErrorCode`: provider errors classified. |
+| [`api/probe.rs`](/file-reference/api-probe/) | Model-probe types: `ModelInfo`, `ModelMetadata`, `PingReport`, `ProbeClass` (0.5.0). |
 | [`stream.rs`](/file-reference/stream/) | Stream events, deltas, stop reasons, the accumulator. |
 | [`stream/handler.rs`](/file-reference/stream-handler/) | `StreamHandler`: retries, timeouts, fallback. |
 | [`stream/rate_limit.rs`](/file-reference/stream-rate-limit/) | Token-bucket rate limiter. |
 | [`structured.rs`](/file-reference/structured/) | Structured (JSON) output: trait, formats, constraints. |
 | [`provider.rs`](/file-reference/provider/) | Provider profiles + shared HTTP plumbing. |
+| [`provider/forensics.rs`](/file-reference/provider-forensics/) | Request ids and rate-limit snapshots captured at HTTP time (0.5.0). |
 | [`provider/openai.rs`](/file-reference/provider-openai/) | OpenAI client (base of the compatible family). |
 | [`provider/anthropic.rs`](/file-reference/provider-anthropic/) | Anthropic client (base of Z.ai path). |
 | [`provider/gemini.rs`](/file-reference/provider-gemini/) | Gemini client. |
@@ -56,6 +58,19 @@ The tables below gather those pages by area, and every row links to the deep div
 | [`provider/embeddings.rs`](/file-reference/provider-embeddings/) | `OllamaEmbedder` + `OpenAiEmbedder`: the real `EmbeddingProvider` backends. |
 | [`provider/sse.rs`](/file-reference/provider-sse/) | The SSE reader shared by the clients. |
 | [`provider/grammar.rs`](/file-reference/provider-grammar/) | Grammar constraints for local samplers. |
+
+## Telemetry and cost
+
+| File | One line |
+|---|---|
+| [`tracing_spans.rs`](/file-reference/tracing-spans/) | The `agent.run`/`agent.turn`/`agent.tool` span tree plus the signal events (0.5.0). |
+| [`metrics.rs`](/file-reference/metrics/) | The metrics module root: wiring and re-exports (0.5.0) [feature: metrics]. |
+| [`metrics/registry.rs`](/file-reference/metrics-registry/) | The 65-row metric catalog with closed label sets (0.5.0) [feature: metrics]. |
+| [`metrics/session.rs`](/file-reference/metrics-session/) | `AgentMetrics` and its typed parts (0.5.0) [feature: metrics]. |
+| [`metrics/store.rs`](/file-reference/metrics-store/) | The live value store and its snapshot (0.5.0) [feature: metrics]. |
+| [`metrics/layer.rs`](/file-reference/metrics-layer/) | `MetricsLayer`: metric events into series (0.5.0) [feature: metrics]. |
+| [`metrics/observer.rs`](/file-reference/metrics-observer/) | `MetricsObserver`: callbacks into a snapshot (0.5.0) [feature: metrics]. |
+| [`pricing.rs`](/file-reference/pricing/) | The vendored price table and micro-dollar cost math (0.5.0). |
 
 ## The engine
 
@@ -142,9 +157,12 @@ The tables below gather those pages by area, and every row links to the deep div
 | [`mcp/server.rs`](/file-reference/mcp-server/) | MCP server side (serve your registry). |
 | [`mcp/convert.rs`](/file-reference/mcp-convert/) | The type conversion layer between worlds. |
 | [`testing.rs`](/file-reference/testing/) | Mocks and fixtures. |
+| [`testing/determinism.rs`](/file-reference/testing-determinism/) | `StepClock` + `CapturingObserver`: the determinism fixtures (0.5.0) [feature: testing]. |
 | [`crates/derive/src/*`](/file-reference/derive-lib/) | The `#[derive(Tool)]` macro crate. |
 | [`crates/sqlite/`](/file-reference/sqlite-crate/) | `loopctl-sqlite`: durable SQLite `LoopMemory` (WAL, FTS5, ranking parity). |
 | [`crates/client/`](/file-reference/client-crate/) | `loopctl-client`: the shared daemon client (UDS REST + SSE, both modes). |
 | [`crates/hnsw/`](/file-reference/hnsw-crate/) | `loopctl-hnsw`: the HNSW `VectorIndex` companion. |
 | [`crates/vector/`](/file-reference/vector-crate/) | `loopctl-vector`: Qdrant + pgvector backends (side workspace). |
+| [`crates/otel/`](/file-reference/otel-crate/) | `loopctl-otel`: OTLP export for the span tree and metrics (0.5.0). |
+| [`crates/langfuse/`](/file-reference/langfuse-crate/) | `loopctl-langfuse`: Langfuse traces, observations, and scores (0.5.0). |
 | [`examples & tests`](/file-reference/examples-tests/) | The runnable tour. |

@@ -10,7 +10,7 @@ Each entry keeps two things: the module's job, and the deep-dive article that co
 
 A bracketed name such as `[feature: streaming]` means the module only exists when you enable that Cargo feature.
 
-The companion crates are `derive`, `sqlite`, `hnsw`, and `client`, plus the side-workspace `vector`, and they all live under `crates/`. Version 0.4.0 moved them there from the repo top level.
+The companion crates are `derive`, `sqlite`, `hnsw`, `client`, `otel`, and `langfuse`, plus the side-workspace `vector`, and they all live under `crates/`. Version 0.4.0 moved them there from the repo top level.
 
 ```text
 loopctl/
@@ -18,8 +18,10 @@ loopctl/
 │   ├── lib.rs              crate root — module wiring, docs
 │   ├── engine/             THE agent loop (brain + hands)
 │   ├── api.rs              the ApiClient trait: "how to talk to a model"
+│   │                       probe.rs — model discovery, liveness, metadata types (0.5.0)
 │   ├── provider/           ready-made clients: OpenAI, Anthropic, Gemini, Bedrock...
 │   │                       embeddings.rs — real embedders (Ollama /api/embed, OpenAI /v1/embeddings)
+│   │                       forensics.rs — request ids + rate-limit snapshots at HTTP time (0.5.0)
 │   ├── stream.rs           streaming event types + the accumulator that assembles them
 │   ├── message.rs          Message, MessagePart, roles — the conversation data model
 │   ├── tool.rs             the Tool trait and its output/error types
@@ -73,14 +75,21 @@ loopctl/
 │   ├── managers.rs         LoopManagers — one bundle holding every optional part
 │   ├── presets.rs          ready-made settings profiles (Constrained, Frontier)
 │   ├── structured.rs       force the model to answer in JSON you can parse
+│   ├── tracing_spans.rs    the agent.run/turn/tool span tree + signal events (0.5.0)
+│   ├── metrics.rs          run metrics: catalog, snapshot, collectors (0.5.0) [feature: metrics]
+│   │                       registry/session/store/layer/observer.rs — the five submodules
+│   ├── pricing.rs          the vendored price table + micro-dollar cost math (0.5.0)
 │   ├── mcp.rs              speak the MCP protocol (use foreign tools, serve your own) [feature: mcp]
 │   ├── testing.rs          fake model client + fake tools for your tests [feature: testing]
+│   │                       determinism.rs — StepClock + CapturingObserver (0.5.0)
 │   └── numeric.rs          internal safe-math helpers (not public)
 ├── crates/                 companion crates — 0.4.0 moved them here into a workspace
 │   ├── derive/             #[derive(Tool)] generates the Tool impl
 │   ├── sqlite/             loopctl-sqlite, durable SQLite memory
 │   ├── hnsw/               loopctl-hnsw, the HNSW VectorIndex
 │   ├── client/             loopctl-client, the shared daemon client
+│   ├── otel/               loopctl-otel, OTLP export for spans + metrics (0.5.0)
+│   ├── langfuse/           loopctl-langfuse, Langfuse traces + scores (0.5.0)
 │   └── vector/             side-workspace crate: loopctl-vector, Qdrant + pgvector backends
 ├── examples/               runnable example programs
 └── tests/                  integration tests
@@ -110,11 +119,13 @@ Deep dives: [state machine](/engine/state-machine/) · [driver loop](/engine/dri
 | File | What it is |
 |---|---|
 | `src/api.rs` | The `ApiClient` trait — implement this to use any model provider. |
+| `src/api/probe.rs` | Model-probe types: `ModelInfo`, `ModelMetadata`, `PingReport`, `ProbeClass` (0.5.0). |
 | `src/api/error.rs` | `ApiError` — provider errors, plus "is this worth retrying?" classification. |
 | `src/stream.rs` | Streaming events (`StreamEvent` deltas) and the accumulator that assembles a full reply from them. |
 | `src/stream/handler.rs` | `StreamHandler` — retries, timeouts, rate-limit handling, fallback to non-streaming [feature: streaming]. |
 | `src/stream/rate_limit.rs` | A token-bucket rate limiter, shared per provider endpoint. |
 | `src/provider.rs` | Shared provider plumbing + one-function profiles (`ollama()`, `deepseek()`, ...). |
+| `src/provider/forensics.rs` | Request-id and rate-limit capture at HTTP time (0.5.0). |
 | `src/provider/openai.rs` | OpenAI client (also the base for Ollama, DeepSeek, Grok, Azure, Moonshot). |
 | `src/provider/anthropic.rs` | Anthropic (Claude) client — also the base for Z.ai; prompt-cache breakpoints. |
 | `src/provider/gemini.rs` | Google Gemini client. |
@@ -123,7 +134,19 @@ Deep dives: [state machine](/engine/state-machine/) · [driver loop](/engine/dri
 | `src/provider/sse.rs` | The reader for SSE (Server-Sent Events) — how streaming bytes arrive. |
 | `src/provider/grammar.rs` | Grammar-constrained tool calls for local models (vLLM `guided_json`). |
 
-Deep dives: [API client](/core-data/api-client/) · [stream events](/core-data/stream-events/) · [providers](/providers/overview/) · [embeddings](/providers/embeddings/)
+Deep dives: [API client](/core-data/api-client/) · [stream events](/core-data/stream-events/) · [providers](/providers/overview/) · [model probes](/providers/probes/) · [wire forensics](/providers/forensics/) · [embeddings](/providers/embeddings/)
+
+## Telemetry and cost
+
+| File | What it is |
+|---|---|
+| `src/tracing_spans.rs` | The `agent.run`/`agent.turn`/`agent.tool` span tree and the seven signal events (0.5.0). |
+| `src/metrics.rs` + `src/metrics/` | The metric catalog, the typed run snapshot, the value store, and the two collectors (0.5.0) [feature: metrics]. |
+| `src/pricing.rs` | The vendored, dated price table and the cost math (0.5.0). |
+| `crates/otel/` | `loopctl-otel`: OTLP export for the span tree and metrics (0.5.0). |
+| `crates/langfuse/` | `loopctl-langfuse`: runs as Langfuse traces with scores (0.5.0). |
+
+Deep dives: [run metrics](/telemetry/metrics/) · [the span tree](/telemetry/spans/) · [exporters](/telemetry/exporters/) · [prices and cost](/telemetry/pricing/)
 
 ## Tools and safety
 
@@ -213,9 +236,11 @@ Deep dives: [messages](/core-data/messages/) · [errors](/core-data/errors/) · 
 | `crates/hnsw/` | The `loopctl-hnsw` crate: an HNSW `VectorIndex` — approximate nearest-neighbour search at scale. |
 | `crates/client/` | The `loopctl-client` crate: the family's shared daemon client (UDS REST + SSE, one interface for in-process and daemon modes). |
 | `crates/vector/` | The `loopctl-vector` crate (side workspace): external vector stores — Qdrant and pgvector backends for `VectorIndex`. |
-| `examples/` | Eleven runnable examples, from hello-world to vector memory. |
-| `tests/` | Integration tests — good reading for "how is X supposed to behave?" — plus the `cassettes/` corpus and `golden/` request bytes. |
-| `Makefile` | `make ci`, `make test`, `make lint`, `make e2e` and friends. |
+| `crates/otel/` | The `loopctl-otel` crate: OTLP export for the engine's spans and metrics (0.5.0). |
+| `crates/langfuse/` | The `loopctl-langfuse` crate: runs as Langfuse traces, observations, and scores (0.5.0). |
+| `examples/` | Thirteen runnable examples, from hello-world to telemetry. |
+| `tests/` | Integration tests — good reading for "how is X supposed to behave?" — plus the `cassettes/` corpus, the conformance battery, and `golden/` request bytes. |
+| `Makefile` | `make ci`, `make test`, `make lint`, `make conformance`, `make e2e` and friends. |
 | `TESTING.md` | The project's testing philosophy. Written for contributors, useful to read anyway. |
 
 Deep dives: [derive macro](/integration/derive-macro/) · [MCP](/integration/mcp/) · [testing](/integration/testing/) · [loopctl-client](/integration/loopctl-client/) · [file-by-file reference](/file-reference/)

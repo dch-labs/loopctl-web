@@ -48,6 +48,18 @@ The echo you get is bounded at 512 bytes.
 
 ## Edit miss repair (0.4.1)
 
+The miss repair is the family's own reader. You get hints for a not-found anchor, a bounded window of the file's actual lines around the best candidate, and normalized-indentation matching with a uniform re-indent on apply.
+
+Since 0.5.0 an ambiguous normalized match refuses by naming the count, `appears N times`, never by echoing the file.
+
+## Receipts (0.5.0)
+
+Edit results stopped echoing files. A receipt is a `Changed:` or `Created:` header, a `│`-prefixed change summary, and `@@ -old,count +new,count @@` hunks with three context lines.
+
+The diff you read is bounded by the change rather than by the file. The Before/After preview survives only where no hunks can be produced, capped at 1,000 lines per side.
+
+The read-before-write guard is decided on the anchor, not on session bookkeeping. A resumed session you run can edit a file it last read before the restart when the anchor text is intact on disk. A changed-on-disk conflict still refuses.
+
 An `old_text` miss classifies and teaches instead of a bare refusal. Stale means the file's closest passage differs in content, and the first differing line is cited with both sides quoted. Whitespace-only means the text matches modulo indentation width, trailing whitespace, or line endings.
 
 No similar passage means nothing resembles your text. A link pointing out names the real target.

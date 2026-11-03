@@ -47,7 +47,7 @@ The embedder exposes the 3-series Matryoshka truncation. When you call `with_dim
 
 Both backends honor the same seven contracts:
 
-- **Batching.** `embed_texts` splits at 256 inputs or an estimated 250,000 token sum per request, whichever closes first, and it runs over the shared error-classification path. Your per-batch `loopctl.embed.batch` metric events carry the usage pair when reported.
+- **Batching.** `embed_texts` splits at 256 inputs or an estimated 250,000 token sum per request, whichever closes first, and it runs over the shared error-classification path. Your per-batch `loopctl.embed.batch.duration_ms` metric events, renamed from `loopctl.embed.batch` in 0.5.0, carry the wall-clock duration of one batch.
 
 - **Bounded reads.** Response budgets are derived from the dimension and clamped between 1 and 64 MiB, so a hostile stream cannot balloon your memory. An over-declared content-length is refused up front.
 

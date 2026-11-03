@@ -19,6 +19,7 @@ Write one method:
 pub trait ToolSelector: Send + Sync {
     fn select(&self, ctx: &SelectionContext<'_>, all: &[ToolSchema])
         -> Vec<ToolSchema>;
+    fn name(&self) -> &'static str { "custom" }   // default since 0.5.0
 }
 
 pub struct SelectionContext<'a> {
@@ -120,6 +121,8 @@ let selector = RewritingSelector::new(Arc::new(client))
 Every failure mode fails open to the full surface: transport error, timeout (default 10 s), budget refusal, or an answer naming no known tool. When the answer names some tools, you advertise exactly those, in registry order.
 
 Pass `with_budget(BudgetLimits)` to ride the existing [budget gate](../03-safety/10-budget-gate.md) machinery. The selector feeds it every rewrite call's reported usage, and refuses further calls on a hard crossing of tokens or wall-clock duration.
+
+`name()` (0.5.0, additive with a default) answers who selected, so the `loopctl.tools.selected` and `loopctl.tools.advertised_count` metrics carry a `selector` label the crate can fill honestly: the four built-ins say `keyword`, `static`, `embedding`, and `rewriting`; your own implementation keeps the default `custom` (a dashboard never attributes a hand-rolled selection to one of the crate's strategies); an unconfigured loop reports `none` — a different fact from a selector that chose nothing. The async family gained the same method.
 
 ## What the estimate counts
 

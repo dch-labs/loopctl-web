@@ -23,11 +23,12 @@ If you are new to loopctl, read these four pages in order, because they build on
 | **[02 The engine](/engine/state-machine/)** | How a run actually works: [state machine](/engine/state-machine/), [driver loop](/engine/driver-loop/), [LLM turn](/engine/llm-turn/), [tool dispatch](/engine/tool-dispatch/), [cancellation](/engine/cancellation/), [compaction](/engine/compaction/), [termination](/engine/termination/), [model switch](/engine/model-switch/), [context accounting](/engine/context-accounting/), [steering](/engine/steering/), and [history rewind](/engine/history-rewind/) |
 | **[03 Safety systems](/safety/middleware/)** | Keeping your agent alive and harmless: [middleware](/safety/middleware/), [loop detection](/safety/loop-detection/), [convergence](/safety/convergence/), [model fallback](/safety/fallback/), [reflection and recovery](/safety/reflection/), [tool health](/safety/tool-health/), [safety shield](/safety/tool-shield/), [permissions](/safety/permission/), [approvals and grants](/safety/approvals/), and [the budget gate](/safety/budget-gate/) |
 | **[04 Extensions](/extensions/observers/)** | Watching and shaping runs: [observers](/extensions/observers/), [hooks](/extensions/hooks/), [memory](/extensions/memory/), [contributors](/extensions/contributors/), [attachments](/extensions/attachments/), [the component bundle](/extensions/managers/), and [the event hub](/extensions/event-hub/) |
-| **[05 Providers](/providers/overview/)** | Real models: [overview and features](/providers/overview/), [the OpenAI family](/providers/openai/), [Anthropic](/providers/anthropic/), [Gemini](/providers/gemini/), [Bedrock](/providers/bedrock/), [SSE](/providers/sse/), [grammar](/providers/grammar/), and [embeddings](/providers/embeddings/) |
+| **[05 Providers](/providers/overview/)** | Real models: [overview and features](/providers/overview/), [the OpenAI family](/providers/openai/), [Anthropic](/providers/anthropic/), [Gemini](/providers/gemini/), [Bedrock](/providers/bedrock/), [SSE](/providers/sse/), [grammar](/providers/grammar/), [embeddings](/providers/embeddings/), [model probes](/providers/probes/), and [wire forensics](/providers/forensics/) |
 | **[06 Integration](/integration/structured-output/)** | Structured answers and the wider world: [structured output](/integration/structured-output/), [MCP](/integration/mcp/), [the derive macro](/integration/derive-macro/), [presets](/integration/presets/), [testing](/integration/testing/), [the manifest](/integration/manifest/), and [loopctl-client](/integration/loopctl-client/) |
-| **[07 File reference](/file-reference/)** | One page per source file, covering what it is, its key items, and its gotchas |
-| **[08 Cookbook](/cookbook/gotchas/)** | [Every gotcha collected](/cookbook/gotchas/) and [18 complete recipes](/cookbook/recipes/) |
-| **[09 Principles](/principles/sans-io/)** | The ideas under the hood, each explained from scratch: [sans-IO](/principles/sans-io/), [state machines](/principles/state-machines/), [tokens and context windows](/principles/tokens-and-context/), [soft and hard errors](/principles/soft-and-hard-errors/), [backoff and jitter](/principles/backoff-and-jitter/), [circuit breakers](/principles/circuit-breakers/), [windows, EWMA, and similarity](/principles/measuring-repetition/), [cooperative cancellation](/principles/cooperative-cancellation/), [caching and invalidation](/principles/caching-and-invalidation/), [rate limiting](/principles/rate-limiting/), [parallel waves](/principles/scheduling-parallel-work/), and [text matching](/principles/text-matching/) |
+| **[07 Telemetry](/telemetry/metrics/)** | The numbers a run produces: [run metrics](/telemetry/metrics/), [the span tree](/telemetry/spans/), [the exporters](/telemetry/exporters/), and [prices and cost](/telemetry/pricing/) |
+| **[08 File reference](/file-reference/)** | One page per source file, covering what it is, its key items, and its gotchas |
+| **[09 Cookbook](/cookbook/gotchas/)** | [Every gotcha collected](/cookbook/gotchas/) and [18 complete recipes](/cookbook/recipes/) |
+| **[10 Principles](/principles/sans-io/)** | The ideas under the hood, each explained from scratch: [sans-IO](/principles/sans-io/), [state machines](/principles/state-machines/), [tokens and context windows](/principles/tokens-and-context/), [soft and hard errors](/principles/soft-and-hard-errors/), [backoff and jitter](/principles/backoff-and-jitter/), [circuit breakers](/principles/circuit-breakers/), [windows, EWMA, and similarity](/principles/measuring-repetition/), [cooperative cancellation](/principles/cooperative-cancellation/), [caching and invalidation](/principles/caching-and-invalidation/), [rate limiting](/principles/rate-limiting/), [parallel waves](/principles/scheduling-parallel-work/), and [text matching](/principles/text-matching/) |
 
 ## Reading paths
 
@@ -51,13 +52,17 @@ Read [The big idea](/start-here/the-big-idea/), then the [Principles](/principle
 
 Read [The big idea](/start-here/the-big-idea/), then [Sans-IO](/principles/sans-io/), then [state machines](/principles/state-machines/). After that take the state machine page, the driver loop, and the four mechanism pages on LLM turn, dispatch, cancellation, and compaction. Finish at [Termination](/engine/termination/).
 
+### You want to know what a run cost or did
+
+Read [Run metrics](/telemetry/metrics/), then [The span tree](/telemetry/spans/). If you ship the numbers somewhere, continue with [Telemetry exporters](/telemetry/exporters/). For spend lines, read [Prices and cost](/telemetry/pricing/) and [the budget gate](/safety/budget-gate/).
+
 ### You are evaluating loopctl for production
 
 Read [What is loopctl](/start-here/what-is-loopctl/), then the whole safety section, then the [Production hardening recipe](/cookbook/recipes/), and finally [Gotchas](/cookbook/gotchas/).
 
 ## About this knowledge base
 
-These pages are grounded in source. They were written against loopctl `v0.4.1`, so every default value, threshold, and behavior stated here comes from the code or its tests.
+These pages are grounded in source. They were written against loopctl `v0.5.0`, so every default value, threshold, and behavior stated here comes from the code or its tests.
 
 They are plain by design. You get no unexplained jargon, short sentences, and every diagram can be read on its own.
 

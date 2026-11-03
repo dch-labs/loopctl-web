@@ -73,6 +73,15 @@ You have several entrances here and one family, plus, since 0.4.0, one rescue in
    → the same turn is re-requested against the compacted history
    → a repeat rejection on the spent turn is a genuine misfit: ContextExceeded
 
+0b) length-cut salvage (0.5.0, first cut only):
+   a completion ends at max_tokens with no visible text and no tool calls
+   → the truncated message is never recorded, the history compacts
+     toward the salvage target, and the turn is reissued once
+   → a second cut on the same turn, or one compaction cannot rescue,
+     is a genuine misfit: ContextExceeded with the figure floored just
+     above the window (or the machine's honest CompactionStalled when a
+     forced pass can no longer make progress)
+
 A) compactor overflow:
    ContextManager.compact_with_reason → Err(ContextOverflow)
    → handle_compact propagates → set_error_state → machine.fail(...)

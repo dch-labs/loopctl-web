@@ -131,4 +131,4 @@ over any scratch copy: `git archive master src/content/docs | tar -x -C
 reads as different prose, so diff against it only deliberately.
 
 Both scripts live in `scripts/`. A batch is done when both pass and
-`npm run build` reports 182 pages.
+`npm run build` reports 199 content pages.

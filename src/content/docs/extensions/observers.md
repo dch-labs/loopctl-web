@@ -58,6 +58,10 @@ agent.register_observer(Arc::new(Metrics { requests: AtomicUsize::new(0) }));
 | `on_run_end` | Every run exit: success, error, or cancel | `success`, `error`, `total_turns`, `duration_ms`, `calibration_ratio_bp`, `context_figure`, `unfinished_input` |
 | `reset` | Once per session start | Nothing |
 
+The usage figures on these contexts carry the detail classes since 0.5.0. `StreamContext` reports cached-read, cache-write, and reasoning beside its input and output. `TurnEndContext` carries the same per-turn detail.
+
+`RunEndContext` ends with a five-field run usage block, the three classes as saturating sums over your run's turns. `StreamContext` and the trajectory's `TrajectoryTurn` joined the `#[non_exhaustive]` set with constructors, so build them with `StreamContext::new(...)` and `TrajectoryTurn::new(...)` rather than struct literals.
+
 ## The fan-out machinery
 
 How does a notification actually reach your observer? Six mechanics sit under that table:
@@ -118,7 +122,11 @@ Its sibling `EventLedgerObserver` writes the finer-grained per-event stream to `
 
 Apart from observer callbacks, the engine emits metric events on the `loopctl::metrics` `tracing` target at `debug` level. That is a structured counter stream for anyone running a metrics collector, and you subscribe through `tracing` rather than through the `LoopObserver` trait.
 
-Most subsystems document their own counters inline. Compaction has `loopctl.compaction.*`, the estimator has `loopctl.estimate.calibration`, and embedding batching has `loopctl.embed.batch`. Four engine-wide additions are worth knowing:
+The whole catalog is declared in one place since 0.5.0. The 65-row registry under the `metrics` feature publishes every name, kind, and label set, and a build gate keeps catalog and emitters from drifting apart.
+
+[Run metrics](/telemetry/metrics/) covers it, and the `MetricsObserver` fills a typed run snapshot straight from these callbacks. The engine's other transparency layer, the span tree and its signal events, is covered in [the span tree](/telemetry/spans/).
+
+Most subsystems document their own counters inline. Compaction has `loopctl.compaction.*`, the estimator has `loopctl.estimate.calibration`, and embedding batching has `loopctl.embed.batch.duration_ms`. Four engine-wide additions are worth knowing:
 
 - **`loopctl.tools.calls`** fires one event per settled dispatch on both dispatch paths, the direct registry and the middleware pipeline. It is emitted at the single exit they share, so no call is double-counted and none is missed. Fields are `tool`, `outcome` as `ok` or `error`, and `duration_ms`.
 

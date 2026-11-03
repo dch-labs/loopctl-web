@@ -79,6 +79,12 @@ Both probes hit the server root, with one trailing `/v1`-style segment stripped 
 
 Failures are fail-soft. A timeout, an HTTP error, or garbage yields `None`, so your declared window stands. When both exist, your engine resolves probe over declaration at run start, which [context accounting](/engine/context-accounting/) covers.
 
+### The model listing (0.5.0)
+
+`list_models()` tries `GET {base}/models` first. A genuine 404, meaning no OpenAI-style route, falls back to Ollama's `GET /api/tags`, which answers names, modification stamps, and weight sizes. When the fallback fails too, the original refusal surfaces, so you see the first honest answer rather than the second.
+
+`ping()` shares the route set, so a tags-only server pings as live rather than reading as a wrong URL. Both verbs ride the shared checked-transport helper with a 5 second total deadline and the same failure forensics a completion carries.
+
 ### Structured output on this client
 
 `RequestOptions` is fully supported here:

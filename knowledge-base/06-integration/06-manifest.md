@@ -43,7 +43,7 @@ profiles:
     provider: { model: llama3.1:8b }
 ```
 
-The `budgets` stanza maps into the [budget gate](../03-safety/10-budget-gate.md)'s `BudgetLimits` (`cost_usd` deliberately maps to nothing — no price table is consulted, so cost has no line; an unparseable `duration` disables the wall-clock line with a warn rather than guessing).
+The `budgets` stanza maps into the [budget gate](../03-safety/10-budget-gate.md)'s `BudgetLimits` (`cost_usd` maps to the gate's `Usd` line since 0.5.0, priced through the [price table](../06b-telemetry/04-pricing.md); an unparseable `duration` disables the wall-clock line with a warn rather than guessing). And since 0.5.0 `parse` refuses a profile named `(none)` — `ManifestError::OverlayRule` naming `profiles.(none)` — because the label carries the `loopctl.profile.active` metric's no-overlay reading; every other profile name is unconstrained.
 
 **The `EnvResolver` seam** is the determinism story for manifests: resolve the same document against an `EnvMap` and the resolved result — and its `config_hash` — is byte-identical everywhere.
 

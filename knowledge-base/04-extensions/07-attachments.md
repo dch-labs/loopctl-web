@@ -59,6 +59,10 @@ One larger than the provider will serve at all is beyond any compactor's help. A
 
 A permissive backend keeps serving the deferred turns you pin. A rejecting one drives the turn through the salvage retry into the run's `ContextExceeded` death. Pin less than the window.
 
+## Telemetry (0.5.0)
+
+The pinned set reports per kind at the consolidation seam: `attachments.count` and `attachments.tokens_estimate` carry a `kind` label, and a kind with nothing pinned records **zero** — an emptied set clears its gauge instead of holding its last value (the histogram, having no empty sample, records nothing for an empty kind). What rode past a compaction boundary reports as `compaction.attachments.carried_count` / `.carried_bytes`. A host wrapping its own store calls the public seams that speak these rows — `AttachmentStore::record_pinned_telemetry` (writes the count and the estimate, zero for an empty kind) and `record_carried_telemetry` — each recording at exactly that seam.
+
 ## Attachments versus the other per-turn context
 
 Four paths inject per-turn context, and they differ in where content lives and what survives:

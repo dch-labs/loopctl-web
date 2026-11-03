@@ -53,7 +53,26 @@ Continuation requests replay prior turns' thinking blocks verbatim when `replay_
 
 Input tokens arrive on `message_start` and output tokens on `message_delta`. The client latches both and merges by max per counter, so a downward revision never under-reports your usage.
 
-Cache reporting needs one normalization. `cache_read_input_tokens` fills `Usage::cached_input_tokens`, and Anthropic's raw `input_tokens` excludes cache traffic, so the client reports input as raw plus cache reads plus cache-creation spend. That keeps the cached share a true subset of the reported input.
+Cache reporting needs one normalization. `cache_read_input_tokens` fills `Usage::cached_input_tokens` and `cache_creation_input_tokens` fills `cache_write_tokens` (0.5.0), and Anthropic's raw `input_tokens` excludes cache traffic, so the client reports input as raw plus cache reads plus cache-creation spend. That keeps the cached share a true subset of the reported input.
+
+A mid-stream revision that arrives on `message_delta` folds additively into the latched start usage, so a cache-write share that arrives only mid-stream survives.
+
+## The thinking capability probe
+
+A request that resolves a thinking effort reads `GET /v1/models/{model}` once per model and writes the thinking control that model accepts, added in 0.5.0. One spelling for every model on the endpoint would misserve an adaptive tier, so the client follows the disclosure:
+
+| The model discloses | The client writes |
+|---|---|
+| `disabled` accepted | `thinking: {"type": "disabled"}` for the off rung, unchanged |
+| Refuses `disabled`, accepts a lower setting | `thinking: {"type": "between_tools"}` |
+| Refuses budgets, takes depth from effort | `output_config: {"effort": <rung>}`, with the `max_tokens` headroom restored |
+| Refuses `disabled` with no alternative | The request is refused up front, naming the model |
+
+The read is soft and cached per model. A definitive answer, a success, a non-JSON success, or a 404 saying there is no Models API at that base URL, is filed under the model you asked about.
+
+An inconclusive one, transport failure, 401, 429, or any 5xx, is filed nowhere and asked again, with the streak counted. Three misses in a row and the route you probe stops being probed for a while, running on disclosed-nothing and expiring after 32 turns served.
+
+A request with no effort never probes, so its wire stays byte-identical and it pays no extra call. `set_model` never flushes a filed answer, because an answer about a model is still true of that model.
 
 ## Structured output: the forced-tool trick
 

@@ -135,6 +135,10 @@ It ignores its input entirely, so an input-validation test needs a real tool or 
 
 It also serializes across the test binary, because parallel tests mutating your environment is UB-adjacent, and it refuses nested guards.
 
+Two determinism fixtures joined in 0.5.0. `StepClock::new(step)` is a `Clock` whose monotonic half advances one fixed step per read, so every duration your engine measures is an exact multiple of the step.
+
+`CapturingObserver` records every lifecycle callback into a comparable, ordered `Vec<CapturedEvent>` you read with `snapshot()`, so two engines you build from the same seeds assert equal event for event. Install them like any pinned implementation, through `LoopManagers::with_clock` and `register_observer`.
+
 ## A complete test, start to finish
 
 ```rust
@@ -193,6 +197,24 @@ Object key order is never a contract, and array order is pinned, which covers yo
 
 Regeneration is a deliberate, reviewed act. Run `UPDATE_GOLDENS=1 cargo test --test golden_requests`, then read the diff like code.
 
+### The conformance battery: the contract is the oracle
+
+Since 0.5.0, one behavioral contract runs per provider over the recorded cassettes. `tests/common/conformance.rs` is written once, and per-provider instantiation is configuration: a profile names a client builder and a dialect, and the battery never changes.
+
+Five families cover the behaviors every `ApiClient` must uphold:
+
+| Family | It protects |
+|---|---|
+| `stream_lifecycle` | Exactly one terminal, nothing after it, and no synthetic stop on a truncated stream |
+| `usage_reporting` | Recorded numbers reach the terminal, repeated reports merge field-wise by max, and unreported never becomes a fabricated number |
+| `stop_reason_routing` | Tool and text routes route identically, and tool lanes carry the requested identity |
+| `error_taxonomy` | 401/403 become `Auth`, 429/503/529 become `RateLimit` carrying the recorded `Retry-After` exactly, and the rest type as `Http` |
+| `options_honoring` | The model override reaches the wire bytes, and `include_usage` agrees with the scenario |
+
+The fixture is the oracle: expected numbers, reasons, and retry values are parsed from the recorded bytes, never hardcoded. Silence is not a verdict, so a family counts as exercised only where a check actually adjudicated a fixture, and `n/r` cells in the generated matrix name what closes them.
+
+`make conformance` runs the suite, and the rule in `TESTING.md` is that a new provider ships with a green conformance run. The suite proves itself too: one test plants a violation in a copy of a recorded fixture, in memory, and asserts the battery reports it.
+
 Both live in the crate's `tests/` under `cassettes/` and `golden/`, and `TESTING.md` in the repository carries the full doctrine.
 
 ## Gotchas
@@ -201,8 +223,7 @@ Both live in the crate's `tests/` under `cassettes/` and `golden/`, and `TESTING
   send. Tests of "the model should have seen X" belong to
   [observers](/extensions/observers/) or the audit trail rather than to the mock.
 
-2. The fixed usage numbers of 50 and 25 leak into your assertions, so do not bake them into
-  app logic.
+2. A mock with no staged usage serves the fixed pair of 50 and 25. Since 0.5.0 you stage your own with `MockApiClient::with_usage(Usage)`, so cache and reasoning detail can be scripted per fixture. `with_usage` and `without_usage` together serve no usage.
 
 3. `with_responses(vec![])` is a no-op that keeps the default script, which is an easy
   silent mistake.

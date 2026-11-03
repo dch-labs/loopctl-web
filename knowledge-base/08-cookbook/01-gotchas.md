@@ -126,7 +126,27 @@ Dispatch holds an owned handle, so a running call drains to completion; only the
 `push` returns `false` and stores nothing when no run is in flight. A UI that fire-and-forgets loses the message silently. Keep it and send it as ordinary input instead.
 
 **38. The whitespace-tolerant Edit keeps the file's formatting, not the model's (0.4.1).**
-An `old_text` that matches modulo indentation applies with the file's own indentation, line endings, and indent characters. The receipt discloses it (`matched with normalized indentation`). An ambiguous normalized match still refuses with the file's lines echoed.
+An `old_text` that matches modulo indentation applies with the file's own indentation, line endings, and indent characters. The receipt discloses it (`matched with normalized indentation`). An ambiguous normalized match refuses by naming the count (`appears N times`), never by echoing the file.
+
+### 40. The two headroom scales read differently (0.5.0)
+
+The `loopctl.compaction.headroom_pct` metric reports percent (0–100); the `CompactTelemetry::headroom_pct` field beside it keeps its 0.0–1.0 fraction. An alert written `headroom_pct < 20` means a fifth of the window left free on the metric series — a fifth on the field reads `0.2`.
+
+### 41. A zero usage class means nobody reported it (0.5.0)
+
+`Usage` detail fields treat `0` as no data, never a measured zero. A cost display that prints `$0.00` for `cache_write_tokens = 0` claims a measurement the provider never made.
+
+### 42. Reasoning counters are rates, not counts (0.5.0)
+
+`loopctl.reasoning.blocks` is counted per block per request at the wire conversion — its value is a rate across requests, so summing it across a conversation overstates the block count.
+
+### 43. The trait-default ping spends a completion (0.5.0)
+
+`ApiClient::ping`'s default sends one minimal completion — on your own client against a metered endpoint, one probe is one bill. The four shipped clients answer on a metadata route and cost nothing.
+
+### 44. An unpriced model spends nothing on the USD line (0.5.0)
+
+The budget gate's `Usd` dimension prices usage through the vendored table; a model the table does not price, or a turn that reported no usage, contributes nothing. A silent cost line is not a free model — check `PriceTable::price(model)` first.
 
 ---
 

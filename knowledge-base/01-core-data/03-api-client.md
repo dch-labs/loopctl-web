@@ -64,15 +64,20 @@ The two capability probes matter for [default wiring](../06-integration/04-prese
 
 ```rust
 pub enum ApiError {
-    Api(String),                        // generic API failure
-    RateLimit { retry_after: Option<Duration>, message: String },  // 429 / 503 / 529
-    Auth(String),                       // bad key / no permission
-    Http(String),                       // HTTP status errors ("HTTP 429: ...")
-    Json(serde_json::Error),            // unparseable response
-    Io(std::io::Error),                 // local IO failure
+    Api(String, Option<Box<ProviderMeta>>),   // generic API failure (meta since 0.5.0)
+    RateLimit { retry_after: Option<Duration>, message: String, .. },
+                                              // 429 / 503 / 529, #[non_exhaustive] since 0.5.0
+    Auth(String, Option<Box<ProviderMeta>>),  // bad key / no permission
+    Http(String, Option<Box<ProviderMeta>>),  // HTTP status errors ("HTTP 429: ...")
+    Json(serde_json::Error),                  // unparseable response
+    Io(std::io::Error),                       // local IO failure
     Tool(String), Config(String), Interrupted, Other(String),
 }
 ```
+
+The `ProviderMeta` elements are wire forensics — request ids and rate-limit snapshots captured at HTTP time, read through `provider_meta()` ([wire forensics](../05-providers/10-forensics.md)). Build the meta-free shape with the constructors `ApiError::api`, `auth`, and `http`, and match the variants with `..`. The trait also gained three probe verbs with working defaults (0.5.0): `list_models()`, `ping()` (the default sends one minimal completion — one bill on a metered endpoint), and `model_metadata(model)` — covered in [model probes](../05-providers/09-probes.md). `ApiError::http_status()` answers the typed status when the endpoint answered and `None` when it never did, and `api::error::parse_retry_after` is the public RFC 9110 `Retry-After` parser (delta-seconds or HTTP-date; past or unparseable reads as no delay).
+
+`Usage` also gained two detail classes in 0.5.0 — `cache_write_tokens` and `reasoning_tokens` (`0` = not reported, never a measured zero; builders `with_cache_write` / `with_reasoning`). Never sum the detail fields on top of the input: Anthropic's conversation total is raw + read + creation, OpenAI's is the prompt count itself. Gemini's `cachedContentTokenCount` is parsed since 0.5.0 and `thoughtsTokenCount` reports the reasoning subset of the output.
 
 The interesting part is not the shapes — it's the three questions every error can answer:
 

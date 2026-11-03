@@ -152,6 +152,24 @@ The budget is **per run**. Your turn numbers restart and the spent retry clears 
 
 If your conversation has nothing to shrink, the figure resets and the turn re-enters directly.
 
+### Length-cut salvage: the truncation the provider never reports (0.5.0)
+
+A context with no room left for generation is not an error on the wire. The response ends at the output cap, and on thinking models it can carry a reasoning trace and nothing else.
+
+Taken as a completed turn, it used to end the run silently on a truncated thought. The engine reads that shape, a completion ending at `max_tokens` with no visible text and no tool calls, as the mirror of the reported overflow.
+
+The salvage runs against it: the truncated message is never recorded, the history compacts toward the salvage target, and the turn is reissued once.
+
+The turn's events stay paired. The truncated attempt closes with a failed turn-end carrying its real usage, because that request succeeded and its spend was real.
+
+What the turn's record and the run's totals keep is the salvaged retry's figures, so the two readings stay deliberately apart.
+
+A second length cut on the same turn, or one compaction cannot rescue, fails the run with `ContextExceeded` carrying the machine's figure floored just above the window. A forced pass that can no longer make progress surfaces the genuine `CompactionStalled` instead.
+
+Truncation and overflow are independent per-turn slots, so either can rescue the same turn after the other. A fresh turn you start is never denied by a prior turn's spent slot.
+
+The trigger reads the finish reason, not the transport, so the non-streaming path you run salvages identically. A tool-carrying completion at the length stop is an ordinary tool turn, and an empty completion at end-turn still completes the run.
+
 ## How the pieces order, per model call
 
 ```mermaid

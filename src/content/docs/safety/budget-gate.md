@@ -8,17 +8,20 @@ A budget gate is a spend line the engine refuses to cross. It accumulates spend 
 
 Read this when a run must stop at N tokens, N turns, or N minutes. Not "eventually, if something notices", but refused before the next request goes out. Source: `src/budget.rs`.
 
-You install one `BudgetGate` with `BareLoop::with_budget_gate(...)`. It is not middleware, it needs no feature flag, and it changes no manifest type.
+You install one `BudgetGate` with `BareLoop::with_budget_gate(...)`. It is not middleware, it needs no feature flag, and it changes no manifest type you rely on.
 
-## The three dimensions
+## The four dimensions
 
 | Dimension | Measured by | Notes |
 |---|---|---|
 | `Tokens` | Provider-reported `input + output` from usage records, never estimates | Usage-less turns contribute nothing. That is the honest count rather than a guess. |
 | `Turns` | Completed turns, counted at turn end | An in-flight turn never counts against itself. |
 | `Duration` | The elapsed reading of your clock seam, passed in as a `Duration` | The gate never reads a clock, so a replayed run crosses the same lines at the same logical instants. |
+| `Usd` | Estimated spend in dollars, priced at capture through the gate's price table (0.5.0) | A turn with no usage, or a model the table does not price, spends nothing on this line. |
 
-You hand the gate a `BudgetLimits { turns, tokens, duration }`. Each field defaults to `None`, and a `None` disables that dimension's lines entirely.
+You hand the gate a `BudgetLimits { turns, tokens, duration, usd }`. Each field defaults to `None`, and a `None` disables that dimension's lines entirely.
+
+The `Usd` line became real in 0.5.0. The gate prices each turn-serving usage report through [the price table](/telemetry/pricing/), in micro-dollars, and the hard ceiling compares in the same unit. Before 0.5.0 a cost you configured mapped to nothing, because the gate refused to guess a price.
 
 ## Two lines per dimension
 
@@ -30,7 +33,7 @@ Crossing the soft line fires `on_budget_warn` exactly once per run per dimension
 
 ### The hard line
 
-The hard line refuses the next request before it is sent, which is the shape litellm's `max_budget` has. The turn fails with `LoopError::BudgetExhausted { dimension, spent, limit }`, and that error is not recoverable.
+The hard line refuses the next request before it is sent, which is the shape litellm's `max_budget` has. The turn you were running fails with `LoopError::BudgetExhausted { dimension, spent, limit }`, and that error is not recoverable.
 
 It follows the `MaxTurnsExceeded` precedent and carries the numbers, so your diagnostics can name the spend and the limit.
 
@@ -59,6 +62,8 @@ run start:   gate.begin()                     — counters reset for this run
 each turn:   pre_request(elapsed) consulted    — BEFORE the request is built
              (warns latch, a hard crossing refuses)
 on usage:    gate.observe_usage(in, out)       — from real usage records
+             gate.observe_cost(model, usage)   — prices the report when a
+             table is installed (with_price_table)
 turn end:    gate.observe_turn_end()
 ```
 
@@ -66,7 +71,7 @@ Accounting is local to each loop by construction, because `with_budget_gate` tak
 
 The manifest's advisory `Budgets` stanza maps into `BudgetLimits` behind the `manifest` feature. Two choices there are deliberate:
 
-- `cost_usd` maps to nothing. No price table is consulted, so cost has no line. The gate refuses to guess a cost.
+- `cost_usd` maps to the `Usd` line since 0.5.0, priced through the gate's price table. A negative or non-numeric value is ignored with a warn rather than guessed at.
 - An unparseable `duration` disables the wall-clock line with a warn, rather than guessing what you meant.
 
 ## Related pages

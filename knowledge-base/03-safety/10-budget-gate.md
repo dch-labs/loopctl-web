@@ -6,15 +6,16 @@
 
 ---
 
-## The three dimensions
+## The four dimensions
 
 | Dimension | Measured by | Notes |
 |---|---|---|
 | `Tokens` | provider-reported `input + output` from usage records — **never estimates** | usage-less turns contribute nothing (the honest count, not a guess) |
 | `Turns` | completed turns, counted at turn end | an in-flight turn never counts against itself |
 | `Duration` | the elapsed reading of the caller's clock seam, passed in as a `Duration` | the gate itself never reads a clock — a replayed run crosses the same lines at the same logical instants |
+| `Usd` | estimated spend in dollars, priced at capture through the gate's price table (0.5.0) | a turn with no usage, or a model the table does not price, spends nothing on this line |
 
-`BudgetLimits { turns, tokens, duration }` — `None` (the default) disables a dimension's lines entirely.
+`BudgetLimits { turns, tokens, duration, usd }` — `None` (the default) disables a dimension's lines entirely. The `Usd` line became real in 0.5.0: the gate prices each turn-serving usage report through the [price table](../06b-telemetry/04-pricing.md) in micro-dollars (`observe_cost`, `with_price_table`), and the hard ceiling compares in the same unit. Before 0.5.0 a configured cost mapped to nothing — the gate refused to guess a price.
 
 ## Soft line, hard line
 
@@ -43,7 +44,7 @@ turn end:    gate.observe_turn_end()
 
 Accounting is local to each loop by construction (`with_budget_gate` takes the gate by value): a second loop nested inside the first's tool dispatch, spending under its own gate, never shortens the first loop's served requests.
 
-The manifest's advisory `Budgets` stanza maps into `BudgetLimits` behind the `manifest` feature, with `cost_usd` deliberately mapping to nothing — no price table is consulted, so cost has no line (the gate refuses to guess a cost); an unparseable `duration` disables the wall-clock line with a warn rather than guessing.
+The manifest's advisory `Budgets` stanza maps into `BudgetLimits` behind the `manifest` feature, with `cost_usd` mapping to the `Usd` line since 0.5.0 (a negative or non-numeric value is ignored with a warn); an unparseable `duration` disables the wall-clock line with a warn rather than guessing.
 
 ---
 
