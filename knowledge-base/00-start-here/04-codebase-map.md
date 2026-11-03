@@ -78,7 +78,7 @@ loopctl/
 
 ---
 
-0.5.0 added three always-compiled modules and one feature-gated family: `tracing_spans.rs` (the span tree + signal events), `pricing.rs` (the vendored price table + cost math), `api/probe.rs` (model-probe types), `provider/forensics.rs` (wire forensics capture), `testing/determinism.rs` (`StepClock`, `CapturingObserver`), `metrics.rs` + `metrics/` behind the `metrics` feature, and the companion crates `otel/` (`loopctl-otel`) and `langfuse/` (`loopctl-langfuse`). Deep dives: [run metrics](../06b-telemetry/01-metrics.md) · [the span tree](../06b-telemetry/02-spans.md) · [exporters](../06b-telemetry/03-exporters.md) · [prices and cost](../06b-telemetry/04-pricing.md).
+0.5.0 added three always-compiled modules — `tracing_spans.rs` (the span tree + signal events), `pricing.rs` (the vendored price table + cost math), and `api/probe.rs` (model-probe types) — plus `provider/forensics.rs` (wire forensics capture, riding the `providers` feature), `testing/determinism.rs` (`StepClock`, `CapturingObserver`, behind `testing`), the `metrics.rs` + `metrics/` family behind the `metrics` feature, and the companion crates `otel/` (`loopctl-otel`) and `langfuse/` (`loopctl-langfuse`). Deep dives: [run metrics](../06b-telemetry/01-metrics.md) · [the span tree](../06b-telemetry/02-spans.md) · [exporters](../06b-telemetry/03-exporters.md) · [prices and cost](../06b-telemetry/04-pricing.md).
 
 ## The engine — where the loop lives
 

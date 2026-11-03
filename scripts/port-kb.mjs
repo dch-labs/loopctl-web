@@ -11,7 +11,8 @@ if (!existsSync(SRC)) {
 
 const slugifySegment = (seg) => {
   const base = seg.replace(/\.md$/, '');
-  const stripped = base.replace(/^\d+-/, '');
+  // strip section prefixes: "01-", "06b-"
+  const stripped = base.replace(/^\d+[a-z]?-/, '');
   if (base.toLowerCase() === 'readme') return 'index';
   return stripped
     .toLowerCase()

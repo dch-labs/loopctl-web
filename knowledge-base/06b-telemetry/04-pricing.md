@@ -8,7 +8,7 @@ Added in 0.5.0.
 
 `curated_prices.json` carries `table_version`, a `pricing_updated` date, and per-family rates: `input`, `output`, and optional `cache_read` and `cache_write`, all in USD per million tokens.
 
-The seed came from converting OpenRouter's public models listing on the table's own date. That gave 1,042 rows over 345 canonical models and 54 providers, so the out-of-box table prices what people actually run. The current vintage reads 2026-11-02.
+The seed came from converting OpenRouter's public models listing on the table's own date. That gave 1,022 rows over 336 canonical models and 53 providers, so the out-of-box table prices what people actually run. The current vintage reads 2026-11-02.
 
 Load it once and read from the static:
 
