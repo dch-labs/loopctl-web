@@ -212,8 +212,24 @@ An alert you write as `headroom_pct < 20` means a fifth of the window left free 
 
 `ApiClient::ping`'s default sends one minimal completion. On your own client against a metered endpoint, one probe is one bill. The four shipped clients answer on a metadata route and cost nothing.
 
-### 44. An unpriced model spends nothing on the USD line (0.5.0)
+### 44. An unpriced model refuses an armed USD line (0.6.0)
 
-The budget gate's `Usd` dimension prices usage through the vendored table, and a model the table does not price, or a turn that reported no usage, contributes nothing. A silent cost line is not a free model. Check `PriceTable::price(model)` before you trust it.
+The budget gate's `Usd` dimension prices usage through the vendored table. A turn that reported no usage spends nothing, but a model the table does not price no longer reads as zero.
+
+While your `cost_usd` limit is configured, one reported usage on such a model refuses the next request as `BudgetExhausted`.
+
+Price the model through a `prices.d/` override row, or leave the line unset. Check `PriceTable::price(model)` before you trust the line. A gate with no table stays inert.
+
+### 45. Gemini non-streaming responses now carry thinking parts (0.6.0)
+
+Thought summaries that earlier versions dropped now arrive as `MessagePart::Thinking` parts. Code that assumed an empty parts vector for a thinking-only response breaks. Keep the parts, because signed reasoning rides your continuations.
+
+### 46. Exhaustive ToolCall matches need the new signature field (0.6.0)
+
+`MessagePart::ToolCall` gained `signature: Option<String>`. Add the field or a `..` rest pattern to your exhaustive constructors and matches. Serde users and `tool_call()` callers are unaffected, because the field defaults both ways.
+
+### 47. The MSRV moved to Rust 1.100 (0.6.0)
+
+The minimum supported Rust version rose from 1.98, and older toolchains stop compiling the crate. Pin your project with `rustup override set 1.100.0`. Companion crates moved together, so one pin covers the family.
 
 For cross-referenced deep dives, see [engine](/engine/driver-loop/), [compaction](/engine/compaction/), [middleware](/safety/middleware/), [detection](/safety/loop-detection/), and [streaming](/core-data/stream-events/).

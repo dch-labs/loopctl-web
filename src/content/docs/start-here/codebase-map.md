@@ -87,7 +87,7 @@ loopctl/
 │   ├── derive/             #[derive(Tool)] generates the Tool impl
 │   ├── sqlite/             loopctl-sqlite, durable SQLite memory
 │   ├── hnsw/               loopctl-hnsw, the HNSW VectorIndex
-│   ├── client/             loopctl-client, the shared daemon client
+│   ├── client/             loopctl-client, the shared daemon client (socket, TCP, and TLS endpoints)
 │   ├── otel/               loopctl-otel, OTLP export for spans + metrics (0.5.0)
 │   ├── langfuse/           loopctl-langfuse, Langfuse traces + scores (0.5.0)
 │   └── vector/             side-workspace crate: loopctl-vector, Qdrant + pgvector backends

@@ -8,13 +8,32 @@ sidebar:
 
 Your CLI's daemon-facing verbs, your TUI's attach, stream, and approval surfaces, and future third-party clients all consume `DaemonClient`. In-process consumers implement the same `LoopctlClient` interface, so you pick a mode without your call sites changing shape.
 
-The crate keeps `default = []` and adds no optional dependencies. It publishes after loopctl, like the other companions, and it is unix-only by design because your transport is the unix socket.
+The crate keeps `default = []`, and the `tls` feature pulls its only optional dependencies. It publishes after loopctl, like the other companions, and it builds on every platform since 0.6.0. The socket endpoint stays Unix-only by design, while TCP, TLS, the verbs, and the event stream run anywhere.
+
+## Endpoints and authentication
+
+Your `ConnectOptions` carries an `Endpoint` since 0.6.0. Pick one of four shapes.
+
+| Endpoint | What it gives you |
+|---|---|
+| `Endpoint::socket(path)` | The per-user unix socket, as before. Autospawn runs here. |
+| `Endpoint::tcp(host, port, token)` | Plain TCP for a trusted network. Your token crosses in the clear. |
+| `Endpoint::tls(...)` | TLS behind the `tls` feature, against a CA you name or the public roots. |
+| `Endpoint::mtls(...)` | TLS plus a client identity PEM, for daemons that authenticate clients. |
+
+Remote endpoints authenticate with a bearer token on every request, the handshake included. A 401 or 403 answer surfaces as the typed `ClientError::Unauthorized`.
+
+Your token never renders through `Debug`. Endpoints, options, and connected clients all print `<redacted>`. A token or host carrying CR, LF, or NUL refuses as a typed transport error before any bytes reach the wire.
+
+Every exchange answers within one deadline. Set `ConnectOptions::with_deadline` to tune it, with 30 seconds as the default. The handshake, each verb, and a subscription's establishing head all obey it, so a stalled daemon cannot hang you. The event stream itself stays unbounded by design.
+
+Three breaks ride 0.6.0. `ConnectOptions.socket_path` became `ConnectOptions.endpoint`, struct literals gain a `deadline: Duration` field, and `ClientError::NotADaemon` carries `endpoint: String` instead of `path: PathBuf`. The constructors keep their shape, so `ConnectOptions::new(path)` still builds the socket endpoint.
 
 ## The wire dialect
 
-You get HTTP/1.1 REST plus SSE over a per-user unix socket at `$XDG_RUNTIME_DIR/loopctl/loopctl.sock`. Paths are `/v1`-versioned and bodies are JSON.
+Your wire dialect is HTTP/1.1 REST plus SSE. Over the socket you reach a per-user unix socket at `$XDG_RUNTIME_DIR/loopctl/loopctl.sock`. Over TCP and TLS you reach the `host:port` you named, and the request's `Host` header carries that authority, with an IPv6 literal bracketed. Paths are `/v1`-versioned and bodies are JSON.
 
-A deliberately minimal in-crate transport carries it. It opens one socket, speaks no TLS, HTTP/2, or redirects, and it uses one connection per request.
+A deliberately minimal in-crate transport carries it. It opens one connection per request, speaks no HTTP/2 or redirects, and refuses where the dialect ends rather than guessing. TLS rides the same transport behind the `tls` feature.
 
 ### Three response framings
 
@@ -29,6 +48,12 @@ A compliant peer may use any of these, and the client reads all three:
 Three caps protect you: a 64 KiB head cap, a 4 MiB line cap, and a 10 MiB one-shot body cap. Conflicting duplicate `Content-Length` headers are refused.
 
 The reader compacts its buffer as frames are consumed, so a long subscription's memory tracks your unread window rather than the stream's lifetime.
+
+Since 0.6.0 the wire contract refuses where it used to tolerate. An interim `1xx` head is skipped to the final head. A chunked trailer section past 64 lines refuses. A 2xx subscription whose media type is not `text/event-stream` refuses, with parameters tolerated.
+
+An event frame that never meets its blank line refuses at the 4 MiB bound, and a cursor that does not advance refuses the feed.
+
+A 204 answers bodyless whatever its head claims. An error body drains under 64 KiB and your deadline, so the status survives a flooded body.
 
 ### The versioned handshake
 
@@ -56,9 +81,11 @@ In-process consumers adapt their own event sources through `EventStream::from_pi
 Errors are typed throughout:
 
 - Envelopes carry `{status, code, message}`.
-- `SocketAbsent` is the in-process degrade signal.
-- `ConnectTimeout` arrives under a bounded, visible autospawn retry window.
-- Set `LOOPCTL_NO_AUTOSPAWN=1` when you want to disable spawning.
+- `Unauthorized` is the credential answer on any transport, added in 0.6.0.
+- `SocketAbsent` is the in-process degrade signal, and the typed absence for a refused remote port.
+- `ConnectTimeout` arrives under a bounded autospawn retry window, which retries transient handshake failures.
+
+Autospawn stays a socket behavior. An absent remote daemon never starts one, because a daemon on another machine is not yours to start. Set `LOOPCTL_NO_AUTOSPAWN=1` when you want to disable spawning.
 
 ## The mode split, in one test
 

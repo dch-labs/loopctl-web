@@ -72,6 +72,8 @@ Accounting is local to each loop by construction, because `with_budget_gate` tak
 The manifest's advisory `Budgets` stanza maps into `BudgetLimits` behind the `manifest` feature. Two choices there are deliberate:
 
 - `cost_usd` maps to the `Usd` line since 0.5.0, priced through the gate's price table. A negative or non-numeric value is ignored with a warn rather than guessed at.
+
+Since 0.6.0 the line fails closed on unpriced usage. One report on a model the table does not price refuses your next request as `BudgetExhausted`. Price the model through a `prices.d/` override, or leave the line unset.
 - An unparseable `duration` disables the wall-clock line with a warn, rather than guessing what you meant.
 
 ## Related pages

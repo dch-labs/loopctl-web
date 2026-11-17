@@ -112,6 +112,12 @@ fact the page already carries, so a facts run is not clean at zero:
   `&self` now), and `as-is`, `snapshot`, `snapshot-based`, `semantics`, `changes`
   in the MCP pages (the server adapter serves its registry live instead of taking
   a snapshot).
+- The 0.6.0 group, facts that became false when the release shipped:
+  `Unix-only by design` and `speaks no TLS` in the client pages, false since the
+  `tls` feature and the cross-platform build landed, plus `0.Y.0` and `Y.0` in
+  the Think pages, the removal window those pages announced and 0.6.0 consumed,
+  and `today` in the metrics page, its row-count sentence rewritten from 65 to
+  64 by the `loopctl.think.calls` removal.
 
 The corpus sits at 18 flagged pages against the ported reference copy, 19 against
 the site's own pre-rewrite text. That is the pass line. Treat a run above it as a
@@ -131,4 +137,4 @@ over any scratch copy: `git archive master src/content/docs | tar -x -C
 reads as different prose, so diff against it only deliberately.
 
 Both scripts live in `scripts/`. A batch is done when both pass and
-`npm run build` reports 199 content pages.
+`npm run build` reports 203 content pages.

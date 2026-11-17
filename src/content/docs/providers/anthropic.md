@@ -49,6 +49,8 @@ Continuation requests replay prior turns' thinking blocks verbatim when `replay_
 - Some Anthropic models refuse to continue a conversation whose earlier thinking lacks a valid signature, so that round trip is load-bearing.
 - Keeping the history byte-stable also keeps the provider's prompt caches hitting.
 
+A part somehow carrying both a signature and a redacted payload answers with the redacted block, because the wire block is a one-of pair. That foreign state is pinned in 0.6.0. See [reasoning fidelity](/core-data/reasoning-fidelity/).
+
 ### Usage accounting
 
 Input tokens arrive on `message_start` and output tokens on `message_delta`. The client latches both and merges by max per counter, so a downward revision never under-reports your usage.

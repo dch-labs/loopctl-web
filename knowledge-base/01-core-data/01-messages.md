@@ -188,3 +188,7 @@ That's the entire model — five shapes (`Message`, `Role`, `MessagePart`, `Tool
 - [Tools](02-tools.md) — where `ToolCall` requests come from and how results are produced.
 - [The big idea](../00-start-here/02-the-big-idea.md) — where these messages live (history vs pending).
 - [File reference: message.rs](../07-file-reference/message.md)
+
+## The ToolCall signature field (0.6.0)
+
+`MessagePart::ToolCall` gained `signature: Option<String>`, carrying Gemini's reasoning token when the provider attaches one to the call itself. It replays verbatim beside the call on the next request, every other dialect drops it at request-build time, and it is never synthesized. The field is serde-defaulted both ways, so pre-field histories deserialize unsigned; `MessagePart::tool_call_with_signature` builds the signed shape.

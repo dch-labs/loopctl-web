@@ -1,6 +1,6 @@
 # `crates/client/` — the `loopctl-client` companion crate
 
-The family's shared daemon client, the seam of the k9s/kubectl split: one object-safe `LoopctlClient` interface consumed by every daemon-facing surface (the CLI's verbs, the TUI's attach/stream/approval, future third parties) — and implemented in-process by consumers that run without a daemon. `default = []`, no optional dependencies, Unix-only by design; publishes after loopctl.
+The family's shared daemon client, the seam of the k9s/kubectl split: one object-safe `LoopctlClient` interface consumed by every daemon-facing surface (the CLI's verbs, the TUI's attach/stream/approval, future third parties) — and implemented in-process by consumers that run without a daemon. `default = []`, with the one optional dependency set behind the `tls` feature; publishes after loopctl. Since 0.6.0 it builds on every platform, with the socket endpoint Unix-only and TCP, TLS, the verbs, and the event stream running anywhere.
 
 **Key items**
 

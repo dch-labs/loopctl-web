@@ -114,6 +114,8 @@ For reading logs or debugging a stuck breaker, the entire manager is one locked 
 | `active_fallback` | `Option<String>` | Cached first non-failed entry, so routing reads stay O(1). |
 | `fallback_switched_at` | `Option<Instant>` | When your cooldown clock started. |
 
+Install a clock with `with_clock`, `set_clock`, or `clock()` and your tests drive the cooldown without sleeping, added in 0.6.0. A frozen clock holds the dead window forever, and a stepped clock crosses it exactly when you move it. An unpinned manager keeps live time and behaves as before.
+
 Each chain entry is `{ name, available, attempt_count, max_fail_count }`. An entry counts as failed when it is unavailable or when `attempt_count` has reached `max_fail_count`, and that budget defaults to 2. Values below 1 are clamped up.
 
 One lock guards the whole struct, so a poisoned lock stops the breaker. It fails closed instead of guessing with half-updated state.

@@ -82,3 +82,9 @@ A frame's declared length must land in `16 bytes … 16 MiB`; anything else mark
 
 - [Anthropic](03-anthropic.md) — whose body builders and emitter the Anthropic path shares.
 - [Overview](01-overview.md)
+
+## Reasoning blocks (0.6.0)
+
+Converse round-trips signed and redacted thinking as `reasoningContent` blocks, in the union AWS documents: `reasoningText` carrying text and signature, or `redactedContent`. Unsigned thinking is dropped and booked `skipped` on the reasoning metrics. Inbound, `reasoningContent` deltas latch a signature onto the thinking lane and a `redactedContent` delta rides as the redacted payload, while the non-streaming reader turns `reasoningContent` blocks into thinking parts. A reasoning delta for an index whose `contentBlockStart` never arrived opens the thinking lane itself, so a stream that omits the block start loses no signature or redacted payload.
+
+The Anthropic-native invoke path's non-streaming reader captures `thinking` and `redacted_thinking` blocks it previously dropped. A signature on a tool call never rides either wire shape. See [reasoning fidelity](../01-core-data/08-reasoning-fidelity.md).

@@ -44,7 +44,7 @@ turn end:    gate.observe_turn_end()
 
 Accounting is local to each loop by construction (`with_budget_gate` takes the gate by value): a second loop nested inside the first's tool dispatch, spending under its own gate, never shortens the first loop's served requests.
 
-The manifest's advisory `Budgets` stanza maps into `BudgetLimits` behind the `manifest` feature, with `cost_usd` mapping to the `Usd` line since 0.5.0 (a negative or non-numeric value is ignored with a warn); an unparseable `duration` disables the wall-clock line with a warn rather than guessing.
+The manifest's advisory `Budgets` stanza maps into `BudgetLimits` behind the `manifest` feature, with `cost_usd` mapping to the `Usd` line since 0.5.0 (a negative or non-numeric value is ignored with a warn); an unparseable `duration` disables the wall-clock line with a warn rather than guessing. Since 0.6.0 the line fails closed on unpriced usage: one report on a model the table does not price refuses the next request as `BudgetExhausted`.
 
 ---
 

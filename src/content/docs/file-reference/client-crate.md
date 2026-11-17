@@ -10,7 +10,7 @@ Code that runs without a daemon implements that interface in-process instead of 
 
 This is the seam that separates your CLI from the daemon, the same split k9s makes with kubectl.
 
-The crate has `default = []`, carries no optional dependencies, and is Unix-only by design. It publishes after `loopctl`.
+The crate has `default = []`, and its `tls` feature pulls the one optional dependency set. It publishes after `loopctl`, and it builds on every platform since 0.6.0. The socket endpoint stays Unix-only by design, while TCP, TLS, the verbs, and the event stream run anywhere.
 
 ## `DaemonClient`
 

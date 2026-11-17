@@ -204,6 +204,8 @@ Terms from the [Principles](09-principles/01-sans-io.md) pages — the patterns 
 | **Cached input tokens** | The share of the input count the provider served from its prompt cache (`Usage::cached_input_tokens`) — the hit-rate number a cache actually pays for. |
 | **Thinking effort** | The none/minimal/low/medium/high/xhigh/max knob (`RequestOptions::effort`) telling a reasoning model how much thinking to spend — `None` the explicit off; seven rungs since 0.5.0. |
 | **Session-scoped reasoning retention** | Prior turns' thinking blocks ride the conversation verbatim (until compaction ages them out) so the request prefix stays byte-stable and provider prompt caches keep hitting. |
+| **Thought signature** | The opaque token a provider attaches to a reasoning block or a tool call, which its API demands back unchanged to continue the reasoning thread. Captured on every dialect since 0.6.0 and replayed where the dialect carries it. |
+| **Redacted reasoning** | A reasoning block the provider withheld, carried as an opaque payload your next request returns in place of the text. |
 | **Embedder** | A real `EmbeddingProvider` backend — `OllamaEmbedder` (local, `/api/embed`) or `OpenAiEmbedder` (`/v1/embeddings`). |
 | **Model probe** | One of the three before-the-turn verbs — `list_models`, `ping`, `model_metadata` — answering what the endpoint serves, whether it is alive, and what a model can do (0.5.0). |
 | **`ProbeClass`** | The failure vocabulary every probe lands in (`Auth`…`Other`), derived mechanically from the wire's own variant and status. |

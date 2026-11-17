@@ -95,6 +95,7 @@ Four rules describe what you can expect from the fold:
 - Text deltas append to the lane's buffer, and `PartStop` flushes that buffer into a `MessagePart::Text`.
 - Tool lanes collect JSON fragments, and those fragments are parsed on close. Empty input becomes `{}`. Unparseable input is the accumulator's one error, `StreamError::InvalidToolInputJson`.
 - Thinking lanes buffer reasoning fragments and latch any `signature` or `redacted` payload. On close they flush a `MessagePart::Thinking`, so the reasoning joins the conversation and continuations can replay it. See [messages](/core-data/messages/).
+- A tool lane's `PartStart` can carry a complete `ToolCall` with a `signature`. On close the built part keeps that token, so a signed call survives the turn. Added in 0.6.0.
 - Deltas with no matching open lane are dropped silently. Slots still open at `build()` are dropped too, because only closed lanes produce parts.
 
 ### Open slots
@@ -109,6 +110,7 @@ struct OpenPart {
     thinking: String,       // thinking lane buffer
     tool_id: String,        // tool lane: the call's id
     tool_name: String,
+    tool_signature: Option<String>,  // tool lane: the latched reasoning token (0.6.0)
     tool_input: String,     // tool lane: RAW JSON text, appended fragment by fragment
 }
 ```

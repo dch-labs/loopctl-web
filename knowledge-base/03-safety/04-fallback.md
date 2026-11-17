@@ -116,3 +116,7 @@ Each chain entry is `{ name, available, attempt_count, max_fail_count }` with `f
 - [Circuit breakers](../09-principles/06-circuit-breakers.md) — the pattern this manager implements, from scratch.
 - [Stream handler](../01-core-data/04-stream-events.md) — the retry ladder that feeds this breaker.
 - [Termination](../02-engine/07-termination.md) — `FallbackExhausted` in context.
+
+## The clock seam (0.6.0)
+
+`FallbackManager::with_clock` / `set_clock` / `clock()` install an `Arc<dyn Clock>`, the same seam the engine exposes. A frozen clock holds the dead window forever and a stepped clock crosses it exactly when the test moves it, so cooldown tests need no wall-clock sleeps. An unpinned manager keeps live time and behaves as before; the public `fallback_switched_at` type is unchanged.

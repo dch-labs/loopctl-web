@@ -83,3 +83,7 @@ The Bedrock client's Anthropic-native path reuses this file's body builders, sys
 ## Related pages
 
 - [Overview](01-overview.md) · [Structured output](../06-integration/01-structured-output.md) · [Bedrock](05-bedrock.md)
+
+## Both payloads, one answer (0.6.0)
+
+The wire block is a one-of pair, `thinking` or `redacted_thinking`. A part somehow carrying both a signature and a redacted payload, a state no Anthropic response builds, answers with the redacted block and drops the signature, pinned in 0.6.0. See [reasoning fidelity](../01-core-data/08-reasoning-fidelity.md).
