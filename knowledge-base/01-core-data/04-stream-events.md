@@ -278,3 +278,7 @@ The engine forwards every accepted event to [observers](../04-extensions/01-obse
 - [API client](03-api-client.md) — the trait producing these events.
 - [The LLM turn](../02-engine/03-llm-turn.md) — how the engine drives streaming vs non-streaming turns.
 - [File reference: stream.rs](../07-file-reference/stream.md)
+
+## The tool-signature latch (0.6.0)
+
+A tool lane's `PartStart` can carry a complete `ToolCall` with a `signature`. The accumulator latches it onto the slot and the built part keeps the token on close, so a signed call survives the turn. A delta with no matching open lane is still dropped silently, which is why providers must open a lane before signaling into it.

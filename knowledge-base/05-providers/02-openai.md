@@ -86,3 +86,7 @@ An SSE error object is classified: rate-limit family (`rate_limit_error`, codes 
 
 - [Overview](01-overview.md) — the full matrix.
 - [Structured output](../06-integration/01-structured-output.md) — the options in action.
+
+## The fidelity boundary (0.6.0)
+
+This dialect's fidelity is text-only: `reasoning_content` both ways, with signature and redacted payloads never riding the wire. o-series models on the Chat Completions wire surface reasoning as usage token counts alone, and the Responses API's reasoning items belong to a wire this client does not speak. See [reasoning fidelity](../01-core-data/08-reasoning-fidelity.md).

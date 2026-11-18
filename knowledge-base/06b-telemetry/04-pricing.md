@@ -41,7 +41,7 @@ The breakdown carries one field per class: `input_usd_micro`, `output_usd_micro`
 
 The [budget gate](../03-safety/10-budget-gate.md) gained a fourth dimension, `Usd`. A turn's usage is priced through the gate's price table at capture, so a `budgets.cost_usd` line in your manifest now spends real money rather than mapping to nothing.
 
-Two rules keep it honest. A provider that reports no usage spends nothing on the line. A model the table does not price spends nothing on the line. The hard ceiling compares in micro-dollars, and the refusal carries the numbers.
+Two rules keep it honest. A provider that reports no usage spends nothing on the line. A model the table does not price refuses an armed line since 0.6.0: the next request fails closed as `BudgetExhausted`, so price the model or leave the line unset. The hard ceiling compares in micro-dollars, and the refusal carries the numbers.
 
 ## Refreshing the table
 

@@ -56,6 +56,8 @@ The lane bookkeeping is what keeps that safe. Text and tool lanes can interleave
 
 Thinking routes to a separate lane too. Models that emit `reasoning_content`, such as DeepSeek-R1 and the o-series style models, produce `on_thinking_delta` fragments (0.4.0).
 
+This dialect's fidelity is text-only, stated and pinned in 0.6.0. Signature and redacted payloads never ride the wire, replay carries text through `reasoning_content` alone, and o-series models surface reasoning as usage token counts with no content at all. See [reasoning fidelity](/core-data/reasoning-fidelity/).
+
 The assembled `MessagePart::Thinking` also rides the conversation for continuation replay when you leave `replay_reasoning(true)` on the builder, which is the default.
 
 Finish reasons map directly:

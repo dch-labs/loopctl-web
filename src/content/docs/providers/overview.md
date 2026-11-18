@@ -132,6 +132,7 @@ Two consequences are worth having. You never need to duplicate a provider fact o
 - [Anthropic](/providers/anthropic/) covers Claude, thinking blocks, forced-tool JSON, and prompt caching.
 - [Gemini](/providers/gemini/) covers the Gemini quirks of model-in-URL and thoughts.
 - [Bedrock](/providers/bedrock/) covers AWS signing, event-stream decoding, and Converse.
+- [Reasoning fidelity](/core-data/reasoning-fidelity/) covers which thinking each provider round-trips.
 - [SSE under the hood](/providers/sse/) covers how streaming bytes become events.
 - [Grammar constraints](/providers/grammar/) covers vLLM `guided_json` for local models.
 - [Embeddings](/providers/embeddings/) covers the `EmbeddingProvider` backends for semantic memory.

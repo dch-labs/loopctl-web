@@ -1,10 +1,10 @@
 # `crates/client/` — the `loopctl-client` companion crate
 
-The family's shared daemon client, the seam of the k9s/kubectl split: one object-safe `LoopctlClient` interface consumed by every daemon-facing surface (the CLI's verbs, the TUI's attach/stream/approval, future third parties) — and implemented in-process by consumers that run without a daemon. `default = []`, no optional dependencies, Unix-only by design; publishes after loopctl.
+The family's shared daemon client, the seam of the k9s/kubectl split: one object-safe `LoopctlClient` interface consumed by every daemon-facing surface (the CLI's verbs, the TUI's attach/stream/approval, future third parties) — and implemented in-process by consumers that run without a daemon. `default = []`, with the one optional dependency set behind the `tls` feature; publishes after loopctl. Since 0.6.0 it builds on every platform, with the socket endpoint Unix-only and TCP, TLS, the verbs, and the event stream running anywhere.
 
 **Key items**
 
-- `DaemonClient` — the daemon-mode implementation: HTTP/1.1 REST + SSE over the per-user unix socket, `/v1`-versioned paths, JSON bodies, a deliberately minimal in-crate transport (connection-per-request, no TLS/HTTP/2).
+- `DaemonClient` — the daemon-mode implementation: HTTP/1.1 REST + SSE over the per-user unix socket, `/v1`-versioned paths, JSON bodies, a deliberately minimal in-crate transport on the socket and TCP endpoints (connection-per-request, no HTTP/2 or redirects), with TLS the remote endpoints' own carrier behind the `tls` feature.
 - The versioned handshake (`GET /v1/hello` → `{family, protocol, floor}`) refusing a mismatched family member in **either** direction, naming both sides.
 - The verb layer — loops `ls`/`get`, runs `start`/`get`/`stop`, gates `ls`/`approve`/`deny`, schedules `ls`/`run-now` — over one generic request path with typed `{status, code, message}` error envelopes.
 - `subscribe(loop, since)` — the SSE observation surface: `id:` = resume cursor, `data:` = one trajectory-JSONL event (the ledger's interchange types reused, so wire and ledger cannot drift); HTTP 410 maps to the typed `CursorExpired`.

@@ -39,6 +39,16 @@ So set `with_include_thoughts(true)` when your model supports thoughts. Its `tho
 
 The response parser routes thought parts correctly either way.
 
+## Thinking fidelity
+
+Your signed thoughts survive the round trip since 0.6.0. Capture takes a `thoughtSignature` on both transports, streaming and non-streaming, and a follow-up request replays the text with `thought: true` and the signature verbatim. Unsigned thinking is dropped, never invented.
+
+A signature riding a `functionCall` part latches onto the call itself. Your next request returns it beside the call, which is the carrier Google documents for reasoning continuity across a tool turn.
+
+A thought streamed as fragments rebuilds as one part carrying the signature computed over the whole summary. Two signed thought parts inside one chunk stay two parts, because a merged lane would destroy the earlier token.
+
+Parts arriving after the `finishReason` are dropped whole. A proxy speaking past the terminal signal cannot open a lane that never closes. See [reasoning fidelity](/core-data/reasoning-fidelity/) for the cross-provider boundary.
+
 ## What this client translates for you
 
 - **System prompts.** Gemini rejects inline `system` roles, so they are folded into the top-level `systemInstruction` field, which is omitted entirely when empty.
@@ -73,6 +83,8 @@ Errors embedded in chunks classify by code or status. Codes 429, 503, and 529 pl
 3. Streaming usage from Gemini proxies can be partial. The client latches whatever arrives, so your `usage` may be `None` behind a quirky proxy.
 
 4. An empty `functionCall.args` normalizes to `{}`, and a malformed args value passes through verbatim so you see it rather than having it hidden.
+
+5. Non-streaming responses now contain `MessagePart::Thinking` parts for thought summaries, where earlier versions dropped them. Expect reasoning where your code used to see an empty parts vector. Added in 0.6.0.
 
 ## Related pages
 

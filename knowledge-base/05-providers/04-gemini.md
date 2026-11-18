@@ -52,3 +52,11 @@ Gemini streams JSON chunks over SSE without a `[DONE]` sentinel — the terminal
 ## Related pages
 
 - [Overview](01-overview.md) · [Structured output](../06-integration/01-structured-output.md)
+
+## Thinking fidelity (0.6.0)
+
+Your signed thoughts survive the round trip. Capture takes a `thoughtSignature` on both transports, streaming and non-streaming, and a follow-up request replays the text with `thought: true` and the signature verbatim. Unsigned thinking is dropped, never invented.
+
+A signature riding a `functionCall` part latches onto the call itself, and the next request returns it beside the call, the carrier Google documents. Two signed thought parts inside one chunk stay two parts, and fragments of one thought across chunks rebuild as a single part carrying the signature computed over the whole summary.
+
+Parts arriving after the `finishReason` are dropped whole. Non-streaming responses now contain `MessagePart::Thinking` parts for thought summaries that earlier versions dropped. See [reasoning fidelity](../01-core-data/08-reasoning-fidelity.md).

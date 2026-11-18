@@ -161,6 +161,7 @@ The tables below gather those pages by area, and every row links to the deep div
 | [`crates/derive/src/*`](/file-reference/derive-lib/) | The `#[derive(Tool)]` macro crate. |
 | [`crates/sqlite/`](/file-reference/sqlite-crate/) | `loopctl-sqlite`: durable SQLite `LoopMemory` (WAL, FTS5, ranking parity). |
 | [`crates/client/`](/file-reference/client-crate/) | `loopctl-client`: the shared daemon client (UDS REST + SSE, both modes). |
+| [`crates/client/src/tls.rs`](/file-reference/client-tls/) | The TLS carrier for remote endpoints, behind the `tls` feature (0.6.0). |
 | [`crates/hnsw/`](/file-reference/hnsw-crate/) | `loopctl-hnsw`: the HNSW `VectorIndex` companion. |
 | [`crates/vector/`](/file-reference/vector-crate/) | `loopctl-vector`: Qdrant + pgvector backends (side workspace). |
 | [`crates/otel/`](/file-reference/otel-crate/) | `loopctl-otel`: OTLP export for the span tree and metrics (0.5.0). |

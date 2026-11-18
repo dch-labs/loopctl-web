@@ -40,6 +40,20 @@ Your async resolver decides an `Ask`. A true answer lets the call through, and a
 
 No resolver configured means denied. That is the safe default for a headless agent.
 
+### Typed asks
+
+`with_ask_resolver_typed` installs a richer seam, added in 0.6.0. Your `PermissionAskResolver` receives a `PermissionAsk`: tool name, the JSON input as the gate saw it, call id, turn number, and the rendered prompt. You answer with a `PermissionResolution`.
+
+| Resolution | What happens |
+|---|---|
+| `AllowOnce` | This one call proceeds. |
+| `DenyOnce` | Refusal with the standard text. |
+| `DenyWithFeedback` | Refusal carrying your user's words verbatim, in both the model-facing error and the gate record. |
+
+Blank feedback answers as a plain `DenyOnce`, so an empty reason box never renders a hollow denial. Both types are `#[non_exhaustive]`, so later variants ride without a break.
+
+Your boolean `AskResolverFn` keeps working unchanged, and it maps onto the same arm. Install both and the typed resolver answers.
+
 A cancel while the answer is pending aborts the wait and denies with "cancelled while awaiting approval", so an unresponsive resolver cannot hold a cancelled run open. If the cancel already fired when your answer lands, the cancel wins deterministically, and a cancelled run never executes the tool.
 
 ### The one thing Modify does not do

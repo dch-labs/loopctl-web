@@ -43,7 +43,8 @@ All the variety lives in this enum, and you will build most of these variants by
 pub enum MessagePart {
     Text      { text: String },                       // plain text
     Image     { source: ImageSource },                // base64-encoded image
-    ToolCall  { id: String, name: String, input: Value },  // the model asks to run a tool
+    ToolCall  { id: String, name: String, input: Value,
+                signature: Option<String> },  // the model asks to run a tool
     Thinking  { text: String, signature: Option<String>, redacted: Option<String> },  // reasoning
     ToolResult{ call_id: String, name: String, output: ToolContent,
                 is_error: Option<bool>, retention: Option<Retention> },
@@ -65,6 +66,8 @@ Five rules govern that pair:
 - `ToolResult.name` matters for providers that match by name, and Gemini does. loopctl fills it for you.
 - `is_error: Some(true)` marks a failed tool run. `None` and `Some(false)` both mean success.
 - `retention` tags how compaction may treat the result. `None` is the untagged default. See [retention classes](#retention-classes) below.
+
+The `ToolCall.signature` field carries Gemini's reasoning token when the provider attaches one to the call itself. It replays verbatim beside the call on your next request, and every other dialect drops it at request-build time. Added in 0.6.0, and never synthesized.
 
 ### Thinking parts
 

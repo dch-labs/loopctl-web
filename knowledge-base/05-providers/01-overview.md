@@ -87,7 +87,8 @@ This is the tier for **config-file-driven hosts**: apply your own precedence on 
 - [OpenAI & the compatible family](02-openai.md) — OpenAiClient, Ollama, DeepSeek, Grok, Azure, Moonshot, self-hosted.
 - [Anthropic](03-anthropic.md) — Claude, thinking blocks, forced-tool JSON, prompt caching.
 - [Gemini](04-gemini.md) — Gemini quirks: model-in-URL, thoughts.
-- [Bedrock](05-bedrock.md) — AWS signing, event-stream decoding, Converse.
+- [Bedrock](05-bedrock.md) — AWS signing, event-stream decoding, Converse.- [Bedrock](05-bedrock.md) — AWS signing, event-stream decoding, Converse.
+- [Reasoning fidelity](../01-core-data/08-reasoning-fidelity.md) covers which thinking each provider round-trips.
 - [SSE under the hood](06-sse.md) — how streaming bytes become events.
 - [Grammar constraints](07-grammar.md) — vLLM `guided_json` for local models.
 - [Embeddings](08-embeddings.md) — the `EmbeddingProvider` backends for semantic memory.

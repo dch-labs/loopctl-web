@@ -13,6 +13,6 @@ The home for tools the crate ships itself. The module exists only to be register
 
 - Registration is the only entry: `registry.register(ThinkTool)` — see [tools](../01-core-data/02-tools.md).
 - No state, no filesystem, no network — safe in any pipeline position and under parallel dispatch.
-- The tool still emits its own `loopctl.think.calls` counter (shipped 0.3.1) — **deprecated in 0.4.0** as redundant double-counting, since the engine-level `loopctl.tools.calls` already counts every Think call. Kept for the released metric surface; slated for removal in a later `0.Y.0`.
+- The tool's own `loopctl.think.calls` counter, shipped 0.3.1, is **removed in 0.6.0**, together with its registry row. Read the engine-level `loopctl.tools.calls` filtered to `tool=Think` and `outcome=ok` instead. A hand-driven `ThinkTool::call` beneath the dispatch layer settles no event.
 
 Deep dive: [Built-in tools](../01-core-data/02-tools.md#built-in-tools--four-families-explicit-registration) · [File reference: tool.rs](tool.md).

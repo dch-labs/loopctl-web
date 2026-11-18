@@ -45,7 +45,7 @@ Every counter saturates rather than wraps. The snapshot serde round-trips with f
 
 ## The metric catalog
 
-The registry declares every metric name the telemetry contract knows: 65 rows today. Each row is a `MetricDescriptor` with a name, a kind, and a closed label set.
+The registry declares every metric name the telemetry contract knows: 64 rows since 0.6.0 removed `loopctl.think.calls`. Each row is a `MetricDescriptor` with a name, a kind, and a closed label set.
 
 | `MetricKind` | Meaning |
 |---|---|

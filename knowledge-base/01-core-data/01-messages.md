@@ -33,7 +33,8 @@ pub enum Role { User, Assistant, System }
 pub enum MessagePart {
     Text      { text: String },                       // plain text
     Image     { source: ImageSource },                // base64-encoded image
-    ToolCall  { id: String, name: String, input: Value },  // the model asks to run a tool
+    ToolCall  { id: String, name: String, input: Value,
+                signature: Option<String> },  // the model asks to run a tool
     Thinking  { text: String, signature: Option<String>, redacted: Option<String> },  // reasoning
     ToolResult{ call_id: String, name: String, output: ToolContent,
                 is_error: Option<bool>, retention: Option<Retention> },
@@ -188,3 +189,7 @@ That's the entire model — five shapes (`Message`, `Role`, `MessagePart`, `Tool
 - [Tools](02-tools.md) — where `ToolCall` requests come from and how results are produced.
 - [The big idea](../00-start-here/02-the-big-idea.md) — where these messages live (history vs pending).
 - [File reference: message.rs](../07-file-reference/message.md)
+
+## The ToolCall signature field (0.6.0)
+
+`MessagePart::ToolCall` gained `signature: Option<String>`, carrying Gemini's reasoning token when the provider attaches one to the call itself. It replays verbatim beside the call on the next request, every other dialect drops it at request-build time, and it is never synthesized. The field is serde-defaulted both ways, so pre-field histories deserialize unsigned; `MessagePart::tool_call_with_signature` builds the signed shape.

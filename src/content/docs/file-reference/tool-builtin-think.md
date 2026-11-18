@@ -26,8 +26,6 @@ Registration is your only entry point: `registry.register(ThinkTool)`, see [tool
 
 Your tool keeps no state, touches no filesystem, and opens no network, so you can place it in any pipeline position and run it under parallel dispatch.
 
-The tool still emits its own `loopctl.think.calls` counter, shipped 0.3.1 and deprecated in 0.4.0 as redundant double-counting, since the engine-level `loopctl.tools.calls` already counts every Think call.
-
-It is kept for the released metric surface and slated for removal in a later `0.Y.0`.
+The tool's own `loopctl.think.calls` counter is gone in 0.6.0, removed with its registry row after deprecation. Read the engine-level `loopctl.tools.calls` filtered to `tool=Think` and `outcome=ok` instead. Shipped 0.3.1, the counter double-counted what the engine already recorded. A hand-driven `ThinkTool::call` beneath the dispatch layer settles no event.
 
 Deep dive: [Built-in tools](/core-data/tools/#built-in-tools) · [File reference: tool.rs](/file-reference/tool/).

@@ -68,7 +68,8 @@ Four rules cover the frames:
 - On the **Anthropic path**, each frame's payload is the same JSON event as the direct API, and it feeds the shared Anthropic emitter.
 - On the **Converse path**, shipped 0.4.0, frames carry `messageStart`, then `contentBlockDelta`, then `messageStop`.
 
-  The `contentBlockDelta` lane covers text, tool-input, and reasoning.
+  The `contentBlockDelta` lane covers text, tool-input, and reasoning. A reasoning delta carrying a `signature` latches it onto the thinking lane, and a `redactedContent` delta rides as the redacted payload with empty text.
+- A reasoning delta for an index whose block start never arrived opens the thinking lane itself, so nothing is lost on that wire.
 
   A final `metadata` frame carries stop reason and usage together, and the terminal pair is emitted exactly once from it.
 - Exception frames carry their `:exception-type` into your error.
@@ -107,6 +108,9 @@ A frame's declared length must land in `16 bytes … 16 MiB`. Anything else mark
 ## Converse mapping notes
 
 - Messages use `user` and `assistant` roles only. Tool calls are `toolUse` blocks and results are `toolResult` blocks with a `status` field of `success` or `error`, so `is_error` does travel on this wire.
+- Signed or redacted thinking rides back as `reasoningContent` blocks, in the union AWS documents. The signed case is `reasoningText` with text and signature, and the withheld case is `redactedContent`. Unsigned thinking is dropped, and both actions are counted on the reasoning metrics. Added in 0.6.0.
+- The non-streaming readers capture reasoning on both paths. Converse `reasoningContent` blocks become thinking parts, and the Anthropic path captures `thinking` and `redacted_thinking` blocks it used to drop.
+- A signature on a tool call never rides this wire, because neither shape carries one. See [reasoning fidelity](/core-data/reasoning-fidelity/).
 - Tools go in `toolConfig.tools[].toolSpec`, your system prompt goes in `system` as a list of text objects, and your output budget goes in `inferenceConfig.maxTokens`.
 - Empty-content messages are dropped for you, because Bedrock rejects them.
 

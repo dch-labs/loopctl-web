@@ -4,6 +4,21 @@
 
 If you have ever used an AI assistant that can look things up, run code, or edit files while it thinks — that is an agent. loopctl is the engine that makes such a program possible without you writing the plumbing yourself.
 
+## Quick start with no API key
+
+Pull a local model, clone the repository, and run the shipped example from its root.
+
+```bash
+git clone https://github.com/dch-labs/loopctl.git
+cd loopctl
+git checkout v0.6.0
+ollama pull qwen3.8:27b
+cargo run --example local-quickstart --features ollama
+```
+
+The example is the whole loop in about seventy lines: one client, one tool, one `run()`. You need Rust 1.100 or newer, the crate's minimum supported version since 0.6.0.
+
+
 ---
 
 ## The problem loopctl solves
@@ -72,6 +87,11 @@ The `run()` call returns a **`Run`** object: the final answer, how many turns it
 5. **Pay only for what you use.** The crate compiles with **zero default features**. Streaming, hooks, tool health, redaction, MCP support, each provider client — every one is a Cargo feature you opt into. A minimal agent pulls in almost nothing.
 
 ---
+
+
+## Why loopctl exists
+
+Any model can drive the loop. The compensation layer is what makes small and local models finish real work: constrained tool calls, verify-on-write, memoization, context re-injection, and aggressive compaction. It is on by default since 0.4.0. Strict constrained tool calls apply only when your client declares support through `supports_tool_constraints()`. Set `FrontierProfile` to opt out when your model already holds these disciplines in its weights.
 
 ## Words you will meet (quick version)
 

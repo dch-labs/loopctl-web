@@ -114,3 +114,7 @@ They compose: hooks run first (engine-level), then the pipeline's permission lay
 - [Middleware](01-middleware.md) — the enforcement mechanics.
 - [Hooks](../04-extensions/02-hooks.md) — the other gate.
 - [The shield](07-tool-shield.md) — risk scoring as an alternative to explicit rules.
+
+## Typed asks (0.6.0)
+
+`with_ask_resolver_typed` installs a `PermissionAskResolver` that receives a `PermissionAsk`: tool name, the JSON input as the gate saw it, call id, turn number, and the rendered prompt. You answer with a `PermissionResolution`: `AllowOnce`, `DenyOnce`, or `DenyWithFeedback`, where the user's words become the denial reason verbatim in both the model-facing error and the gate record. Blank feedback answers as the plain `DenyOnce`. Both types are `#[non_exhaustive]`; the boolean `AskResolverFn` maps onto the same arm unchanged, and the typed resolver answers when both are installed.

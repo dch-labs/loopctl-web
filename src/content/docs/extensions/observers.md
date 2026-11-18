@@ -134,7 +134,9 @@ Most subsystems document their own counters inline. Compaction has `loopctl.comp
 
 - **Span to counter renames** moved several 0.3.x span-style events into counter style under the `loopctl.` prefix. Notably `vector.index.search` became `loopctl.vector.index.search` and `vector.embed` became `loopctl.vector.embed`, so every vector tier, whether linear, HNSW, Qdrant, or pgvector, now emits the same names.
 
-- **Deprecated** is `loopctl.think.calls` from the `Think` tool, shipped 0.3.1. It is redundant double-counting, because the engine's `loopctl.tools.calls` already counts every Think call. It still fires for backward compatibility and is slated for removal in a later `0.Y.0`. See [Think](/file-reference/tool-builtin-think/).
+- **Removed in 0.6.0** is the `Think` tool's `loopctl.think.calls`, shipped 0.3.1 and deprecated as redundant double-counting. The engine's `loopctl.tools.calls` already counts every Think call with `tool` and `outcome` labels, so read that counter filtered to `tool=Think` and `outcome=ok` instead.
+
+  `loopctl.think.first_in_turn` stays, because it answers a question no generic counter can. See [Think](/file-reference/tool-builtin-think/).
 
 ## From observer to event stream
 
