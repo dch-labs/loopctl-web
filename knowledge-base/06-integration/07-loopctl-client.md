@@ -6,7 +6,7 @@ The fifth companion crate (`crates/client/`, `loopctl-client`): one object-safe 
 
 ## The wire dialect
 
-HTTP/1.1 REST + SSE over a per-user unix socket (`$XDG_RUNTIME_DIR/loopctl/loopctl.sock`), `/v1`-versioned paths, JSON bodies — carried by a deliberately minimal in-crate transport (one socket, no TLS/HTTP/2/redirects, connection-per-request):
+HTTP/1.1 REST + SSE over the per-user unix socket (`$XDG_RUNTIME_DIR/loopctl/loopctl.sock`), `/v1`-versioned paths, JSON bodies — carried on the socket (and TCP) by a deliberately minimal in-crate transport, one connection per request with no HTTP/2 or redirects; TLS is the remote endpoints' own carrier behind the `tls` feature (below):
 
 - **All three response framings** a compliant peer may use: declared `Content-Length`, chunked transfer coding (decoded incrementally through a cancel-safe state machine — every phase transition commits only after its bytes are consumed, so a dropped and recreated read resumes exactly where the last completed step left off), and close-delimiting.
 - **Bounded against unbounded peers** — a 64 KiB head cap, a 4 MiB line cap, a 10 MiB one-shot body cap; conflicting duplicate `Content-Length` headers refused; the reader's buffer compacted as frames are consumed (a long subscription's memory tracks the unread window, not the stream's lifetime).

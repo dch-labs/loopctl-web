@@ -226,7 +226,7 @@ Thought summaries that earlier versions dropped now arrive as `MessagePart::Thin
 
 ### 46. Exhaustive ToolCall matches need the new signature field (0.6.0)
 
-`MessagePart::ToolCall` gained `signature: Option<String>`. Add the field or a `..` rest pattern to your exhaustive constructors and matches. Serde users and `tool_call()` callers are unaffected, because the field defaults both ways.
+`MessagePart::ToolCall` gained `signature: Option<String>`. Construct an unsigned call with `signature: None`, and add a `..` rest pattern to your exhaustive match arms. Serde users and `tool_call()` callers are unaffected, because the field defaults both ways.
 
 ### 47. The MSRV moved to Rust 1.100 (0.6.0)
 

@@ -115,7 +115,7 @@ Every settled call emits one `loopctl.tools.calls` event on the `loopctl::metric
 
 It is emitted once at the shared exit of the direct-registry and middleware paths. So your retries and both dispatch modes can neither double-count nor miss a call.
 
-It counts every tool, including `Think`, which is why the Think tool's own counter is now deprecated. See [the metric stream](/extensions/observers/).
+It counts every tool, including `Think`, which is why the Think tool's own counter was removed in 0.6.0. See [the metric stream](/extensions/observers/).
 
 ### Panic isolation
 

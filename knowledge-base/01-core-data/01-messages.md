@@ -33,7 +33,8 @@ pub enum Role { User, Assistant, System }
 pub enum MessagePart {
     Text      { text: String },                       // plain text
     Image     { source: ImageSource },                // base64-encoded image
-    ToolCall  { id: String, name: String, input: Value },  // the model asks to run a tool
+    ToolCall  { id: String, name: String, input: Value,
+                signature: Option<String> },  // the model asks to run a tool
     Thinking  { text: String, signature: Option<String>, redacted: Option<String> },  // reasoning
     ToolResult{ call_id: String, name: String, output: ToolContent,
                 is_error: Option<bool>, retention: Option<Retention> },

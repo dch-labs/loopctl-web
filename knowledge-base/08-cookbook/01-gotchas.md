@@ -146,7 +146,7 @@ The `loopctl.compaction.headroom_pct` metric reports percent (0–100); the `Com
 
 ### 44. An unpriced model refuses an armed USD line (0.6.0)
 
-The budget gate's `Usd` dimension prices usage through the vendored table. A turn that reported no usage spends nothing, but a model the table does not price no longer reads as zero: while a `cost_usd` limit is configured, one reported usage on such a model refuses the next request as `BudgetExhausted`. Price the model through a `prices.d/` override row, or leave the line unset. Check `PriceTable::price(model)` before you trust the line.
+The budget gate's `Usd` dimension prices usage through the vendored table. A turn that reported no usage spends nothing, but a model the table does not price no longer reads as zero: while a `cost_usd` limit is configured, one reported usage on such a model refuses the next request as `BudgetExhausted`. Price the model through a `prices.d/` override row, or leave the line unset. A gate with no price table stays inert. Check `PriceTable::price(model)` before you trust the line.
 
 ---
 
@@ -156,7 +156,7 @@ Thought summaries that earlier versions dropped now arrive as `MessagePart::Thin
 
 ### 46. Exhaustive ToolCall matches need the new signature field (0.6.0)
 
-`MessagePart::ToolCall` gained `signature: Option<String>`. Add the field or a `..` rest pattern to your exhaustive constructors and matches. Serde users and `tool_call()` callers are unaffected, because the field defaults both ways.
+`MessagePart::ToolCall` gained `signature: Option<String>`. Construct an unsigned call with `signature: None`, and add a `..` rest pattern to your exhaustive match arms. Serde users and `tool_call()` callers are unaffected, because the field defaults both ways.
 
 ### 47. The MSRV moved to Rust 1.100 (0.6.0)
 

@@ -93,7 +93,7 @@ Only **successful** calls, and lossy by design: input and result are each trunca
 
 ### The per-call metric
 
-Every settled call emits one `loopctl.tools.calls` event on the `loopctl::metrics` `tracing` target — `tool`, `outcome` (`ok`/`error`), `duration_ms` — emitted once at the shared exit of the direct-registry and middleware paths, so retries and both dispatch modes can neither double-count nor miss a call. It counts *every* tool, including `Think`, which is why the Think tool's own counter is now deprecated (see [the metric stream](../04-extensions/01-observers.md)).
+Every settled call emits one `loopctl.tools.calls` event on the `loopctl::metrics` `tracing` target — `tool`, `outcome` (`ok`/`error`), `duration_ms` — emitted once at the shared exit of the direct-registry and middleware paths, so retries and both dispatch modes can neither double-count nor miss a call. It counts *every* tool, including `Think`, which is why the Think tool's own counter was removed in 0.6.0 (see [the metric stream](../04-extensions/01-observers.md)).
 
 ### Panic isolation
 

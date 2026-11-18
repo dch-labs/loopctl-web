@@ -17,7 +17,7 @@ You install one `BudgetGate` with `BareLoop::with_budget_gate(...)`. It is not m
 | `Tokens` | Provider-reported `input + output` from usage records, never estimates | Usage-less turns contribute nothing. That is the honest count rather than a guess. |
 | `Turns` | Completed turns, counted at turn end | An in-flight turn never counts against itself. |
 | `Duration` | The elapsed reading of your clock seam, passed in as a `Duration` | The gate never reads a clock, so a replayed run crosses the same lines at the same logical instants. |
-| `Usd` | Estimated spend in dollars, priced at capture through the gate's price table (0.5.0) | A turn with no usage, or a model the table does not price, spends nothing on this line. |
+| `Usd` | Estimated spend in dollars, priced at capture through the gate's price table (0.5.0) | A turn with no usage spends nothing. Since 0.6.0 a model the table does not price refuses the next request. |
 
 You hand the gate a `BudgetLimits { turns, tokens, duration, usd }`. Each field defaults to `None`, and a `None` disables that dimension's lines entirely.
 

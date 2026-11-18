@@ -39,7 +39,7 @@ The table states the boundary per dialect. "Native" means the block rides back i
 | Anthropic | Native, while the effective effort budgets a thinking block. | Native. | Dropped. |
 | OpenAI family | Text only, through `reasoning_content` when replay is on. | Dropped. | Dropped. |
 
-Unsigned thinking is skipped everywhere, and each skip is counted on the reasoning metrics. See [telemetry](/telemetry/metrics/) for the rows.
+Unsigned thinking is skipped unless the dialect replays it as text. The OpenAI family rides it through `reasoning_content` when replay is on, and the builder leaves replay off by default. Each skip and each text replay is counted on the reasoning metrics. See [telemetry](/telemetry/metrics/) for the rows.
 
 ## The rules that hold everywhere
 

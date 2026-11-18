@@ -12,9 +12,12 @@ If you have used an AI assistant that looks things up, runs code, or edits files
 
 ## Quick start with no API key
 
-Pull a local model and run the shipped example against it.
+Pull a local model, clone the repository, and run the shipped example from its root.
 
 ```bash
+git clone https://github.com/dch-labs/loopctl.git
+cd loopctl
+git checkout v0.6.0
 ollama pull qwen3.8:27b
 cargo run --example local-quickstart --features ollama
 ```
@@ -88,7 +91,7 @@ The `run()` call returns a **`Run`** object: the final answer, how many turns it
 
 Any model can drive the loop. The compensation layer is what makes small and local models finish real work: constrained tool calls, verify-on-write, memoization, context re-injection, and aggressive compaction.
 
-It is on by default since 0.4.0. Set `FrontierProfile` to opt out when your model already holds these disciplines in its weights.
+It is on by default since 0.4.0. Strict constrained tool calls apply only when your client declares support through `supports_tool_constraints()`. Set `FrontierProfile` to opt out when your model already holds these disciplines in its weights.
 
 ## Words you will meet
 
