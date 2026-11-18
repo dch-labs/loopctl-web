@@ -188,9 +188,9 @@ const ideas = [
             <div class="section-eyebrow">II. The whole point</div>
             <h2 class="section-title">Twenty lines, and the loop is <em>somebody else's problem.</em></h2>
             <p class="section-deck">
-              A complete, working agent from <code>examples/hello-cli.rs</code> — it runs with a
-              mock connection, no API key. Swap the mock for an OpenAI, Anthropic, Gemini, Bedrock,
-              or Ollama client and nothing else changes.
+              A complete, working agent against a real model on your own machine — llama.cpp,
+              vLLM, LM Studio, any OpenAI-wire server, no API key. Swap the self-hosted client
+              for OpenAI, Anthropic, Gemini, or Bedrock and nothing else changes.
             </p>
           </div>
         </div>
@@ -208,20 +208,22 @@ const ideas = [
             </p>
             <a class="text-link" href="/start-here/what-is-loopctl/">walk through it, line by line →</a>
           </div>
-          <div class="code-block" role="img" aria-label="A twenty-line loopctl agent">
+          <div class="code-block" role="img" aria-label="A twenty-line loopctl agent against a real self-hosted model">
             <div class="code-line"><span class="kw">use</span> loopctl::engine::BareLoop;</div>
             <div class="code-line"><span class="kw">use</span> loopctl::engine::core::Loop;</div>
             <div class="code-line"><span class="kw">use</span> loopctl::engine::RunConfig;</div>
             <div class="code-line"><span class="kw">use</span> loopctl::tool::ToolRegistry;</div>
             <div class="code-line"><span class="kw">use</span> loopctl::config::SessionConfig;</div>
-            <div class="code-line"><span class="kw">use</span> loopctl::testing::MockApiClient;</div>
+            <div class="code-line"><span class="kw">use</span> loopctl::provider;</div>
             <div class="code-line"><span class="kw">use</span> std::sync::Arc;</div>
             <div class="code-line">&nbsp;</div>
             <div class="code-line"><span class="attr">#[tokio::main]</span></div>
             <div class="code-line"><span class="kw">async fn</span> <span class="fn">main</span>() {'{'}</div>
-            <div class="code-line">    <span class="com">// a mock connection — swap for a real provider</span></div>
-            <div class="code-line">    <span class="kw">let</span> client = MockApiClient::new(<span class="str">"hello-model"</span>)</div>
-            <div class="code-line">        .with_text_response(<span class="str">"Hello, world!"</span>);</div>
+            <div class="code-line">    <span class="kw">let</span> client = provider::self_hosted(</div>
+            <div class="code-line">        <span class="str">"http://localhost:8080/v1"</span>,</div>
+            <div class="code-line">        <span class="str">"qwen3.8:27b"</span>,</div>
+            <div class="code-line">    )</div>
+            <div class="code-line">    .expect(<span class="str">"self-hosted server is up"</span>);</div>
             <div class="code-line">&nbsp;</div>
             <div class="code-line">    <span class="kw">let</span> tools = ToolRegistry::new();</div>
             <div class="code-line">    <span class="kw">let mut</span> agent = BareLoop::new(Arc::new(client), tools, SessionConfig::default());</div>
@@ -1080,6 +1082,8 @@ const ideas = [
 
   .code-block {
     font-family: var(--font-mono-ui);
+    font-feature-settings: normal;
+    font-variant-ligatures: none;
     font-size: 13px;
     line-height: 1.62;
     background: var(--bg-code);
